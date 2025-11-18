@@ -1,0 +1,60 @@
+/* Professional RSVP Typography System */
+
+/* OpenDyslexic Font - Accessibility focused, dyslexia-friendly */
+@font-face {
+  font-family: 'OpenDyslexic';
+  src: url('https://cdn.jsdelivr.net/npm/open-dyslexic@1.0.3/fonts/OpenDyslexicMono-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Font Family Definitions */
+:root {
+  --font-courier-prime: 'Courier Prime', 'Courier New', monospace;
+  --font-roboto-mono: 'Roboto Mono', 'Consolas', monospace;
+  --font-fira-code: 'Fira Code', 'Monaco', monospace;
+  --font-opendyslexic: 'OpenDyslexic', monospace;
+  --font-jetbrains-mono: 'JetBrains Mono', 'Menlo', monospace;
+}
+
+/* Theme Color Palettes for Reader */
+.theme-cinema {
+  --reader-bg: #0a0a0a;
+  --reader-text: #ffffff;
+  --reader-text-dim: #9ca3af;
+  --reader-accent: #d4af37;
+}
+
+.theme-paper {
+  --reader-bg: #f4f1ea;
+  --reader-text: #3e2723;
+  --reader-text-dim: #6d4c41;
+  --reader-accent: #8d6e63;
+}
+
+.theme-hacker {
+  --reader-bg: #000000;
+  --reader-text: #00ff00;
+  --reader-text-dim: #008800;
+  --reader-accent: #00ff00;
+}
+
+.theme-eink {
+  --reader-bg: #ffffff;
+  --reader-text: #000000;
+  --reader-text-dim: #555555;
+  --reader-accent: #333333;
+}
+
+/* Font Weight Utility Classes */
+.font-weight-light { font-weight: 300; }
+.font-weight-normal { font-weight: 400; }
+.font-weight-medium { font-weight: 500; }
+.font-weight-bold { font-weight: 700; }
+
+/* Letter Spacing Presets */
+.letter-spacing-tight { letter-spacing: -0.05em; }
+.letter-spacing-normal { letter-spacing: 0; }
+.letter-spacing-relaxed { letter-spacing: 0.05em; }
+.letter-spacing-wide { letter-spacing: 0.1em; }

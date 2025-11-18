@@ -1,0 +1,78 @@
+{
+  "name": "scriptmaster-ai",
+  "version": "1.0.0",
+  "description": "AI-Powered Screenplay Analysis and Speed Reading Tool",
+  "main": "src/electron/main.js",
+  "scripts": {
+    "start": "concurrently \"npm run start:react\" \"wait-on http://localhost:3000 && electron .\"",
+    "start:react": "vite",
+    "start:electron": "electron .",
+    "build": "vite build",
+    "build:electron": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [
+    "screenplay",
+    "film",
+    "script",
+    "analysis",
+    "speed-reading",
+    "electron",
+    "react"
+  ],
+  "author": "ScriptMaster AI",
+  "license": "MIT",
+  "build": {
+    "appId": "com.scriptmaster.ai",
+    "productName": "ScriptMaster AI",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "build/**/*",
+      "src/electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.2.1",
+    "axios": "^1.6.2",
+    "electron-store": "^8.1.0",
+    "openai": "^4.104.0",
+    "pdf-parse": "^1.1.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "zustand": "^4.4.7"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
+    "concurrently": "^8.2.2",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "vite": "^5.0.10",
+    "wait-on": "^7.2.0"
+  }
+}
