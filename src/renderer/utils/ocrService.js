@@ -39,7 +39,7 @@ export async function performPDFOCR(filePath, language = 'tur+eng', onProgress =
     // Create worker with all local paths for full offline support
     worker = await Tesseract.createWorker(language, 1, {
       workerPath: '/tesseract/worker.min.js',
-      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+      langPath: '/tesseract/traineddata',
       corePath: '/tesseract',
       logger: (m) => {
         console.log('OCR Worker:', m);
