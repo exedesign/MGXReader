@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useScriptStore } from '../store/scriptStore';
 import { useReaderStore } from '../store/readerStore';
 import { useAIStore } from '../store/aiStore';
@@ -18,6 +19,7 @@ import ReadingTimeline from './ReadingTimeline';
  * - Word blacklist filtering
  */
 export default function SpeedReader() {
+  const { t, i18n } = useTranslation();
   const { cleanedText, scriptText, setCleanedText, pageCount, originalPageRatio, pageBreaks, wordsPerPage } = useScriptStore();
   const { isConfigured, getAIHandler } = useAIStore();
   const { getActivePrompt } = usePromptStore();
@@ -55,11 +57,11 @@ export default function SpeedReader() {
 
   const intervalRef = useRef(null);
   const wordDisplayRef = useRef(null);
-  
+
   // Mouse idle detection for Zen Mode
   const [mouseIdle, setMouseIdle] = useState(false);
   const mouseIdleTimerRef = useRef(null);
-  
+
   // AI Summary states
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
@@ -75,7 +77,7 @@ export default function SpeedReader() {
         totalWords: originalPageRatio.totalWords,
         pageBreaks: pageBreaks
       } : null;
-      
+
       const wordsWithMetadata = parseWordsWithMetadata(text, pageInfo);
       setWords(wordsWithMetadata);
     }
@@ -123,7 +125,7 @@ export default function SpeedReader() {
     };
 
     window.addEventListener('mousemove', handleMouseMove);
-    
+
     // Initial timer
     mouseIdleTimerRef.current = setTimeout(() => {
       setMouseIdle(true);
@@ -148,13 +150,13 @@ export default function SpeedReader() {
   // Generate AI Summary for Speed Reading
   const handleGenerateSummary = async () => {
     if (!isConfigured()) {
-      alert('Please configure AI provider first');
+      alert(t('speedReader.configureFirst'));
       return;
     }
 
     const text = cleanedText || scriptText;
     if (!text) {
-      alert('No text available for summary');
+      alert(t('speedReader.noText'));
       return;
     }
 
@@ -163,7 +165,7 @@ export default function SpeedReader() {
     try {
       const aiHandler = getAIHandler();
       const speedReadingPrompt = getActivePrompt('speed_reading');
-      
+
       let prompt;
       if (speedReadingPrompt && speedReadingPrompt.system && speedReadingPrompt.user) {
         prompt = {
@@ -180,13 +182,14 @@ export default function SpeedReader() {
 
       const summary = await aiHandler.analyzeWithCustomPrompt(text, {
         systemPrompt: prompt.system,
-        userPrompt: prompt.user
+        userPrompt: prompt.user,
+        language: i18n.language
       });
       setAiSummary(summary);
       setShowSummaryModal(true);
     } catch (error) {
       console.error('Summary generation error:', error);
-      alert('Failed to generate summary: ' + error.message);
+      alert(t('speedReader.failedSummary') + ' ' + error.message);
     } finally {
       setIsGeneratingSummary(false);
     }
@@ -196,14 +199,14 @@ export default function SpeedReader() {
   const applySummaryAsText = () => {
     if (aiSummary) {
       setCleanedText(aiSummary);
-      
+
       // Prepare page information for summary text
       const pageInfo = originalPageRatio ? {
         pageCount: pageCount,
         totalWords: originalPageRatio.totalWords,
         pageBreaks: pageBreaks
       } : null;
-      
+
       const summaryWords = parseWordsWithMetadata(aiSummary, pageInfo);
       setWords(summaryWords);
       setCurrentWordIndex(0);
@@ -265,8 +268,8 @@ export default function SpeedReader() {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <p className="text-cinema-text-dim">Loading screenplay...</p>
-          <p className="text-sm text-cinema-text-dim mt-2">Please upload a PDF first</p>
+          <p className="text-cinema-text-dim">{t('speedReader.loading')}</p>
+          <p className="text-sm text-cinema-text-dim mt-2">{t('speedReader.uploadFirst')}</p>
         </div>
       </div>
     );
@@ -275,7 +278,7 @@ export default function SpeedReader() {
   // Get current word object
   const currentWordObj = activeWords[currentWordIndex];
   const currentWord = currentWordObj?.word || currentWordObj || '';
-  
+
   // Calculate progress and page information
   const progress = activeWords.length > 0 ? (currentWordIndex / activeWords.length) * 100 : 0;
   const pagePosition = calculatePagePosition(currentWordIndex, activeWords);
@@ -289,7 +292,7 @@ export default function SpeedReader() {
   const calculateORP = (word) => {
     const len = word.length;
     let baseORP;
-    
+
     // Standard ORP calculation based on word length
     if (len <= 1) baseORP = 0;
     else if (len <= 5) baseORP = 1;
@@ -311,19 +314,19 @@ export default function SpeedReader() {
 
     // For monospace fonts, each character has equal width
     // We need to shift the word so that the ORP character aligns with center
-    
+
     // Characters before ORP (should be to the left of center)
     const charsBeforeORP = orpIndex;
-    
+
     // Characters after ORP (should be to the right of center)
     const charsAfterORP = word.length - orpIndex - 1;
-    
+
     // Calculate offset as a percentage of character width
     // Negative value shifts left, positive shifts right
     // We want ORP at center, so we shift by the distance from word start to ORP
     const charWidth = fontSize * 0.6; // Monospace character width approximation
     const offsetPixels = -(charsBeforeORP * charWidth) + (word.length * charWidth * 0.5) - (charWidth * 0.5);
-    
+
     return `translateX(${offsetPixels}px)`;
   };
 
@@ -363,9 +366,9 @@ export default function SpeedReader() {
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-bold text-cinema-accent flex items-center gap-2">
                   <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                   </svg>
-                  AI Summary for Speed Reading
+                  {t('speedReader.aiSummaryTitle')}
                 </h3>
                 <button
                   onClick={() => setShowSummaryModal(false)}
@@ -377,33 +380,33 @@ export default function SpeedReader() {
                 </button>
               </div>
               <p className="text-sm text-cinema-text-dim mt-2">
-                This AI-generated summary is optimized for speed reading with key points and main ideas.
+                {t('speedReader.aiSummaryDesc')}
               </p>
             </div>
-            
+
             <div className="p-6">
               <div className="bg-cinema-bg border border-cinema-gray-light rounded-lg p-4 mb-4 max-h-96 overflow-y-auto">
                 <pre className="text-cinema-text whitespace-pre-wrap font-mono text-sm leading-relaxed">
                   {aiSummary}
                 </pre>
               </div>
-              
+
               <div className="flex justify-between items-center">
                 <div className="text-sm text-cinema-text-dim">
-                  Summary ready for speed reading • {aiSummary.split(/\s+/).length} words
+                  {t('speedReader.summaryReady')} • {aiSummary.split(/\s+/).length} {t('editor.words').toLowerCase()}
                 </div>
                 <div className="flex gap-3">
                   <button
                     onClick={() => setShowSummaryModal(false)}
                     className="px-4 py-2 bg-cinema-gray hover:bg-cinema-gray-light text-cinema-text rounded-lg transition-colors"
                   >
-                    Keep Original
+                    {t('speedReader.keepOriginal')}
                   </button>
                   <button
                     onClick={applySummaryAsText}
                     className="px-4 py-2 bg-cinema-accent hover:bg-cinema-accent-dark text-cinema-black rounded-lg transition-colors"
                   >
-                    Use Summary for Speed Reading
+                    {t('speedReader.useSummary')}
                   </button>
                 </div>
               </div>
@@ -421,7 +424,7 @@ export default function SpeedReader() {
               <button
                 onClick={togglePlay}
                 className="w-14 h-14 rounded-full bg-cinema-accent hover:bg-cinema-accent-dark text-cinema-black flex items-center justify-center transition-colors"
-                title="Play/Pause (Space)"
+                title={t('speedReader.playPause')}
               >
                 {isPlaying ? (
                   <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -438,7 +441,7 @@ export default function SpeedReader() {
               <button
                 onClick={reset}
                 className="p-3 bg-cinema-gray hover:bg-cinema-gray-light rounded-lg transition-colors"
-                title="Reset to start (Home)"
+                title={t('speedReader.reset')}
               >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
@@ -447,7 +450,7 @@ export default function SpeedReader() {
 
               {/* WPM Control */}
               <div className="flex items-center gap-3 bg-cinema-gray px-4 py-2 rounded-lg">
-                <label className="text-sm text-cinema-text-dim">WPM:</label>
+                <label className="text-sm text-cinema-text-dim">{t('speedReader.wpm')}</label>
                 <input
                   type="range"
                   min="100"
@@ -462,7 +465,7 @@ export default function SpeedReader() {
 
               {/* Font Size */}
               <div className="flex items-center gap-3 bg-cinema-gray px-4 py-2 rounded-lg">
-                <label className="text-sm text-cinema-text-dim">Size:</label>
+                <label className="text-sm text-cinema-text-dim">{t('speedReader.size')}</label>
                 <input
                   type="range"
                   min="24"
@@ -477,7 +480,7 @@ export default function SpeedReader() {
 
               {/* Page Information */}
               <div className="flex items-center gap-2 bg-cinema-gray px-3 py-2 rounded-lg">
-                <span className="text-sm text-cinema-text-dim">Page:</span>
+                <span className="text-sm text-cinema-text-dim">{t('speedReader.page')}</span>
                 <span className="text-cinema-accent font-bold text-sm">
                   {pagePosition.page} / {pagePosition.totalPages}
                 </span>
@@ -489,7 +492,7 @@ export default function SpeedReader() {
 
               {/* ORP Adjustment */}
               <div className="flex items-center gap-2 bg-cinema-gray px-3 py-2 rounded-lg">
-                <span className="text-sm text-cinema-text-dim">Focus:</span>
+                <span className="text-sm text-cinema-text-dim">{t('speedReader.focus')}</span>
                 <button
                   onClick={adjustORPLeft}
                   className="p-1 hover:bg-cinema-gray-light rounded transition-colors"
@@ -520,12 +523,11 @@ export default function SpeedReader() {
               <button
                 onClick={handleGenerateSummary}
                 disabled={isGeneratingSummary || !isConfigured()}
-                className={`px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
-                  isConfigured() 
-                    ? 'bg-cinema-accent text-cinema-black hover:bg-cinema-accent-dark disabled:opacity-50' 
-                    : 'bg-cinema-gray text-cinema-text-dim cursor-not-allowed'
-                }`}
-                title="Generate AI summary for speed reading"
+                className={`px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${isConfigured()
+                  ? 'bg-cinema-accent text-cinema-black hover:bg-cinema-accent-dark disabled:opacity-50'
+                  : 'bg-cinema-gray text-cinema-text-dim cursor-not-allowed'
+                  }`}
+                title={t('speedReader.aiSummaryTitle')}
               >
                 {isGeneratingSummary ? (
                   <>
@@ -533,21 +535,21 @@ export default function SpeedReader() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Generating...
+                    {t('speedReader.generating')}
                   </>
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                     </svg>
-                    AI Summary
+                    {t('speedReader.aiSummaryBtn')}
                   </>
                 )}
               </button>
               <button
                 onClick={handleToggleFullscreen}
                 className="p-3 bg-cinema-gray hover:bg-cinema-gray-light rounded-lg transition-colors"
-                title="Fullscreen (F)"
+                title={t('speedReader.fullscreen')}
               >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   {isFullscreen ? (
@@ -561,12 +563,12 @@ export default function SpeedReader() {
                 onClick={toggleFocusMode}
                 className="px-4 py-2 bg-cinema-gray hover:bg-cinema-gray-light text-cinema-text rounded-lg text-sm transition-colors"
               >
-                Focus Mode
+                {t('speedReader.focusMode')}
               </button>
               <button
                 onClick={toggleSettings}
                 className="p-3 bg-cinema-gray hover:bg-cinema-gray-light rounded-lg transition-colors"
-                title="Settings (S)"
+                title={t('speedReader.settings')}
               >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81a.488.488 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6-3.6z" />
@@ -619,14 +621,13 @@ export default function SpeedReader() {
         {/* Zen Mode Floating Controls - HIDDEN in fullscreen */}
         {focusMode && !isFullscreen && (
           <div
-            className={`absolute top-4 right-4 flex gap-2 transition-opacity duration-500 ${
-              mouseIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'
-            }`}
+            className={`absolute top-4 right-4 flex gap-2 transition-opacity duration-500 ${mouseIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'
+              }`}
           >
             <button
               onClick={togglePlay}
               className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur rounded-lg transition-colors"
-              title="Play/Pause (Space)"
+              title={t('speedReader.playPause')}
             >
               {isPlaying ? (
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -641,7 +642,7 @@ export default function SpeedReader() {
             <button
               onClick={handleToggleFullscreen}
               className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur rounded-lg transition-colors"
-              title="Toggle Fullscreen (F)"
+              title={t('speedReader.fullscreen')}
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
@@ -650,7 +651,7 @@ export default function SpeedReader() {
             <button
               onClick={toggleSettings}
               className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur rounded-lg transition-colors"
-              title="Settings (S)"
+              title={t('speedReader.settings')}
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81a.488.488 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
@@ -659,7 +660,7 @@ export default function SpeedReader() {
             <button
               onClick={toggleFocusMode}
               className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur rounded-lg transition-colors"
-              title="Exit Focus Mode"
+              title={t('speedReader.exitFocus')}
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
@@ -675,23 +676,23 @@ export default function SpeedReader() {
             style={{ color: 'var(--reader-text-dim)' }}
           >
             <div className="mb-2">
-              Press <kbd className="px-2 py-1 bg-white/10 rounded">SPACE</kbd> to play/pause
+              <kbd className="px-2 py-1 bg-white/10 rounded">{t('speedReader.shortcuts.space')}</kbd> {t('speedReader.shortcuts.playPause')}
             </div>
             <div className="text-xs flex items-center justify-center gap-4 flex-wrap">
               <span>
-                <kbd className="px-2 py-1 bg-white/10 rounded">← →</kbd> Skip
+                <kbd className="px-2 py-1 bg-white/10 rounded">← →</kbd> {t('speedReader.shortcuts.skip')}
               </span>
               <span>
-                <kbd className="px-2 py-1 bg-white/10 rounded">HOME</kbd> Reset
+                <kbd className="px-2 py-1 bg-white/10 rounded">HOME</kbd> {t('speedReader.shortcuts.reset')}
               </span>
               <span>
-                <kbd className="px-2 py-1 bg-white/10 rounded">F</kbd> Fullscreen
+                <kbd className="px-2 py-1 bg-white/10 rounded">F</kbd> {t('speedReader.shortcuts.fullscreen')}
               </span>
               <span>
-                <kbd className="px-2 py-1 bg-white/10 rounded">S</kbd> Settings
+                <kbd className="px-2 py-1 bg-white/10 rounded">S</kbd> {t('speedReader.shortcuts.settings')}
               </span>
               <span>
-                <kbd className="px-2 py-1 bg-white/10 rounded">[ ]</kbd> Focus
+                <kbd className="px-2 py-1 bg-white/10 rounded">[ ]</kbd> {t('speedReader.shortcuts.focus')}
               </span>
             </div>
           </div>

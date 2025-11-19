@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useScriptStore } from '../store/scriptStore';
 import { useAIStore } from '../store/aiStore';
 import { usePromptStore } from '../store/promptStore';
 import { cleanScreenplayText } from '../utils/textProcessing';
 
 export default function TextEditor() {
+  const { t } = useTranslation();
   const { scriptText, cleanedText, setCleanedText } = useScriptStore();
   const { isConfigured, provider, getAIHandler } = useAIStore();
   const { getActivePrompt, getPromptTypes, setActivePrompt, activePrompts } = usePromptStore();
@@ -50,20 +52,20 @@ export default function TextEditor() {
 
   const handleGrammarCorrection = async () => {
     if (!isConfigured()) {
-      alert('Please configure your AI provider in Settings first.');
+      alert(t('editor.configureFirst'));
       return;
     }
 
     setIsCorrectingGrammar(true);
     setGrammarProgress(null);
-    
+
     try {
       const aiHandler = getAIHandler();
       const textToCorrect = cleanedText || scriptText;
-      
+
       // Get active custom prompt for grammar correction
       const customPrompt = getActivePrompt('grammar');
-      
+
       let correctedText;
       if (customPrompt && customPrompt.system && customPrompt.user) {
         // Use custom prompt
@@ -85,14 +87,14 @@ export default function TextEditor() {
           },
         });
       }
-      
+
       setCleanedText(correctedText);
       setViewMode('cleaned');
       setGrammarProgress(null);
-      alert('Grammar correction completed!');
+      alert(t('editor.grammarComplete'));
     } catch (error) {
       console.error('Grammar correction failed:', error);
-      alert(`Grammar correction failed: ${error.message}`);
+      alert(t('editor.grammarFailed') + ' ' + error.message);
       setGrammarProgress(null);
     } finally {
       setIsCorrectingGrammar(false);
@@ -120,8 +122,8 @@ export default function TextEditor() {
     return (
       <div className="flex-1 flex items-center justify-center bg-cinema-black">
         <div className="text-center text-cinema-text-dim">
-          <div className="text-lg mb-2">No script loaded</div>
-          <div>Upload a PDF script to get started</div>
+          <div className="text-lg mb-2">{t('editor.noScript')}</div>
+          <div>{t('editor.uploadPrompt')}</div>
         </div>
       </div>
     );
@@ -137,35 +139,32 @@ export default function TextEditor() {
             <div className="flex gap-2 bg-cinema-gray rounded-lg p-1">
               <button
                 onClick={() => setViewMode('cleaned')}
-                className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                  viewMode === 'cleaned'
+                className={`px-3 py-1.5 rounded text-sm transition-colors ${viewMode === 'cleaned'
                     ? 'bg-cinema-accent text-cinema-black font-medium'
                     : 'text-cinema-text hover:bg-cinema-gray-light'
-                }`}
+                  }`}
               >
-                Cleaned
+                {t('editor.cleaned')}
               </button>
               <button
                 onClick={() => setViewMode('raw')}
-                className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                  viewMode === 'raw'
+                className={`px-3 py-1.5 rounded text-sm transition-colors ${viewMode === 'raw'
                     ? 'bg-cinema-accent text-cinema-black font-medium'
                     : 'text-cinema-text hover:bg-cinema-gray-light'
-                }`}
+                  }`}
               >
-                Original
+                {t('editor.original')}
               </button>
             </div>
 
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-                isEditing
+              className={`px-4 py-2 rounded-lg text-sm transition-colors ${isEditing
                   ? 'bg-cinema-accent text-cinema-black'
                   : 'bg-cinema-gray text-cinema-text hover:bg-cinema-gray-light'
-              }`}
+                }`}
             >
-              {isEditing ? '✓ Done Editing' : '✏️ Edit'}
+              {isEditing ? '✓ ' + t('editor.doneEditing') : '✏️ ' + t('editor.edit')}
             </button>
           </div>
 
@@ -173,7 +172,7 @@ export default function TextEditor() {
           <div className="flex items-center gap-3">
             {viewMode === 'raw' && (
               <button onClick={handleClean} className="btn-secondary text-sm">
-                🧹 Clean Text
+                🧹 {t('editor.cleanText')}
               </button>
             )}
 
@@ -184,18 +183,18 @@ export default function TextEditor() {
                 className="btn-secondary text-sm flex items-center gap-2"
                 disabled={isCorrectingGrammar}
               >
-                ⚙️ Grammar Settings
+                ⚙️ {t('editor.grammarSettings')}
               </button>
 
               {showGrammarSettings && (
                 <div className="absolute right-0 top-full mt-2 w-72 bg-cinema-dark border border-cinema-gray rounded-lg shadow-lg z-10">
                   <div className="p-4">
-                    <h4 className="text-sm font-medium text-cinema-text mb-3">Grammar Correction</h4>
-                    
+                    <h4 className="text-sm font-medium text-cinema-text mb-3">{t('editor.grammarCorrection')}</h4>
+
                     {/* Custom Prompt Selector */}
                     <div className="mb-4">
                       <label className="block text-xs text-cinema-text-dim mb-2">
-                        Correction Style
+                        {t('editor.correctionStyle')}
                       </label>
                       <select
                         value={activePrompts.grammar}
@@ -209,7 +208,7 @@ export default function TextEditor() {
                         ))}
                       </select>
                       <div className="text-xs text-cinema-text-dim mt-1">
-                        Using: {getActivePrompt('grammar')?.name}
+                        {t('editor.using')} {getActivePrompt('grammar')?.name}
                       </div>
                     </div>
                   </div>
@@ -222,18 +221,18 @@ export default function TextEditor() {
               disabled={isCorrectingGrammar || !displayText}
               className="btn-primary text-sm"
             >
-              {isCorrectingGrammar 
-                ? grammarProgress?.message || 'Correcting...'
-                : '✨ Fix Grammar'
+              {isCorrectingGrammar
+                ? grammarProgress?.message || t('editor.correcting')
+                : '✨ ' + t('editor.fixGrammar')
               }
             </button>
 
             <button onClick={handleExport} className="btn-primary text-sm">
-              💾 Export
+              💾 {t('editor.export')}
             </button>
           </div>
         </div>
-        
+
         {/* Progress Bar for Grammar Correction */}
         {isCorrectingGrammar && grammarProgress && (
           <div className="mt-3">
@@ -241,7 +240,7 @@ export default function TextEditor() {
               <span>{grammarProgress.message}</span>
               {grammarProgress.currentChunk && grammarProgress.totalChunks && (
                 <span>
-                  Chunk {grammarProgress.currentChunk} of {grammarProgress.totalChunks}
+                  {t('editor.chunk')} {grammarProgress.currentChunk} {t('editor.of')} {grammarProgress.totalChunks}
                 </span>
               )}
               <span>{Math.round(grammarProgress.progress || 0)}%</span>
@@ -280,12 +279,12 @@ export default function TextEditor() {
       <div className="bg-cinema-dark border-t border-cinema-gray p-3 px-6">
         <div className="flex items-center justify-between text-xs text-cinema-text-dim">
           <div className="flex gap-6">
-            <span>Characters: {displayText?.length.toLocaleString()}</span>
-            <span>Words: {displayText?.split(/\s+/).length.toLocaleString()}</span>
-            <span>Lines: {displayText?.split('\n').length.toLocaleString()}</span>
+            <span>{t('editor.characters')}: {displayText?.length.toLocaleString()}</span>
+            <span>{t('editor.words')}: {displayText?.split(/\s+/).length.toLocaleString()}</span>
+            <span>{t('editor.lines')}: {displayText?.split('\n').length.toLocaleString()}</span>
           </div>
           <div>
-            {viewMode === 'cleaned' ? 'Viewing cleaned text' : 'Viewing original text'}
+            {viewMode === 'cleaned' ? t('editor.viewingCleaned') : t('editor.viewingOriginal')}
           </div>
         </div>
       </div>

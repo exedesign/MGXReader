@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // PDF APIs
   parsePDF: (filePath) => ipcRenderer.invoke('pdf:parse', filePath),
+  pdfToImages: (filePath) => ipcRenderer.invoke('pdf:toImages', filePath),
+  
+  // OCR APIs
+  ocrCleanup: (tmpDir) => ipcRenderer.invoke('ocr:cleanup', tmpDir),
 
   // File APIs
   readFile: (filePath) => ipcRenderer.invoke('file:read', filePath),

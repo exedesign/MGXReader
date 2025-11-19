@@ -7,18 +7,6 @@ import { splitTextForAnalysis, getOptimalChunkSize } from './textProcessing.js';
  * @param {string} prompt - The prompt to send
  * @param {string} systemPrompt - System prompt
  * @returns {Promise<string>} - API response
- */
-export async function callOpenAI(apiKey, prompt, systemPrompt = 'You are a helpful assistant.') {
-  try {
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-4-turbo-preview',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.3,
         max_tokens: 4000,
       },
       {
@@ -95,10 +83,10 @@ export async function correctText(text, apiKey, provider = 'openai') {
  * @param {string} provider - 'openai' or 'claude'
  * @returns {Promise<object>} - Analysis data
  */
-export async function analyzeScreenplay(text, apiKey, provider = 'openai') {
-  const systemPrompt = `You are an expert screenplay analyst and production coordinator. Analyze the provided screenplay and extract structured information for production planning. Return a valid JSON object only, no additional text.`;
+export async function analyzeScreenplay(text, apiKey, provider = 'openai', language = 'en') {
+  const systemPrompt = `You are an expert screenplay analyst and production coordinator. Analyze the provided screenplay and extract structured information for production planning. Return a valid JSON object only, no additional text. Ensure all text content in the JSON is in ${language} language.`;
 
-  const prompt = `Analyze this screenplay and provide a detailed breakdown in the following JSON format:
+  const prompt = `Analyze this screenplay and provide a detailed breakdown in the following JSON format. Ensure all descriptions and text are in ${language}:
 
 {
   "scenes": [
@@ -175,7 +163,7 @@ ${text.substring(0, 15000)}`;
 export async function analyzeScreenplayWithChunking(text, provider, apiKey, options = {}) {
   const {
     useChunking = true,
-    onProgress = () => {},
+    onProgress = () => { },
     model = '',
   } = options;
 
@@ -183,23 +171,23 @@ export async function analyzeScreenplayWithChunking(text, provider, apiKey, opti
     // If text is small enough or chunking is disabled, use regular analysis
     if (!useChunking || text.length < 10000) {
       onProgress({ step: 'analyzing', progress: 0, message: 'Analyzing screenplay...' });
-      const result = await analyzeScreenplay(text, provider, apiKey);
+      const result = await analyzeScreenplay(text, apiKey, provider, options.language);
       onProgress({ step: 'complete', progress: 100, message: 'Analysis complete' });
       return result;
     }
 
     // Get optimal chunk size for the provider
     const chunkOptions = getOptimalChunkSize(provider, model);
-    
-    onProgress({ 
-      step: 'chunking', 
-      progress: 5, 
-      message: 'Splitting screenplay into manageable chunks...' 
+
+    onProgress({
+      step: 'chunking',
+      progress: 5,
+      message: 'Splitting screenplay into manageable chunks...'
     });
 
     // Split text into chunks
     const chunks = splitTextForAnalysis(text, chunkOptions);
-    
+
     if (chunks.length === 0) {
       throw new Error('No text chunks created');
     }
@@ -207,15 +195,15 @@ export async function analyzeScreenplayWithChunking(text, provider, apiKey, opti
     if (chunks.length === 1) {
       // Only one chunk, use regular analysis
       onProgress({ step: 'analyzing', progress: 10, message: 'Analyzing screenplay...' });
-      const result = await analyzeScreenplay(chunks[0].text, provider, apiKey);
+      const result = await analyzeScreenplay(chunks[0].text, apiKey, provider, options.language);
       onProgress({ step: 'complete', progress: 100, message: 'Analysis complete' });
       return result;
     }
 
-    onProgress({ 
-      step: 'analyzing_chunks', 
-      progress: 10, 
-      message: `Analyzing ${chunks.length} chunks...` 
+    onProgress({
+      step: 'analyzing_chunks',
+      progress: 10,
+      message: `Analyzing ${chunks.length} chunks...`
     });
 
     // Analyze each chunk
@@ -224,7 +212,7 @@ export async function analyzeScreenplayWithChunking(text, provider, apiKey, opti
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-      
+
       onProgress({
         step: 'analyzing_chunk',
         progress: 10 + (i / totalChunks) * 70,
@@ -234,7 +222,7 @@ export async function analyzeScreenplayWithChunking(text, provider, apiKey, opti
       });
 
       try {
-        const chunkResult = await analyzeChunk(chunk, provider, apiKey, i + 1, totalChunks);
+        const chunkResult = await analyzeChunk(chunk, provider, apiKey, i + 1, totalChunks, options.language);
         chunkResults.push({
           ...chunkResult,
           chunkIndex: i,
@@ -266,29 +254,29 @@ export async function analyzeScreenplayWithChunking(text, provider, apiKey, opti
       }
     }
 
-    onProgress({ 
-      step: 'combining', 
-      progress: 85, 
-      message: 'Combining analysis results...' 
+    onProgress({
+      step: 'combining',
+      progress: 85,
+      message: 'Combining analysis results...'
     });
 
     // Combine chunk results
     const combinedResult = combineChunkAnalyses(chunkResults, text);
 
-    onProgress({ 
-      step: 'complete', 
-      progress: 100, 
-      message: 'Analysis complete' 
+    onProgress({
+      step: 'complete',
+      progress: 100,
+      message: 'Analysis complete'
     });
 
     return combinedResult;
 
   } catch (error) {
     console.error('Chunked analysis failed:', error);
-    onProgress({ 
-      step: 'error', 
-      progress: 0, 
-      message: `Analysis failed: ${error.message}` 
+    onProgress({
+      step: 'error',
+      progress: 0,
+      message: `Analysis failed: ${error.message}`
     });
     throw error;
   }
@@ -303,10 +291,10 @@ export async function analyzeScreenplayWithChunking(text, provider, apiKey, opti
  * @param {number} totalChunks - Total number of chunks
  * @returns {Promise<object>} - Chunk analysis result
  */
-async function analyzeChunk(chunk, provider, apiKey, chunkNumber, totalChunks) {
-  const systemPrompt = `You are a professional screenplay analyst. You are analyzing chunk ${chunkNumber} of ${totalChunks} from a larger screenplay. Focus on this specific section but be aware it's part of a larger work.`;
+async function analyzeChunk(chunk, provider, apiKey, chunkNumber, totalChunks, language = 'en') {
+  const systemPrompt = `You are a professional screenplay analyst. You are analyzing chunk ${chunkNumber} of ${totalChunks} from a larger screenplay. Focus on this specific section but be aware it's part of a larger work. Ensure all output is in ${language}.`;
 
-  const prompt = `Analyze this screenplay chunk and provide a detailed breakdown in the following JSON format. This is chunk ${chunkNumber} of ${totalChunks}, so focus on this section specifically:
+  const prompt = `Analyze this screenplay chunk and provide a detailed breakdown in the following JSON format. This is chunk ${chunkNumber} of ${totalChunks}, so focus on this section specifically. Ensure all text content is in ${language}:
 
 {
   "scenes": [
@@ -384,7 +372,7 @@ ${chunk.text}`;
  */
 function combineChunkAnalyses(chunkResults, originalText) {
   const validResults = chunkResults.filter(result => !result.error);
-  
+
   if (validResults.length === 0) {
     throw new Error('No valid chunk analyses to combine');
   }

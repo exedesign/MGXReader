@@ -18,15 +18,15 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
         window.electronAPI.isFullscreen().then(setIsFullscreen);
       }
     };
-    
+
     checkFullscreen();
-    
+
     // Listen for fullscreen changes
     const handleFullscreenChange = () => checkFullscreen();
     if (window.electronAPI && window.electronAPI.onFullscreenChange) {
       window.electronAPI.onFullscreenChange(handleFullscreenChange);
     }
-    
+
     return () => {
       if (window.electronAPI && window.electronAPI.removeFullscreenListener) {
         window.electronAPI.removeFullscreenListener(handleFullscreenChange);
@@ -53,10 +53,10 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
 
     try {
       const timestamp = new Date().toISOString().split('T')[0];
-      const fileName = originalFileName ? 
+      const fileName = originalFileName ?
         `${originalFileName.replace(/\.[^/.]+$/, '')}_analysis_${timestamp}.json` :
         `screenplay_analysis_${timestamp}.json`;
-        
+
       const filePath = await window.electronAPI.saveFile({
         defaultPath: fileName,
         filters: [
@@ -70,10 +70,10 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
           filePath,
           data: JSON.stringify(analysisData, null, 2),
         });
-        alert('Analysis exported successfully!');
+        alert(t('export.success', { format: 'JSON' }));
       }
     } catch (error) {
-      alert(`Export failed: ${error.message}`);
+      alert(t('export.failed', { error: error.message }));
     }
   };
 
@@ -115,7 +115,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
         <div className="flex items-center gap-2 lg:gap-3 min-w-0">
           <div className="text-xl lg:text-2xl flex-shrink-0">🎬</div>
           <div className="min-w-0">
-            <h1 className="text-lg lg:text-xl font-bold text-cinema-accent truncate">ScriptMaster AI</h1>
+            <h1 className="text-lg lg:text-xl font-bold text-cinema-accent truncate">{t('header.title')}</h1>
             {originalFileName && (
               <p className="text-xs text-cinema-text-dim truncate max-w-[150px] lg:max-w-xs" title={originalFileName}>
                 {originalFileName}
@@ -132,11 +132,10 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
             <button
               key={view.id}
               onClick={() => setCurrentView(view.id)}
-              className={`px-2 lg:px-4 py-2 rounded-md transition-all text-sm lg:text-base ${
-                currentView === view.id
+              className={`px-2 lg:px-4 py-2 rounded-md transition-all text-sm lg:text-base ${currentView === view.id
                   ? 'bg-cinema-accent text-cinema-black font-medium'
                   : 'text-cinema-text hover:bg-cinema-gray-light'
-              }`}
+                }`}
             >
               <span className="mr-1 lg:mr-2">{view.icon}</span>
               <span className="hidden lg:inline">{view.label}</span>
@@ -151,22 +150,20 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
         <div className="flex bg-cinema-gray rounded-lg p-1">
           <button
             onClick={() => changeLanguage('tr')}
-            className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-              i18n.language === 'tr' 
-                ? 'bg-cinema-accent text-cinema-black' 
+            className={`px-2 py-1 text-xs font-medium rounded transition-colors ${i18n.language === 'tr'
+                ? 'bg-cinema-accent text-cinema-black'
                 : 'text-cinema-text hover:bg-cinema-gray-light'
-            }`}
+              }`}
             title="Türkçe"
           >
             TR
           </button>
           <button
             onClick={() => changeLanguage('en')}
-            className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-              i18n.language === 'en' 
-                ? 'bg-cinema-accent text-cinema-black' 
+            className={`px-2 py-1 text-xs font-medium rounded transition-colors ${i18n.language === 'en'
+                ? 'bg-cinema-accent text-cinema-black'
                 : 'text-cinema-text hover:bg-cinema-gray-light'
-            }`}
+              }`}
             title="English"
           >
             EN
@@ -177,7 +174,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
           <button
             onClick={handleDownloadAnalysis}
             className="p-2 bg-cinema-gray hover:bg-green-900/30 text-cinema-text rounded-lg transition-colors"
-            title="Download Analysis (JSON)"
+            title={t('header.downloadAnalysis')}
           >
             <svg className="w-4 lg:w-5 h-4 lg:h-5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -188,12 +185,11 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
         {/* AI Settings Button */}
         <button
           onClick={() => setShowAISettings(true)}
-          className={`p-2 rounded-lg transition-colors flex items-center gap-2 ${
-            isConfigured()
+          className={`p-2 rounded-lg transition-colors flex items-center gap-2 ${isConfigured()
               ? 'bg-cinema-gray hover:bg-cinema-gray-light text-cinema-text'
               : 'bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400'
-          }`}
-          title="AI Provider Settings"
+            }`}
+          title={t('header.aiProviderSettings')}
         >
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
@@ -214,7 +210,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
         <button
           onClick={handleToggleFullscreen}
           className="p-2 bg-cinema-gray hover:bg-cinema-gray-light text-cinema-text rounded-lg transition-colors"
-          title={isFullscreen ? 'Exit Fullscreen (F11)' : 'Enter Fullscreen (F11)'}
+          title={isFullscreen ? t('header.exitFullscreen') : t('header.enterFullscreen')}
         >
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
             {isFullscreen ? (
@@ -229,12 +225,12 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
         {originalFileName && (
           <button
             onClick={() => {
-              if (confirm('Are you sure you want to close this script?')) {
+              if (confirm(t('header.closeScriptConfirm'))) {
                 clearScript();
               }
             }}
             className="p-2 hover:bg-orange-900/30 text-cinema-text rounded-lg transition-colors ml-2"
-            title="Close Script"
+            title={t('header.closeScript')}
           >
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />

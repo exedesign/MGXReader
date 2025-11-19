@@ -25,29 +25,29 @@ export default function AnalysisPanel() {
 
     setIsAnalyzing(true);
     setAnalysisProgress(null);
-    
+
     try {
       const text = cleanedText || scriptText;
       const aiHandler = getAIHandler();
-      
+
       console.log(`🔍 Starting analysis with provider: ${provider}`);
-      
+
       // Optimal chunking settings per provider
       const isCloudProvider = provider === 'openai' || provider === 'gemini';
       const useChunking = !isCloudProvider && text.length > 15000;
-      
+
       let result;
-      
+
       if (useCustomAnalysis) {
         console.log('Running custom prompt analysis');
-        
+
         // Get active custom prompt
         const customPrompt = getActivePrompt('analysis');
-        
+
         if (!customPrompt || !customPrompt.system || !customPrompt.user) {
           throw new Error('Custom prompt not properly configured');
         }
-        
+
         // Run custom analysis
         const customAnalysisText = await aiHandler.analyzeWithCustomPrompt(text, {
           systemPrompt: customPrompt.system,
@@ -58,14 +58,14 @@ export default function AnalysisPanel() {
             console.log('Custom analysis progress:', progress);
           },
         });
-        
+
         // Store custom results and create compatible structure
         const newCustomResults = {
           ...customResults,
           [selectedCustomPrompt]: customAnalysisText
         };
         setCustomResults(newCustomResults);
-        
+
         // Create structure compatible with tab display
         result = {
           isCustomAnalysis: true,
@@ -77,26 +77,26 @@ export default function AnalysisPanel() {
           characters: [],
           equipment: []
         };
-        
+
         // Auto-switch to custom tab
         setActiveTab('custom');
       } else {
         console.log('Running comprehensive enhanced screenplay analysis');
-        
+
         // Enhanced analysis with all 8 engines
         result = await aiHandler.analyzeScreenplayEnhanced(text, [], [], {
           useChunking,
-          language: i18n.language, // Pass current language
+          language: t('language.code', 'en'), // Pass current language
           onProgress: (progress) => {
             setAnalysisProgress(progress);
             console.log('Analysis progress:', progress);
           },
         });
-        
+
         // Ensure it's marked as default analysis
         result.isCustomAnalysis = false;
       }
-      
+
       setAnalysisData(result);
       setAnalysisProgress(null);
     } catch (error) {
@@ -130,7 +130,7 @@ export default function AnalysisPanel() {
 
     try {
       let defaultPath, filters, data;
-      
+
       switch (format) {
         case 'pdf':
           defaultPath = 'screenplay-analysis.pdf';
@@ -339,14 +339,14 @@ export default function AnalysisPanel() {
           <div className="flex items-center gap-3">
             {analysisData && !isAnalyzing && (
               <div className="relative" ref={exportMenuRef}>
-                <button 
+                <button
                   onClick={() => setShowExportMenu(!showExportMenu)}
                   className="btn-secondary text-sm flex items-center gap-2"
                 >
                   💾 {t('analysis.exportAnalysis')}
                   <span className="text-xs">▼</span>
                 </button>
-                
+
                 {showExportMenu && (
                   <div className="absolute top-full right-0 mt-1 bg-cinema-dark border border-cinema-gray rounded-lg shadow-lg z-50 min-w-[200px]">
                     <button
@@ -393,7 +393,7 @@ export default function AnalysisPanel() {
             </button>
           </div>
         </div>
-        
+
         {/* Analysis Configuration */}
         <div className="bg-cinema-gray rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
@@ -402,11 +402,10 @@ export default function AnalysisPanel() {
               <span className="text-sm text-cinema-text-dim">{t('analysis.config.analysisMode')}</span>
               <button
                 onClick={() => setUseCustomAnalysis(!useCustomAnalysis)}
-                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                  useCustomAnalysis
-                    ? 'bg-cinema-accent text-cinema-black'
-                    : 'bg-cinema-gray-light text-cinema-text hover:bg-cinema-accent/20'
-                }`}
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${useCustomAnalysis
+                  ? 'bg-cinema-accent text-cinema-black'
+                  : 'bg-cinema-gray-light text-cinema-text hover:bg-cinema-accent/20'
+                  }`}
               >
                 {useCustomAnalysis ? '🎯 Custom' : '📊 Standard'}
               </button>
@@ -424,11 +423,10 @@ export default function AnalysisPanel() {
                     <button
                       key={key}
                       onClick={() => setSelectedCustomPrompt(key)}
-                      className={`px-3 py-2 rounded-lg text-sm transition-colors ${
-                        selectedCustomPrompt === key
-                          ? 'bg-cinema-accent text-cinema-black font-medium'
-                          : 'bg-cinema-gray-light text-cinema-text hover:bg-cinema-accent/20'
-                      }`}
+                      className={`px-3 py-2 rounded-lg text-sm transition-colors ${selectedCustomPrompt === key
+                        ? 'bg-cinema-accent text-cinema-black font-medium'
+                        : 'bg-cinema-gray-light text-cinema-text hover:bg-cinema-accent/20'
+                        }`}
                     >
                       {name}
                     </button>
@@ -436,7 +434,7 @@ export default function AnalysisPanel() {
                 </div>
               </div>
               <div className="text-xs text-cinema-text-dim bg-cinema-black/30 p-2 rounded">
-                💡 <strong>Custom Analysis:</strong> Uses your predefined prompts for specialized analysis. 
+                💡 <strong>Custom Analysis:</strong> Uses your predefined prompts for specialized analysis.
                 Results will appear in a dedicated Custom tab with formatted text output.
               </div>
             </div>
@@ -446,7 +444,7 @@ export default function AnalysisPanel() {
             </div>
           )}
         </div>
-        
+
         {/* Progress Bar */}
         {isAnalyzing && analysisProgress && (
           <div className="mt-3">
@@ -476,11 +474,10 @@ export default function AnalysisPanel() {
             <div className="text-center max-w-md">
               <div className="text-6xl mb-4">🎬</div>
               <h3 className="text-xl font-bold text-cinema-text mb-2">
-                No Analysis Yet
+                {t('analysis.noAnalysisYet')}
               </h3>
               <p className="text-cinema-text-dim mb-6">
-                Click "Run Analysis" to get AI-powered production breakdown including
-                scenes, locations, characters, and equipment needs.
+                {t('analysis.noAnalysisYetDesc')}
               </p>
             </div>
           </div>
@@ -488,195 +485,193 @@ export default function AnalysisPanel() {
           <div className="max-w-6xl mx-auto">
             {/* Comprehensive Analysis Results */}
             <>
-                {/* Enhanced Summary Cards */}
-                {analysisData.isCustomAnalysis ? (
-                  /* Custom Analysis Summary */
-                  <div className="grid grid-cols-3 gap-4 mb-8">
-                    <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray hover:border-cinema-accent/30 transition-colors cursor-pointer"
-                         onClick={() => setActiveTab('custom')}>
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="text-2xl">🎯</div>
-                        <div className="text-3xl font-bold text-cinema-accent">
-                          {analysisData.customResults ? Object.keys(analysisData.customResults).length : 0}
-                        </div>
+              {/* Enhanced Summary Cards */}
+              {analysisData.isCustomAnalysis ? (
+                /* Custom Analysis Summary */
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                  <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray hover:border-cinema-accent/30 transition-colors cursor-pointer"
+                    onClick={() => setActiveTab('custom')}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="text-2xl">🎯</div>
+                      <div className="text-3xl font-bold text-cinema-accent">
+                        {analysisData.customResults ? Object.keys(analysisData.customResults).length : 0}
                       </div>
-                      <div className="text-sm text-cinema-text-dim">Custom Results</div>
-                      <div className="text-xs text-cinema-accent mt-1">Click to view analysis</div>
                     </div>
-                    <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="text-2xl">📝</div>
-                        <div className="text-3xl font-bold text-cinema-accent">
-                          {analysisData.activeCustomPrompt ? 1 : 0}
-                        </div>
-                      </div>
-                      <div className="text-sm text-cinema-text-dim">Active Analysis</div>
-                      <div className="text-xs text-cinema-text-dim mt-1">{analysisData.activeCustomPrompt || 'None'}</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="text-2xl">⚡</div>
-                        <div className="text-3xl font-bold text-cinema-accent">
-                          Custom
-                        </div>
-                      </div>
-                      <div className="text-sm text-cinema-text-dim">Analysis Type</div>
-                      <div className="text-xs text-cinema-accent mt-1">Specialized prompt</div>
-                    </div>
+                    <div className="text-sm text-cinema-text-dim">{t('analysis.tabs.customResults')}</div>
+                    <div className="text-xs text-cinema-accent mt-1">{t('analysis.clickToViewAnalysis')}</div>
                   </div>
-                ) : (
-                  /* Standard Analysis Summary */
-                  <div className="grid grid-cols-4 gap-4 mb-8">
-                    <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray hover:border-cinema-accent/30 transition-colors cursor-pointer"
-                         onClick={() => setActiveTab('scenes')}>
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="text-2xl">🎬</div>
-                        <div className="text-3xl font-bold text-cinema-accent">
-                          {analysisData.summary?.totalScenes || analysisData.scenes?.length || 0}
-                        </div>
+                  <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="text-2xl">📝</div>
+                      <div className="text-3xl font-bold text-cinema-accent">
+                        {analysisData.activeCustomPrompt ? 1 : 0}
                       </div>
-                      <div className="text-sm text-cinema-text-dim">Total Scenes</div>
-                      <div className="text-xs text-cinema-accent mt-1">Click to view details</div>
                     </div>
-                    <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray hover:border-cinema-accent/30 transition-colors cursor-pointer"
-                         onClick={() => setActiveTab('locations')}>
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="text-2xl">📍</div>
-                        <div className="text-3xl font-bold text-cinema-accent">
-                          {analysisData.locations?.length || 0}
-                        </div>
-                      </div>
-                      <div className="text-sm text-cinema-text-dim">Locations</div>
-                      <div className="text-xs text-cinema-accent mt-1">Click to view details</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray hover:border-cinema-accent/30 transition-colors cursor-pointer"
-                         onClick={() => setActiveTab('characters')}>
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="text-2xl">👥</div>
-                        <div className="text-3xl font-bold text-cinema-accent">
-                          {analysisData.characters?.length || 0}
-                        </div>
-                      </div>
-                      <div className="text-sm text-cinema-text-dim">Characters</div>
-                      <div className="text-xs text-cinema-accent mt-1">Click to view details</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray hover:border-cinema-accent/30 transition-colors cursor-pointer"
-                         onClick={() => setActiveTab('equipment')}>
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="text-2xl">🎥</div>
-                        <div className="text-3xl font-bold text-cinema-accent">
-                          {analysisData.summary?.estimatedShootingDays || 
-                           (analysisData.locations?.reduce((acc, loc) => acc + (parseInt(loc.estimatedShootingDays) || 1), 0)) || 0}
-                        </div>
-                      </div>
-                      <div className="text-sm text-cinema-text-dim">Est. Shoot Days</div>
-                      <div className="text-xs text-cinema-accent mt-1">Click to view equipment</div>
-                    </div>
+                    <div className="text-sm text-cinema-text-dim">{t('analysis.activeAnalysis')}</div>
+                    <div className="text-xs text-cinema-text-dim mt-1">{analysisData.activeCustomPrompt || 'None'}</div>
                   </div>
-                )}
+                  <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="text-2xl">⚡</div>
+                      <div className="text-3xl font-bold text-cinema-accent">
+                        Custom
+                      </div>
+                    </div>
+                    <div className="text-sm text-cinema-text-dim">{t('analysis.analysisType')}</div>
+                    <div className="text-xs text-cinema-accent mt-1">{t('analysis.specializedPrompt')}</div>
+                  </div>
+                </div>
+              ) : (
+                /* Standard Analysis Summary */
+                <div className="grid grid-cols-4 gap-4 mb-8">
+                  <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray hover:border-cinema-accent/30 transition-colors cursor-pointer"
+                    onClick={() => setActiveTab('scenes')}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="text-2xl">🎬</div>
+                      <div className="text-3xl font-bold text-cinema-accent">
+                        {analysisData.summary?.totalScenes || analysisData.scenes?.length || 0}
+                      </div>
+                    </div>
+                    <div className="text-sm text-cinema-text-dim">{t('analysis.totalScenes')}</div>
+                    <div className="text-xs text-cinema-accent mt-1">{t('common.clickToView')}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray hover:border-cinema-accent/30 transition-colors cursor-pointer"
+                    onClick={() => setActiveTab('locations')}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="text-2xl">📍</div>
+                      <div className="text-3xl font-bold text-cinema-accent">
+                        {analysisData.locations?.length || 0}
+                      </div>
+                    </div>
+                    <div className="text-sm text-cinema-text-dim">{t('analysis.tabs.locations')}</div>
+                    <div className="text-xs text-cinema-accent mt-1">{t('common.clickToView')}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray hover:border-cinema-accent/30 transition-colors cursor-pointer"
+                    onClick={() => setActiveTab('characters')}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="text-2xl">👥</div>
+                      <div className="text-3xl font-bold text-cinema-accent">
+                        {analysisData.characters?.length || 0}
+                      </div>
+                    </div>
+                    <div className="text-sm text-cinema-text-dim">{t('analysis.tabs.characters')}</div>
+                    <div className="text-xs text-cinema-accent mt-1">{t('common.clickToView')}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray hover:border-cinema-accent/30 transition-colors cursor-pointer"
+                    onClick={() => setActiveTab('equipment')}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="text-2xl">🎥</div>
+                      <div className="text-3xl font-bold text-cinema-accent">
+                        {analysisData.summary?.estimatedShootingDays ||
+                          (analysisData.locations?.reduce((acc, loc) => acc + (parseInt(loc.estimatedShootingDays) || 1), 0)) || 0}
+                      </div>
+                    </div>
+                    <div className="text-sm text-cinema-text-dim">{t('analysis.estShootDays')}</div>
+                    <div className="text-xs text-cinema-accent mt-1">{t('common.clickToView')}</div>
+                  </div>
+                </div>
+              )}
 
-                {/* Enhanced Tab Navigation */}
-                <div className="flex gap-1 mb-6 bg-cinema-gray rounded-xl p-1 overflow-x-auto">
-                  {[
-                    { key: 'overview', label: 'Overview', icon: '📊', count: null, show: !analysisData.isCustomAnalysis },
-                    { key: 'scenes', label: 'Scenes', icon: '🎬', count: analysisData.scenes?.length, show: !analysisData.isCustomAnalysis },
-                    { key: 'locations', label: 'Locations', icon: '📍', count: analysisData.locations?.length, show: !analysisData.isCustomAnalysis },
-                    { key: 'characters', label: 'Characters', icon: '👥', count: analysisData.characters?.length, show: !analysisData.isCustomAnalysis },
-                    { key: 'competitive', label: 'Competitive', icon: '🏆', count: null, show: !analysisData.isCustomAnalysis && analysisData.competitiveAnalysis },
-                    { key: 'geographic', label: 'Geographic', icon: '🌍', count: null, show: !analysisData.isCustomAnalysis && analysisData.geographicAnalysis },
-                    { key: 'trend', label: 'Trends', icon: '📈', count: null, show: !analysisData.isCustomAnalysis && analysisData.trendAnalysis },
-                    { key: 'risk', label: 'Risk & Opp', icon: '⚖️', count: null, show: !analysisData.isCustomAnalysis && analysisData.riskOpportunityAnalysis },
-                    { key: 'equipment', label: 'Equipment', icon: '🎥', count: analysisData.equipment?.length, show: !analysisData.isCustomAnalysis },
-                    { key: 'vfx', label: 'VFX/SFX', icon: '✨', count: analysisData.vfxRequirements?.length || analysisData.sfxRequirements?.length, show: !analysisData.isCustomAnalysis },
-                    { key: 'production', label: 'Virtual Production', icon: '🎮', count: null, show: !analysisData.isCustomAnalysis },
-                    { key: 'evaluation', label: 'Evaluation', icon: '📝', count: null, show: !analysisData.isCustomAnalysis },
-                    { key: 'audience', label: 'Audience', icon: '🎯', count: null, show: !analysisData.isCustomAnalysis },
-                    { key: 'custom', label: 'Custom Results', icon: '🎯', count: analysisData.customResults ? Object.keys(analysisData.customResults).length : 0, show: analysisData.isCustomAnalysis }
-                  ].filter(tab => tab.show !== false).map((tab) => (
-                    <button
-                      key={tab.key}
-                      onClick={() => setActiveTab(tab.key)}
-                      className={`flex-shrink-0 px-4 py-3 rounded-lg transition-all font-medium flex items-center justify-center gap-2 ${
-                        activeTab === tab.key
-                          ? 'bg-cinema-accent text-cinema-black shadow-lg'
-                          : 'text-cinema-text hover:bg-cinema-gray-light hover:text-cinema-accent'
+              {/* Enhanced Tab Navigation */}
+              <div className="flex gap-1 mb-6 bg-cinema-gray rounded-xl p-1 overflow-x-auto">
+                {[
+                  { key: 'overview', label: t('analysis.tabs.overview'), icon: '📊', count: null, show: !analysisData.isCustomAnalysis },
+                  { key: 'scenes', label: t('analysis.tabs.scenes'), icon: '🎬', count: analysisData.scenes?.length, show: !analysisData.isCustomAnalysis },
+                  { key: 'locations', label: t('analysis.tabs.locations'), icon: '📍', count: analysisData.locations?.length, show: !analysisData.isCustomAnalysis },
+                  { key: 'characters', label: t('analysis.tabs.characters'), icon: '👥', count: analysisData.characters?.length, show: !analysisData.isCustomAnalysis },
+                  { key: 'competitive', label: t('analysis.tabs.competitive'), icon: '🏆', count: null, show: !analysisData.isCustomAnalysis && analysisData.competitiveAnalysis },
+                  { key: 'geographic', label: t('analysis.tabs.geographic'), icon: '🌍', count: null, show: !analysisData.isCustomAnalysis && analysisData.geographicAnalysis },
+                  { key: 'trend', label: t('analysis.tabs.trend'), icon: '📈', count: null, show: !analysisData.isCustomAnalysis && analysisData.trendAnalysis },
+                  { key: 'risk', label: t('analysis.tabs.risk'), icon: '⚖️', count: null, show: !analysisData.isCustomAnalysis && analysisData.riskOpportunityAnalysis },
+                  { key: 'equipment', label: t('analysis.tabs.equipment'), icon: '🎥', count: analysisData.equipment?.length, show: !analysisData.isCustomAnalysis },
+                  { key: 'vfx', label: t('analysis.tabs.vfx'), icon: '✨', count: analysisData.vfxRequirements?.length || analysisData.sfxRequirements?.length, show: !analysisData.isCustomAnalysis },
+                  { key: 'production', label: t('analysis.tabs.virtualProduction'), icon: '🎮', count: null, show: !analysisData.isCustomAnalysis },
+                  { key: 'evaluation', label: t('analysis.tabs.evaluation'), icon: '📝', count: null, show: !analysisData.isCustomAnalysis },
+                  { key: 'audience', label: t('analysis.tabs.audience'), icon: '🎯', count: null, show: !analysisData.isCustomAnalysis },
+                  { key: 'custom', label: t('analysis.tabs.customResults'), icon: '🎯', count: analysisData.customResults ? Object.keys(analysisData.customResults).length : 0, show: analysisData.isCustomAnalysis }
+                ].filter(tab => tab.show !== false).map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`flex-shrink-0 px-4 py-3 rounded-lg transition-all font-medium flex items-center justify-center gap-2 ${activeTab === tab.key
+                      ? 'bg-cinema-accent text-cinema-black shadow-lg'
+                      : 'text-cinema-text hover:bg-cinema-gray-light hover:text-cinema-accent'
                       }`}
-                    >
-                      <span className="text-lg">{tab.icon}</span>
-                      <span>{tab.label}</span>
-                      {tab.count !== undefined && (
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-                          activeTab === tab.key 
-                            ? 'bg-cinema-black/20 text-cinema-black' 
-                            : 'bg-cinema-accent/20 text-cinema-accent'
+                  >
+                    <span className="text-lg">{tab.icon}</span>
+                    <span>{tab.label}</span>
+                    {tab.count !== undefined && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${activeTab === tab.key
+                        ? 'bg-cinema-black/20 text-cinema-black'
+                        : 'bg-cinema-accent/20 text-cinema-accent'
                         }`}>
-                          {tab.count || 0}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                        {tab.count || 0}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
 
-                {/* Enhanced Tab Content */}
-                <div className="bg-cinema-dark rounded-xl border border-cinema-gray-light p-6 min-h-[500px]">
-                  {activeTab === 'overview' && (
-                    <OverviewTab analysisData={analysisData} />
-                  )}
-                  {activeTab === 'scenes' && (
-                    <ScenesTab scenes={analysisData.scenes || []} />
-                  )}
-                  {activeTab === 'locations' && (
-                    <LocationsTab locations={analysisData.locations || []} />
-                  )}
-                  {activeTab === 'characters' && (
-                    <CharactersTab characters={analysisData.characters || []} />
-                  )}
-                  {activeTab === 'competitive' && (
-                    <CompetitiveTab analysis={analysisData.competitiveAnalysis} />
-                  )}
-                  {activeTab === 'geographic' && (
-                    <GeographicTab analysis={analysisData.geographicAnalysis} />
-                  )}
-                  {activeTab === 'trend' && (
-                    <TrendTab analysis={analysisData.trendAnalysis} />
-                  )}
-                  {activeTab === 'risk' && (
-                    <RiskTab analysis={analysisData.riskOpportunityAnalysis} />
-                  )}
-                  {activeTab === 'equipment' && (
-                    <EquipmentTab equipment={analysisData.equipment || []} />
-                  )}
-                  {activeTab === 'vfx' && (
-                    <VFXTab 
-                      vfxRequirements={analysisData.vfxRequirements || []} 
-                      sfxRequirements={analysisData.sfxRequirements || []}
-                    />
-                  )}
-                  {activeTab === 'production' && (
-                    <VirtualProductionTab 
-                      virtualProductionSuitability={analysisData.virtualProductionSuitability || {}}
-                      shootingTechniques={analysisData.shootingTechniques || []}
-                    />
-                  )}
-                  {activeTab === 'evaluation' && (
-                    <EvaluationTab 
-                      evaluation={analysisData.evaluation || {}}
-                    />
-                  )}
-                  {activeTab === 'audience' && (
-                    <AudienceTab 
-                      audienceAnalysis={analysisData.audienceAnalysis || {}}
-                    />
-                  )}
-                  {activeTab === 'custom' && (
-                    <CustomAnalysisTab 
-                      customResults={analysisData.customResults || {}} 
-                      activePrompt={analysisData.activeCustomPrompt}
-                      onSelectPrompt={setSelectedCustomPrompt}
-                    />
-                  )}
-                </div>
-              </>
+              {/* Enhanced Tab Content */}
+              <div className="bg-cinema-dark rounded-xl border border-cinema-gray-light p-6 min-h-[500px]">
+                {activeTab === 'overview' && (
+                  <OverviewTab analysisData={analysisData} />
+                )}
+                {activeTab === 'scenes' && (
+                  <ScenesTab scenes={analysisData.scenes || []} />
+                )}
+                {activeTab === 'locations' && (
+                  <LocationsTab locations={analysisData.locations || []} />
+                )}
+                {activeTab === 'characters' && (
+                  <CharactersTab characters={analysisData.characters || []} />
+                )}
+                {activeTab === 'competitive' && (
+                  <CompetitiveTab analysis={analysisData.competitiveAnalysis} />
+                )}
+                {activeTab === 'geographic' && (
+                  <GeographicTab analysis={analysisData.geographicAnalysis} />
+                )}
+                {activeTab === 'trend' && (
+                  <TrendTab analysis={analysisData.trendAnalysis} />
+                )}
+                {activeTab === 'risk' && (
+                  <RiskTab analysis={analysisData.riskOpportunityAnalysis} />
+                )}
+                {activeTab === 'equipment' && (
+                  <EquipmentTab equipment={analysisData.equipment || []} />
+                )}
+                {activeTab === 'vfx' && (
+                  <VFXTab
+                    vfxRequirements={analysisData.vfxRequirements || []}
+                    sfxRequirements={analysisData.sfxRequirements || []}
+                  />
+                )}
+                {activeTab === 'production' && (
+                  <VirtualProductionTab
+                    virtualProductionSuitability={analysisData.virtualProductionSuitability || {}}
+                    shootingTechniques={analysisData.shootingTechniques || []}
+                  />
+                )}
+                {activeTab === 'evaluation' && (
+                  <EvaluationTab
+                    evaluation={analysisData.evaluation || {}}
+                  />
+                )}
+                {activeTab === 'audience' && (
+                  <AudienceTab
+                    audienceAnalysis={analysisData.audienceAnalysis || {}}
+                  />
+                )}
+                {activeTab === 'custom' && (
+                  <CustomAnalysisTab
+                    customResults={analysisData.customResults || {}}
+                    activePrompt={analysisData.activeCustomPrompt}
+                    onSelectPrompt={setSelectedCustomPrompt}
+                  />
+                )}
+              </div>
+            </>
           </div>
         )}
       </div>
@@ -685,11 +680,12 @@ export default function AnalysisPanel() {
 }
 
 function ScenesTab({ scenes }) {
+  const { t } = useTranslation();
   if (!scenes || scenes.length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
         <div className="text-4xl mb-4">🎬</div>
-        <p>No scenes detected in analysis</p>
+        <p>{t('scenes.noScenes')}</p>
       </div>
     );
   }
@@ -698,9 +694,9 @@ function ScenesTab({ scenes }) {
     <div className="space-y-4">
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">Scene Breakdown</h3>
+        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('scenes.title')}</h3>
         <p className="text-cinema-text-dim text-sm">
-          Detailed analysis of {scenes.length} scenes with production requirements
+          {t('scenes.desc', { count: scenes.length })}
         </p>
       </div>
 
@@ -715,10 +711,10 @@ function ScenesTab({ scenes }) {
               <div className="flex-1">
                 <h4 className="text-cinema-text font-bold text-lg mb-2">{scene.header || `Scene ${index + 1}`}</h4>
                 <p className="text-cinema-text-dim text-sm mb-4 leading-relaxed">{scene.description}</p>
-                
+
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
-                    <span className="text-xs text-cinema-text-dim uppercase tracking-wider">Technical Details</span>
+                    <span className="text-xs text-cinema-text-dim uppercase tracking-wider">{t('scenes.technicalDetails')}</span>
                     <div className="flex gap-2 flex-wrap mt-1">
                       <span className="text-xs px-2 py-1 bg-cinema-black rounded text-cinema-text border border-cinema-gray-light">
                         {scene.intExt || 'N/A'}
@@ -727,12 +723,12 @@ function ScenesTab({ scenes }) {
                         {scene.timeOfDay || 'N/A'}
                       </span>
                       <span className="text-xs px-2 py-1 bg-cinema-black rounded text-cinema-text border border-cinema-gray-light">
-                        ~{scene.estimatedDuration || '5'} min
+                        ~{scene.estimatedDuration || '5'} {t('units.min')}
                       </span>
                     </div>
                   </div>
                   <div>
-                    <span className="text-xs text-cinema-text-dim uppercase tracking-wider">Characters</span>
+                    <span className="text-xs text-cinema-text-dim uppercase tracking-wider">{t('scenes.characters')}</span>
                     <div className="flex gap-1 flex-wrap mt-1">
                       {scene.characters && scene.characters.length > 0 ? (
                         scene.characters.map((char, i) => (
@@ -744,7 +740,7 @@ function ScenesTab({ scenes }) {
                           </span>
                         ))
                       ) : (
-                        <span className="text-xs text-cinema-text-dim">No characters specified</span>
+                        <span className="text-xs text-cinema-text-dim">{t('scenes.noCharactersSpecified')}</span>
                       )}
                     </div>
                   </div>
@@ -759,11 +755,12 @@ function ScenesTab({ scenes }) {
 }
 
 function LocationsTab({ locations }) {
+  const { t } = useTranslation();
   if (!locations || locations.length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
         <div className="text-4xl mb-4">📍</div>
-        <p>No locations detected in analysis</p>
+        <p>{t('locations.noLocations')}</p>
       </div>
     );
   }
@@ -772,9 +769,9 @@ function LocationsTab({ locations }) {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">Filming Locations</h3>
+        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('locations.title')}</h3>
         <p className="text-cinema-text-dim text-sm">
-          Production requirements for {locations.length} unique locations
+          {t('locations.desc', { count: locations.length })}
         </p>
       </div>
 
@@ -789,16 +786,16 @@ function LocationsTab({ locations }) {
               <div className="flex-1">
                 <h4 className="text-cinema-text font-bold text-lg mb-1">{location.name || `Location ${index + 1}`}</h4>
                 <span className="text-xs px-2 py-1 bg-cinema-accent/20 rounded text-cinema-accent">
-                  {location.type || 'Unknown Type'}
+                  {location.type || t('common.unknownType')}
                 </span>
               </div>
             </div>
-            
+
             <div className="space-y-3">
               {location.description && (
                 <p className="text-cinema-text-dim text-sm leading-relaxed">{location.description}</p>
               )}
-              
+
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="space-y-2">
                   <div className="flex justify-between">
@@ -852,9 +849,9 @@ function CharactersTab({ characters }) {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">Character Analysis</h3>
+        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('characters.title')}</h3>
         <p className="text-cinema-text-dim text-sm">
-          Cast and character breakdown for {characters.length} identified characters
+          {t('characters.desc', { count: characters.length })}
         </p>
       </div>
 
@@ -868,31 +865,30 @@ function CharactersTab({ characters }) {
               </div>
               <div className="flex-1">
                 <h4 className="text-cinema-text font-bold text-lg mb-1">{character.name || `Character ${index + 1}`}</h4>
-                <span className={`text-xs px-2 py-1 rounded ${
-                  character.importance === 'main' 
-                    ? 'bg-cinema-accent text-cinema-black' 
-                    : character.importance === 'supporting'
+                <span className={`text-xs px-2 py-1 rounded ${character.importance === 'main'
+                  ? 'bg-cinema-accent text-cinema-black'
+                  : character.importance === 'supporting'
                     ? 'bg-blue-500/20 text-blue-400'
                     : 'bg-gray-500/20 text-gray-400'
-                }`}>
+                  }`}>
                   {character.importance || 'Character'}
                 </span>
               </div>
             </div>
-            
+
             {character.description && (
               <p className="text-cinema-text-dim text-sm mb-4 leading-relaxed">{character.description}</p>
             )}
-            
+
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-cinema-text-dim text-sm">Scene Appearances</span>
+                <span className="text-cinema-text-dim text-sm">{t('characters.sceneAppearances')}</span>
                 <span className="text-cinema-accent font-bold text-lg">{character.sceneCount || '0'}</span>
               </div>
-              
+
               {character.relationships && character.relationships.length > 0 && (
                 <div>
-                  <span className="text-cinema-text-dim text-xs uppercase tracking-wider">Key Relationships</span>
+                  <span className="text-cinema-text-dim text-xs uppercase tracking-wider">{t('characters.keyRelationships')}</span>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {character.relationships.slice(0, 3).map((rel, i) => (
                       <span key={i} className="text-xs px-1 py-0.5 bg-cinema-black rounded text-cinema-text">
@@ -905,10 +901,10 @@ function CharactersTab({ characters }) {
                   </div>
                 </div>
               )}
-              
+
               {character.notes && (
                 <div className="text-xs text-cinema-text-dim bg-cinema-black/30 p-2 rounded">
-                  <strong>Notes:</strong> {character.notes}
+                  <strong>{t('characters.notes')}</strong> {character.notes}
                 </div>
               )}
             </div>
@@ -924,14 +920,14 @@ function EquipmentTab({ equipment }) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
         <div className="text-4xl mb-4">🎬</div>
-        <p>No special equipment requirements detected</p>
+        <p>{t('equipment.noEquipment')}</p>
       </div>
     );
   }
 
   // Group equipment by category
   const groupedEquipment = equipment.reduce((acc, item) => {
-    const category = item.category || 'General Equipment';
+    const category = item.category || t('common.general');
     if (!acc[category]) acc[category] = [];
     acc[category].push(item);
     return acc;
@@ -941,9 +937,9 @@ function EquipmentTab({ equipment }) {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">Production Equipment</h3>
+        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('equipment.title')}</h3>
         <p className="text-cinema-text-dim text-sm">
-          Equipment requirements and technical needs for production
+          {t('equipment.desc')}
         </p>
       </div>
 
@@ -952,43 +948,42 @@ function EquipmentTab({ equipment }) {
         {Object.entries(groupedEquipment).map(([category, items]) => (
           <div key={category}>
             <h4 className="text-lg font-bold text-cinema-text mb-4 border-b border-cinema-gray-light pb-2">
-              {category} <span className="text-sm font-normal text-cinema-text-dim">({items.length} items)</span>
+              {category} <span className="text-sm font-normal text-cinema-text-dim">({items.length} {t('equipment.items')})</span>
             </h4>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {items.map((item, index) => (
                 <div key={index} className="p-4 bg-cinema-gray rounded-lg border border-cinema-gray-light hover:border-cinema-accent/30 transition-colors">
                   <div className="flex items-start gap-3">
                     <div className="text-2xl">
-                      {item.category === 'Camera' ? '📹' : 
-                       item.category === 'Audio' ? '🎤' : 
-                       item.category === 'Lighting' ? '💡' : 
-                       item.category === 'Props' ? '🎭' : '🔧'}
+                      {item.category === 'Camera' ? '📹' :
+                        item.category === 'Audio' ? '🎤' :
+                          item.category === 'Lighting' ? '💡' :
+                            item.category === 'Props' ? '🎭' : '🔧'}
                     </div>
                     <div className="flex-1">
                       <h5 className="text-cinema-text font-bold mb-2">{item.item || item.name || 'Equipment'}</h5>
                       <p className="text-cinema-text-dim text-sm mb-3 leading-relaxed">{item.reason || item.description}</p>
-                      
+
                       {item.scenes && item.scenes.length > 0 && (
                         <div className="mb-3">
-                          <span className="text-xs text-cinema-text-dim uppercase tracking-wider">Required for scenes</span>
+                          <span className="text-xs text-cinema-text-dim uppercase tracking-wider">{t('equipment.requiredForScenes')}</span>
                           <div className="text-sm text-cinema-text mt-1">
                             {Array.isArray(item.scenes) ? item.scenes.join(', ') : item.scenes}
                           </div>
                         </div>
                       )}
-                      
+
                       <div className="flex justify-between items-center text-xs">
-                        <span className={`px-2 py-1 rounded ${
-                          item.priority === 'high' ? 'bg-red-500/20 text-red-400' :
+                        <span className={`px-2 py-1 rounded ${item.priority === 'high' ? 'bg-red-500/20 text-red-400' :
                           item.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                          'bg-green-500/20 text-green-400'
-                        }`}>
-                          {item.priority || 'Standard'} Priority
+                            'bg-green-500/20 text-green-400'
+                          }`}>
+                          {t(`common.${item.priority?.toLowerCase()}`) || item.priority || t('common.standard')} {t('equipment.priority')}
                         </span>
                         {item.cost && (
                           <span className="text-cinema-text-dim">
-                            Est. Cost: {item.cost}
+                            {t('equipment.estimatedCost')} {item.cost}
                           </span>
                         )}
                       </div>
@@ -1008,13 +1003,13 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
   // Get prompt store functions
   const getPromptTypes = usePromptStore(state => state.getPromptTypes);
   const getPrompt = usePromptStore(state => state.getPrompt);
-  
+
   if (!customResults || Object.keys(customResults).length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
         <div className="text-4xl mb-4">🎯</div>
-        <p>No custom analysis results yet</p>
-        <p className="text-sm mt-2">Run a custom analysis to see results here</p>
+        <p>{t('custom.noResults')}</p>
+        <p className="text-sm mt-2">{t('custom.runCustom')}</p>
       </div>
     );
   }
@@ -1026,9 +1021,9 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">Custom Analysis Results</h3>
+        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('custom.title')}</h3>
         <p className="text-cinema-text-dim text-sm">
-          Specialized analysis results from your custom prompts
+          {t('custom.desc')}
         </p>
       </div>
 
@@ -1042,11 +1037,10 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                 <button
                   key={promptKey}
                   onClick={() => onSelectPrompt(promptKey)}
-                  className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-                    activePrompt === promptKey
-                      ? 'bg-cinema-accent text-cinema-black font-medium'
-                      : 'bg-cinema-gray-light text-cinema-text hover:bg-cinema-accent/20'
-                  }`}
+                  className={`px-4 py-2 rounded-lg text-sm transition-colors ${activePrompt === promptKey
+                    ? 'bg-cinema-accent text-cinema-black font-medium'
+                    : 'bg-cinema-gray-light text-cinema-text hover:bg-cinema-accent/20'
+                    }`}
                 >
                   {promptInfo?.name || promptKey}
                 </button>
@@ -1060,10 +1054,10 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
       <div className="space-y-6">
         {availableResults.map((promptKey) => {
           if (activePrompt && activePrompt !== promptKey) return null;
-          
+
           const promptInfo = getPrompt('analysis', promptKey);
           const result = customResults[promptKey];
-          
+
           return (
             <div key={promptKey} className="bg-cinema-gray rounded-lg border border-cinema-gray-light p-6">
               <div className="flex items-start gap-3 mb-4">
@@ -1077,13 +1071,13 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                   </p>
                 </div>
               </div>
-              
+
               <div className="bg-cinema-black rounded-lg p-4 border border-cinema-gray-light">
                 <div className="text-cinema-text whitespace-pre-wrap text-sm leading-relaxed font-mono">
                   {result}
                 </div>
               </div>
-              
+
               {/* Copy Button */}
               <div className="mt-4 flex justify-end">
                 <button
@@ -1093,7 +1087,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                   }}
                   className="px-3 py-1 bg-cinema-gray-light hover:bg-cinema-accent/20 text-cinema-text text-xs rounded transition-colors flex items-center gap-1"
                 >
-                  📋 Copy Text
+                  📋 {t('custom.copyText')}
                 </button>
               </div>
             </div>
@@ -1105,6 +1099,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
 }
 
 function OverviewTab({ analysisData }) {
+  const { t } = useTranslation();
   if (!analysisData) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
@@ -1118,9 +1113,9 @@ function OverviewTab({ analysisData }) {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">Production Overview</h3>
+        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('overview.title')}</h3>
         <p className="text-cinema-text-dim text-sm">
-          Comprehensive summary of screenplay analysis and production requirements
+          {t('overview.desc')}
         </p>
       </div>
 
@@ -1129,24 +1124,24 @@ function OverviewTab({ analysisData }) {
         <div className="bg-cinema-gray rounded-lg p-4 text-center">
           <div className="text-2xl mb-2">🎬</div>
           <div className="text-2xl font-bold text-cinema-accent">{analysisData.scenes?.length || 0}</div>
-          <div className="text-sm text-cinema-text-dim">Scenes</div>
+          <div className="text-sm text-cinema-text-dim">{t('overview.scenes')}</div>
         </div>
         <div className="bg-cinema-gray rounded-lg p-4 text-center">
           <div className="text-2xl mb-2">📍</div>
           <div className="text-2xl font-bold text-cinema-accent">{analysisData.locations?.length || 0}</div>
-          <div className="text-sm text-cinema-text-dim">Locations</div>
+          <div className="text-sm text-cinema-text-dim">{t('overview.locations')}</div>
         </div>
         <div className="bg-cinema-gray rounded-lg p-4 text-center">
           <div className="text-2xl mb-2">👥</div>
           <div className="text-2xl font-bold text-cinema-accent">{analysisData.characters?.length || 0}</div>
-          <div className="text-sm text-cinema-text-dim">Characters</div>
+          <div className="text-sm text-cinema-text-dim">{t('overview.characters')}</div>
         </div>
         <div className="bg-cinema-gray rounded-lg p-4 text-center">
           <div className="text-2xl mb-2">📅</div>
           <div className="text-2xl font-bold text-cinema-accent">
-            {analysisData.summary?.estimatedShootingDays || 'TBD'}
+            {analysisData.summary?.estimatedShootingDays || t('common.tbd')}
           </div>
-          <div className="text-sm text-cinema-text-dim">Shoot Days</div>
+          <div className="text-sm text-cinema-text-dim">{t('overview.shootDays')}</div>
         </div>
       </div>
 
@@ -1154,25 +1149,25 @@ function OverviewTab({ analysisData }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-cinema-gray rounded-lg p-5">
           <h4 className="text-lg font-bold text-cinema-text mb-3 flex items-center gap-2">
-            <span>🎯</span> Production Scope
+            <span>🎯</span> {t('overview.productionScope')}
           </h4>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-cinema-text-dim">Equipment Items:</span>
+              <span className="text-cinema-text-dim">{t('overview.equipmentItems')}</span>
               <span className="text-cinema-text font-medium">{analysisData.equipment?.length || 0}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-cinema-text-dim">VFX Sequences:</span>
+              <span className="text-cinema-text-dim">{t('overview.vfxSequences')}</span>
               <span className="text-cinema-text font-medium">{analysisData.vfxRequirements?.length || 0}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-cinema-text-dim">SFX Requirements:</span>
+              <span className="text-cinema-text-dim">{t('overview.sfxRequirements')}</span>
               <span className="text-cinema-text font-medium">{analysisData.sfxRequirements?.length || 0}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-cinema-text-dim">Virtual Production:</span>
+              <span className="text-cinema-text-dim">{t('overview.virtualProduction')}</span>
               <span className="text-cinema-accent font-medium">
-                {analysisData.virtualProductionSuitability?.overall || 'Not Assessed'}
+                {analysisData.virtualProductionSuitability?.overall || t('virtualProduction.notAssessed')}
               </span>
             </div>
           </div>
@@ -1180,31 +1175,31 @@ function OverviewTab({ analysisData }) {
 
         <div className="bg-cinema-gray rounded-lg p-5">
           <h4 className="text-lg font-bold text-cinema-text mb-3 flex items-center gap-2">
-            <span>📈</span> Analysis Summary
+            <span>📈</span> {t('overview.analysisSummary')}
           </h4>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-cinema-text-dim">Genre:</span>
+              <span className="text-cinema-text-dim">{t('overview.genre')}</span>
               <span className="text-cinema-text font-medium">
-                {analysisData.enhancedMetrics?.marketAnalysis?.genre || analysisData.evaluation?.genre || 'TBD'}
+                {analysisData.enhancedMetrics?.marketAnalysis?.genre || analysisData.evaluation?.genre || t('common.tbd')}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-cinema-text-dim">Emotion Score:</span>
+              <span className="text-cinema-text-dim">{t('overview.emotionScore')}</span>
               <span className="text-cinema-accent font-medium">
-                {analysisData.evaluation?.emotionScore || 'Not Scored'}/10
+                {analysisData.evaluation?.emotionScore || t('common.notScored')}/10
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-cinema-text-dim">Competitive Score:</span>
+              <span className="text-cinema-text-dim">{t('analysis.tabs.competitive.score')}</span>
               <span className="text-cinema-text font-medium">
                 {analysisData.competitiveAnalysis?.competitiveScore || 'N/A'}/100
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-cinema-text-dim">Market Potential:</span>
+              <span className="text-cinema-text-dim">{t('analysis.tabs.geographic.globalPotential')}:</span>
               <span className="text-cinema-text font-medium">
-                {analysisData.enhancedMetrics?.marketAnalysis?.marketPotential?.toUpperCase() || 'TBD'}
+                {analysisData.enhancedMetrics?.marketAnalysis?.marketPotential?.toUpperCase() || t('common.tbd')}
               </span>
             </div>
           </div>
@@ -1215,13 +1210,14 @@ function OverviewTab({ analysisData }) {
 }
 
 function VFXTab({ vfxRequirements, sfxRequirements }) {
+  const { t } = useTranslation();
   const totalRequirements = [...(vfxRequirements || []), ...(sfxRequirements || [])];
-  
+
   if (totalRequirements.length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
         <div className="text-4xl mb-4">✨</div>
-        <p>No VFX or SFX requirements detected</p>
+        <p>{t('vfx.noRequirements')}</p>
       </div>
     );
   }
@@ -1230,9 +1226,9 @@ function VFXTab({ vfxRequirements, sfxRequirements }) {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">VFX & SFX Requirements</h3>
+        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('vfx.title')}</h3>
         <p className="text-cinema-text-dim text-sm">
-          Visual and sound effects analysis for production planning
+          {t('vfx.desc')}
         </p>
       </div>
 
@@ -1240,7 +1236,7 @@ function VFXTab({ vfxRequirements, sfxRequirements }) {
       {vfxRequirements && vfxRequirements.length > 0 && (
         <div className="mb-8">
           <h4 className="text-lg font-bold text-cinema-text mb-4 flex items-center gap-2">
-            <span>🎭</span> Visual Effects ({vfxRequirements.length})
+            <span>🎭</span> {t('vfx.visualEffects')} ({vfxRequirements.length})
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {vfxRequirements.map((vfx, index) => (
@@ -1249,30 +1245,29 @@ function VFXTab({ vfxRequirements, sfxRequirements }) {
                   <div className="text-2xl">🎬</div>
                   <div className="flex-1">
                     <h5 className="text-cinema-text font-bold text-lg mb-1">{vfx.type || `VFX Effect ${index + 1}`}</h5>
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      vfx.complexity === 'high' ? 'bg-red-500/20 text-red-400' :
+                    <span className={`text-xs px-2 py-1 rounded ${vfx.complexity === 'high' ? 'bg-red-500/20 text-red-400' :
                       vfx.complexity === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-green-500/20 text-green-400'
-                    }`}>
-                      {vfx.complexity || 'Medium'} Complexity
+                        'bg-green-500/20 text-green-400'
+                      }`}>
+                      {t(`common.${vfx.complexity?.toLowerCase()}`) || vfx.complexity || t('common.medium')} {t('vfx.complexity')}
                     </span>
                   </div>
                 </div>
-                
+
                 <p className="text-cinema-text-dim text-sm mb-4 leading-relaxed">{vfx.description}</p>
-                
+
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-cinema-text-dim">Scenes:</span>
-                    <span className="text-cinema-text">{Array.isArray(vfx.scenes) ? vfx.scenes.join(', ') : vfx.scenes || 'TBD'}</span>
+                    <span className="text-cinema-text-dim">{t('vfx.scenes')}</span>
+                    <span className="text-cinema-text">{Array.isArray(vfx.scenes) ? vfx.scenes.join(', ') : vfx.scenes || t('common.tbd')}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-cinema-text-dim">Estimated Cost:</span>
-                    <span className="text-cinema-accent font-medium">{vfx.estimatedCost || 'TBD'}</span>
+                    <span className="text-cinema-text-dim">{t('vfx.estimatedCost')}</span>
+                    <span className="text-cinema-accent font-medium">{vfx.estimatedCost || t('common.tbd')}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-cinema-text-dim">Timeline:</span>
-                    <span className="text-cinema-text">{vfx.timeline || 'TBD'}</span>
+                    <span className="text-cinema-text-dim">{t('vfx.timeline')}</span>
+                    <span className="text-cinema-text">{vfx.timeline || t('common.tbd')}</span>
                   </div>
                 </div>
               </div>
@@ -1285,7 +1280,7 @@ function VFXTab({ vfxRequirements, sfxRequirements }) {
       {sfxRequirements && sfxRequirements.length > 0 && (
         <div>
           <h4 className="text-lg font-bold text-cinema-text mb-4 flex items-center gap-2">
-            <span>🔊</span> Sound Effects ({sfxRequirements.length})
+            <span>🔊</span> {t('vfx.soundEffects')} ({sfxRequirements.length})
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {sfxRequirements.map((sfx, index) => (
@@ -1294,26 +1289,25 @@ function VFXTab({ vfxRequirements, sfxRequirements }) {
                   <div className="text-2xl">🎵</div>
                   <div className="flex-1">
                     <h5 className="text-cinema-text font-bold text-lg mb-1">{sfx.type || `SFX ${index + 1}`}</h5>
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      sfx.priority === 'high' ? 'bg-red-500/20 text-red-400' :
+                    <span className={`text-xs px-2 py-1 rounded ${sfx.priority === 'high' ? 'bg-red-500/20 text-red-400' :
                       sfx.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-green-500/20 text-green-400'
-                    }`}>
-                      {sfx.priority || 'Medium'} Priority
+                        'bg-green-500/20 text-green-400'
+                      }`}>
+                      {t(`common.${sfx.priority?.toLowerCase()}`) || sfx.priority || t('common.medium')} {t('common.priority')}
                     </span>
                   </div>
                 </div>
-                
+
                 <p className="text-cinema-text-dim text-sm mb-4 leading-relaxed">{sfx.description}</p>
-                
+
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-cinema-text-dim">Type:</span>
-                    <span className="text-cinema-text">{sfx.category || 'General'}</span>
+                    <span className="text-cinema-text-dim">{t('vfx.type')}</span>
+                    <span className="text-cinema-text">{sfx.category || t('common.general')}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-cinema-text-dim">Recording Required:</span>
-                    <span className="text-cinema-accent">{sfx.recordingRequired ? 'Yes' : 'Library'}</span>
+                    <span className="text-cinema-text-dim">{t('vfx.recordingRequired')}</span>
+                    <span className="text-cinema-accent">{sfx.recordingRequired ? t('vfx.yes') : t('vfx.library')}</span>
                   </div>
                 </div>
               </div>
@@ -1326,11 +1320,12 @@ function VFXTab({ vfxRequirements, sfxRequirements }) {
 }
 
 function VirtualProductionTab({ virtualProductionSuitability, shootingTechniques }) {
+  const { t } = useTranslation();
   if (!virtualProductionSuitability || Object.keys(virtualProductionSuitability).length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
         <div className="text-4xl mb-4">🎮</div>
-        <p>No virtual production analysis available</p>
+        <p>{t('virtualProduction.noAnalysis')}</p>
       </div>
     );
   }
@@ -1339,9 +1334,9 @@ function VirtualProductionTab({ virtualProductionSuitability, shootingTechniques
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">Virtual Production Assessment</h3>
+        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('virtualProduction.title')}</h3>
         <p className="text-cinema-text-dim text-sm">
-          Analysis of virtual production suitability and shooting techniques
+          {t('virtualProduction.desc')}
         </p>
       </div>
 
@@ -1350,13 +1345,12 @@ function VirtualProductionTab({ virtualProductionSuitability, shootingTechniques
         <div className="flex items-center gap-4 mb-4">
           <div className="text-4xl">🎯</div>
           <div>
-            <h4 className="text-xl font-bold text-cinema-text">Overall Suitability</h4>
-            <div className={`text-2xl font-bold mt-1 ${
-              virtualProductionSuitability.overall === 'High' ? 'text-green-400' :
+            <h4 className="text-xl font-bold text-cinema-text">{t('virtualProduction.overallSuitability')}</h4>
+            <div className={`text-2xl font-bold mt-1 ${virtualProductionSuitability.overall === 'High' ? 'text-green-400' :
               virtualProductionSuitability.overall === 'Medium' ? 'text-yellow-400' :
-              'text-red-400'
-            }`}>
-              {virtualProductionSuitability.overall || 'Not Assessed'}
+                'text-red-400'
+              }`}>
+              {t(`common.${virtualProductionSuitability.overall?.toLowerCase()}`) || virtualProductionSuitability.overall || t('virtualProduction.notAssessed')}
             </div>
           </div>
         </div>
@@ -1369,25 +1363,25 @@ function VirtualProductionTab({ virtualProductionSuitability, shootingTechniques
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-cinema-gray rounded-lg p-5">
           <h5 className="text-lg font-bold text-cinema-text mb-3 flex items-center gap-2">
-            <span>🌍</span> Environment Suitability
+            <span>🌍</span> {t('virtualProduction.environmentSuitability')}
           </h5>
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-cinema-text-dim">Controlled Environments:</span>
+              <span className="text-cinema-text-dim">{t('virtualProduction.controlledEnvironments')}</span>
               <span className="text-cinema-accent font-medium">
-                {virtualProductionSuitability.controlledEnvironments || 'TBD'}
+                {virtualProductionSuitability.controlledEnvironments || t('common.tbd')}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-cinema-text-dim">CGI Integration:</span>
+              <span className="text-cinema-text-dim">{t('virtualProduction.cgiIntegration')}</span>
               <span className="text-cinema-accent font-medium">
-                {virtualProductionSuitability.cgiIntegration || 'TBD'}
+                {virtualProductionSuitability.cgiIntegration || t('common.tbd')}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-cinema-text-dim">LED Volume Ready:</span>
+              <span className="text-cinema-text-dim">{t('virtualProduction.ledVolumeReady')}</span>
               <span className="text-cinema-accent font-medium">
-                {virtualProductionSuitability.ledVolumeReady ? 'Yes' : 'No'}
+                {virtualProductionSuitability.ledVolumeReady ? t('common.yes') : t('common.no')}
               </span>
             </div>
           </div>
@@ -1395,25 +1389,25 @@ function VirtualProductionTab({ virtualProductionSuitability, shootingTechniques
 
         <div className="bg-cinema-gray rounded-lg p-5">
           <h5 className="text-lg font-bold text-cinema-text mb-3 flex items-center gap-2">
-            <span>📹</span> Technical Requirements
+            <span>📹</span> {t('virtualProduction.technicalRequirements')}
           </h5>
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-cinema-text-dim">Real-time Rendering:</span>
+              <span className="text-cinema-text-dim">{t('virtualProduction.realTimeRendering')}</span>
               <span className="text-cinema-accent font-medium">
-                {virtualProductionSuitability.realTimeRendering || 'TBD'}
+                {virtualProductionSuitability.realTimeRendering || t('common.tbd')}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-cinema-text-dim">Motion Capture:</span>
+              <span className="text-cinema-text-dim">{t('virtualProduction.motionCapture')}</span>
               <span className="text-cinema-accent font-medium">
-                {virtualProductionSuitability.motionCapture || 'TBD'}
+                {virtualProductionSuitability.motionCapture || t('common.tbd')}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-cinema-text-dim">Camera Tracking:</span>
+              <span className="text-cinema-text-dim">{t('virtualProduction.cameraTracking')}</span>
               <span className="text-cinema-accent font-medium">
-                {virtualProductionSuitability.cameraTracking || 'TBD'}
+                {virtualProductionSuitability.cameraTracking || t('common.tbd')}
               </span>
             </div>
           </div>
@@ -1424,11 +1418,12 @@ function VirtualProductionTab({ virtualProductionSuitability, shootingTechniques
 }
 
 function EvaluationTab({ evaluation }) {
+  const { t } = useTranslation();
   if (!evaluation || Object.keys(evaluation).length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
         <div className="text-4xl mb-4">📈</div>
-        <p>No screenplay evaluation available</p>
+        <p>{t('evaluation.noEvaluation')}</p>
       </div>
     );
   }
@@ -1437,9 +1432,9 @@ function EvaluationTab({ evaluation }) {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">Screenplay Evaluation</h3>
+        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('evaluation.title')}</h3>
         <p className="text-cinema-text-dim text-sm">
-          Comprehensive assessment of screenplay qualities and production metrics
+          {t('evaluation.desc')}
         </p>
       </div>
 
@@ -1448,22 +1443,22 @@ function EvaluationTab({ evaluation }) {
         <div className="bg-gradient-to-br from-cinema-gray to-cinema-gray-light rounded-lg p-4 text-center">
           <div className="text-2xl mb-2">💝</div>
           <div className="text-2xl font-bold text-cinema-accent">{evaluation.emotionScore || 'N/A'}/10</div>
-          <div className="text-sm text-cinema-text-dim">Emotion Score</div>
+          <div className="text-sm text-cinema-text-dim">{t('evaluation.emotionScore')}</div>
         </div>
         <div className="bg-gradient-to-br from-cinema-gray to-cinema-gray-light rounded-lg p-4 text-center">
           <div className="text-2xl mb-2">🎭</div>
-          <div className="text-lg font-bold text-cinema-accent">{evaluation.genre || 'TBD'}</div>
-          <div className="text-sm text-cinema-text-dim">Primary Genre</div>
+          <div className="text-lg font-bold text-cinema-accent">{evaluation.genre || t('common.tbd')}</div>
+          <div className="text-sm text-cinema-text-dim">{t('evaluation.primaryGenre')}</div>
         </div>
         <div className="bg-gradient-to-br from-cinema-gray to-cinema-gray-light rounded-lg p-4 text-center">
           <div className="text-2xl mb-2">⏱️</div>
-          <div className="text-lg font-bold text-cinema-accent">{evaluation.estimatedDuration || 'TBD'}</div>
-          <div className="text-sm text-cinema-text-dim">Duration</div>
+          <div className="text-lg font-bold text-cinema-accent">{evaluation.estimatedDuration || t('common.tbd')}</div>
+          <div className="text-sm text-cinema-text-dim">{t('evaluation.duration')}</div>
         </div>
         <div className="bg-gradient-to-br from-cinema-gray to-cinema-gray-light rounded-lg p-4 text-center">
           <div className="text-2xl mb-2">📊</div>
           <div className="text-2xl font-bold text-cinema-accent">{evaluation.complexityScore || 'N/A'}/10</div>
-          <div className="text-sm text-cinema-text-dim">Complexity</div>
+          <div className="text-sm text-cinema-text-dim">{t('evaluation.complexity')}</div>
         </div>
       </div>
     </div>
@@ -1623,7 +1618,7 @@ function TrendTab({ analysis }) {
       </div>
     </div>
   );
-}function RiskTab({ analysis }) {
+} function RiskTab({ analysis }) {
   const { t } = useTranslation();
   if (!analysis) return <div className="text-center py-12 text-cinema-text-dim">{t('analysis.tabs.risk.noData', 'No risk analysis available')}</div>;
 

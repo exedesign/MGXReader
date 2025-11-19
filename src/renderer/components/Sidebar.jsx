@@ -1,9 +1,11 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useScriptStore } from '../store/scriptStore';
 import { useReaderStore } from '../store/readerStore';
 import { parseScenes, extractCharacters } from '../utils/textProcessing';
 
 export default function Sidebar() {
+  const { t } = useTranslation();
   const { scriptText, cleanedText, pageCount, scenes } = useScriptStore();
   const { words, wpm } = useReaderStore();
 
@@ -17,12 +19,12 @@ export default function Sidebar() {
     if (!text) return null;
 
     const wordCount = words.length > 0 ? words.length : text.split(/\s+/).length;
-    
+
     // Traditional reading speeds (words per minute)
     const traditionalWPM = 200; // Average adult reading speed
     const slowWPM = 150; // Slow reader
     const fastWPM = 300; // Fast reader
-    
+
     // Current speed reading WPM
     const speedReadingWPM = wpm;
 
@@ -72,27 +74,27 @@ export default function Sidebar() {
     <div className="p-4 h-full overflow-y-auto">
       {/* Script Info */}
       <div className="mb-6">
-        <h2 className="text-lg font-bold text-cinema-accent mb-3">Script Info</h2>
+        <h2 className="text-lg font-bold text-cinema-accent mb-3">{t('sidebar.scriptInfo')}</h2>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-cinema-text-dim">Pages:</span>
+            <span className="text-cinema-text-dim">{t('sidebar.pages')}:</span>
             <span className="text-cinema-text font-medium">{pageCount}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-cinema-text-dim">Scenes:</span>
+            <span className="text-cinema-text-dim">{t('sidebar.scenes')}:</span>
             <span className="text-cinema-text font-medium">{sceneList.length}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-cinema-text-dim">Characters:</span>
+            <span className="text-cinema-text-dim">{t('sidebar.characters')}:</span>
             <span className="text-cinema-text font-medium">{characters.length}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-cinema-text-dim">Est. Runtime:</span>
+            <span className="text-cinema-text-dim">{t('sidebar.estRuntime')}:</span>
             <span className="text-cinema-text font-medium">~{pageCount} min</span>
           </div>
           {stats && (
             <div className="flex justify-between">
-              <span className="text-cinema-text-dim">Total Words:</span>
+              <span className="text-cinema-text-dim">{t('sidebar.totalWords')}:</span>
               <span className="text-cinema-text font-medium">{stats.wordCount.toLocaleString()}</span>
             </div>
           )}
@@ -102,27 +104,27 @@ export default function Sidebar() {
       {/* Reading Times Analysis */}
       {stats && (
         <div className="mb-6">
-          <h2 className="text-lg font-bold text-cinema-accent mb-3">📖 Reading Times</h2>
+          <h2 className="text-lg font-bold text-cinema-accent mb-3">📖 {t('sidebar.readingTimes')}</h2>
           <div className="space-y-4">
             {/* Traditional vs Speed Reading Comparison */}
             <div className="bg-cinema-dark p-4 rounded-lg border border-cinema-gray">
-              <h3 className="text-sm font-bold text-cinema-text mb-3">📚 Traditional Reading</h3>
+              <h3 className="text-sm font-bold text-cinema-text mb-3">📚 {t('sidebar.traditionalReading')}</h3>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">Normal (200 WPM):</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.normal')}:</span>
                   <span className="text-cinema-text">{formatTime(stats.traditionalTime)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">Slow (150 WPM):</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.slow')}:</span>
                   <span className="text-cinema-text">{formatTime(stats.slowTime)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">Fast (300 WPM):</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.fast')}:</span>
                   <span className="text-cinema-text">{formatTime(stats.fastTime)}</span>
                 </div>
                 <div className="border-t border-cinema-gray pt-2 mt-2">
                   <div className="flex justify-between">
-                    <span className="text-cinema-text-dim">Per Page (Normal):</span>
+                    <span className="text-cinema-text-dim">{t('sidebar.perPage')}:</span>
                     <span className="text-cinema-text">{formatTime(stats.traditionalPageTime)}</span>
                   </div>
                 </div>
@@ -131,18 +133,18 @@ export default function Sidebar() {
 
             {/* Speed Reading Stats */}
             <div className="bg-cinema-accent/10 p-4 rounded-lg border border-cinema-accent/30">
-              <h3 className="text-sm font-bold text-cinema-accent mb-3">⚡ Speed Reading ({wpm} WPM)</h3>
+              <h3 className="text-sm font-bold text-cinema-accent mb-3">⚡ {t('sidebar.speedReading')} ({wpm} WPM)</h3>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">Total Time:</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.totalTime')}:</span>
                   <span className="text-cinema-accent font-bold">{formatTime(stats.speedTime)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">Per Page:</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.perPage')}:</span>
                   <span className="text-cinema-accent font-bold">{formatTime(stats.speedPageTime)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">Words/Page:</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.wordsPerPage')}:</span>
                   <span className="text-cinema-text">{stats.wordsPerPage}</span>
                 </div>
               </div>
@@ -150,27 +152,27 @@ export default function Sidebar() {
 
             {/* Time Saved Analysis */}
             <div className="bg-green-900/20 p-4 rounded-lg border border-green-500/30">
-              <h3 className="text-sm font-bold text-green-400 mb-3">💾 Time Saved</h3>
+              <h3 className="text-sm font-bold text-green-400 mb-3">💾 {t('sidebar.timeSaved')}</h3>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">vs Normal Reading:</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.vsNormal')}:</span>
                   <span className="text-green-400 font-bold">
                     {stats.timeSavedVsTraditional > 0 ? '+' : ''}{formatTime(Math.abs(stats.timeSavedVsTraditional))}
-                    {stats.timeSavedVsTraditional < 0 && ' slower'}
+                    {stats.timeSavedVsTraditional < 0 && ` ${t('sidebar.slower')}`}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">vs Slow Reading:</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.vsSlow')}:</span>
                   <span className="text-green-400 font-bold">
                     {stats.timeSavedVsSlow > 0 ? '+' : ''}{formatTime(Math.abs(stats.timeSavedVsSlow))}
-                    {stats.timeSavedVsSlow < 0 && ' slower'}
+                    {stats.timeSavedVsSlow < 0 && ` ${t('sidebar.slower')}`}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">vs Fast Reading:</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.vsFast')}:</span>
                   <span className="text-green-400 font-bold">
                     {stats.timeSavedVsFast > 0 ? '+' : ''}{formatTime(Math.abs(stats.timeSavedVsFast))}
-                    {stats.timeSavedVsFast < 0 && ' slower'}
+                    {stats.timeSavedVsFast < 0 && ` ${t('sidebar.slower')}`}
                   </span>
                 </div>
               </div>
@@ -178,22 +180,22 @@ export default function Sidebar() {
 
             {/* Efficiency Stats */}
             <div className="bg-blue-900/20 p-4 rounded-lg border border-blue-500/30">
-              <h3 className="text-sm font-bold text-blue-400 mb-3">📊 Efficiency</h3>
+              <h3 className="text-sm font-bold text-blue-400 mb-3">📊 {t('sidebar.efficiency')}</h3>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">Speed Multiplier:</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.speedMultiplier')}:</span>
                   <span className="text-blue-400 font-bold">
-                    {(wpm / 200).toFixed(1)}x faster
+                    {(wpm / 200).toFixed(1)}x {t('sidebar.faster')}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">Pages per Hour:</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.pagesPerHour')}:</span>
                   <span className="text-blue-400 font-bold">
-                    {Math.round(60 / stats.speedPageTime)} pages
+                    {Math.round(60 / stats.speedPageTime)} {t('sidebar.pages').toLowerCase()}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-cinema-text-dim">Productivity Boost:</span>
+                  <span className="text-cinema-text-dim">{t('sidebar.productivityBoost')}:</span>
                   <span className="text-blue-400 font-bold">
                     {Math.round(((stats.traditionalTime - stats.speedTime) / stats.traditionalTime) * 100)}%
                   </span>
@@ -206,7 +208,7 @@ export default function Sidebar() {
 
       {/* Scene List */}
       <div className="mb-6">
-        <h2 className="text-lg font-bold text-cinema-accent mb-3">Scenes</h2>
+        <h2 className="text-lg font-bold text-cinema-accent mb-3">{t('sidebar.scenes')}</h2>
         {sceneList.length > 0 ? (
           <div className="space-y-2">
             {sceneList.map((scene, index) => (
@@ -236,13 +238,13 @@ export default function Sidebar() {
             ))}
           </div>
         ) : (
-          <p className="text-cinema-text-dim text-sm">No scenes detected</p>
+          <p className="text-cinema-text-dim text-sm">{t('sidebar.noScenes')}</p>
         )}
       </div>
 
       {/* Characters */}
       <div>
-        <h2 className="text-lg font-bold text-cinema-accent mb-3">Characters</h2>
+        <h2 className="text-lg font-bold text-cinema-accent mb-3">{t('sidebar.characters')}</h2>
         {characters.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {characters.map((character, index) => (
@@ -255,7 +257,7 @@ export default function Sidebar() {
             ))}
           </div>
         ) : (
-          <p className="text-cinema-text-dim text-sm">No characters detected</p>
+          <p className="text-cinema-text-dim text-sm">{t('sidebar.noCharacters')}</p>
         )}
       </div>
     </div>

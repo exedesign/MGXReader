@@ -13,7 +13,7 @@ const resources = {
       "nav.aiSettings": "AI Ayarları",
       "nav.promptsTab": "Komutlar",
       "nav.providersTab": "Sağlayıcılar",
-      
+
       // Analysis Panel
       "analysis.title": "AI Analizi",
       "analysis.runAnalysis": "Analizi Başlat",
@@ -22,7 +22,7 @@ const resources = {
       "analysis.noAnalysisYet": "Henüz Analiz Yok",
       "analysis.noAnalysisYetDesc": "AI destekli prodüksiyon detayları için 'Analizi Başlat' butonuna tıklayın",
       "analysis.configureFirst": "Önce Ayarlarda AI Sağlayıcınızı yapılandırın",
-      
+
       // Analysis Configuration
       "analysis.config.title": "Analiz Yapılandırması",
       "analysis.config.analysisMode": "Analiz Modu:",
@@ -31,7 +31,7 @@ const resources = {
       "analysis.config.selectCustom": "Özel Analiz Türü Seçin:",
       "analysis.config.customDesc": "Özel Analiz: Özel komutlarınızı kullanarak özelleştirilmiş analiz. Sonuçlar özel sekmede formatlanmış metin olarak görünür.",
       "analysis.config.standardDesc": "Standart Analiz: Karakterler, mekanlar, sahneler ve prodüksiyon gereksinimlerini içeren kapsamlı senaryo analizi.",
-      
+
       // Analysis Tabs
       "analysis.tabs.overview": "Genel Bakış",
       "analysis.tabs.scenes": "Sahneler",
@@ -47,19 +47,19 @@ const resources = {
       "analysis.tabs.trend": "Trendler",
       "analysis.tabs.risk": "Risk & Fırsat",
       "analysis.tabs.customResults": "Özel Sonuçlar",
-      
+
       // Export
       "export.json": "JSON (Veri)",
       "export.pdf": "PDF (Rapor)",
       "export.docx": "Word Belgesi",
       "export.success": "Analiz başarıyla {{format}} olarak dışa aktarıldı!",
       "export.failed": "Dışa aktarma başarısız: {{error}}",
-      
+
       // Overview Tab
       "overview.title": "Prodüksiyon Genel Bakışı",
       "overview.desc": "Senaryo analizi ve prodüksiyon gereksinimlerinin kapsamlı özeti",
       "overview.scenes": "Sahneler",
-      "overview.locations": "Mekanlar", 
+      "overview.locations": "Mekanlar",
       "overview.characters": "Karakterler",
       "overview.shootDays": "Çekim Günleri",
       "overview.productionScope": "Prodüksiyon Kapsamı",
@@ -72,7 +72,7 @@ const resources = {
       "overview.emotionScore": "Duygu Puanı:",
       "overview.targetDuration": "Hedef Süre:",
       "overview.primaryAudience": "Birincil Kitle:",
-      
+
       // Scenes Tab
       "scenes.title": "Sahne Dökümü",
       "scenes.desc": "Prodüksiyon gereksinimleri ile {{count}} sahnenin detaylı analizi",
@@ -80,7 +80,7 @@ const resources = {
       "scenes.technicalDetails": "Teknik Detaylar",
       "scenes.characters": "Karakterler",
       "scenes.noCharactersSpecified": "Karakter belirtilmedi",
-      
+
       // Locations Tab
       "locations.title": "Çekim Mekanları",
       "locations.desc": "{{count}} benzersiz mekan için prodüksiyon gereksinimleri",
@@ -89,7 +89,7 @@ const resources = {
       "locations.shootDays": "Çekim Günleri:",
       "locations.requirements": "Gereksinimler",
       "locations.more": "+{{count}} daha",
-      
+
       // Characters Tab
       "characters.title": "Karakter Analizi",
       "characters.desc": "{{count}} tespit edilen karakter için oyuncu kadrosu ve karakter dökümü",
@@ -97,7 +97,7 @@ const resources = {
       "characters.sceneAppearances": "Sahne Görünümleri",
       "characters.keyRelationships": "Temel İlişkiler",
       "characters.notes": "Notlar:",
-      
+
       // Equipment Tab
       "equipment.title": "Prodüksiyon Ekipmanı",
       "equipment.desc": "Prodüksiyon için ekipman gereksinimleri ve teknik ihtiyaçlar",
@@ -106,7 +106,7 @@ const resources = {
       "equipment.requiredForScenes": "Gerekli sahneler",
       "equipment.priority": "Öncelik",
       "equipment.estimatedCost": "Tahmini Maliyet:",
-      
+
       // VFX Tab
       "vfx.title": "VFX & SFX Gereksinimleri",
       "vfx.desc": "Prodüksiyon planlama için görsel ve ses efektleri analizi",
@@ -124,7 +124,7 @@ const resources = {
       "vfx.recordingRequired": "Kayıt Gerekli:",
       "vfx.yes": "Evet",
       "vfx.library": "Kütüphane",
-      
+
       // Virtual Production Tab
       "virtualProduction.title": "Sanal Prodüksiyon Değerlendirmesi",
       "virtualProduction.desc": "Sanal prodüksiyon uygunluğu ve çekim teknikleri analizi",
@@ -139,7 +139,7 @@ const resources = {
       "virtualProduction.realTimeRendering": "Gerçek Zamanlı Render:",
       "virtualProduction.motionCapture": "Motion Capture:",
       "virtualProduction.cameraTracking": "Kamera Takibi:",
-      
+
       // Evaluation Tab
       "evaluation.title": "Senaryo Değerlendirmesi",
       "evaluation.desc": "Senaryo kalitesi ve prodüksiyon metriklerinin kapsamlı değerlendirmesi",
@@ -148,7 +148,7 @@ const resources = {
       "evaluation.primaryGenre": "Birincil Tür",
       "evaluation.duration": "Süre",
       "evaluation.complexity": "Karmaşıklık",
-      
+
       // Audience Tab
       "audience.title": "Kitle & Platform Analizi",
       "audience.desc": "Hedef kitle demografisi ve platform uygunluk değerlendirmesi",
@@ -205,14 +205,14 @@ const resources = {
       "analysis.tabs.risk.factors": "Risk Faktörleri",
       "analysis.tabs.risk.opportunities": "Fırsatlar",
       "analysis.tabs.risk.impact": "Etki",
-      
+
       // Custom Analysis Tab
       "custom.title": "Özel Analiz Sonuçları",
       "custom.desc": "Özel komutlarınızdan özelleştirilmiş analiz sonuçları",
       "custom.noResults": "Henüz özel analiz sonucu yok",
       "custom.runCustom": "Burada sonuçları görmek için özel analiz çalıştırın",
       "custom.copyText": "Metni Kopyala",
-      
+
       // Common
       "common.tbd": "Belirlenmedi",
       "common.notScored": "Puanlanmadı",
@@ -220,14 +220,139 @@ const resources = {
       "common.priority": "öncelik",
       "common.items": "öğe",
       "common.clickToView": "Detayları görmek için tıklayın",
-      
+      "common.unknownType": "Bilinmeyen Tür",
+      "common.yes": "Evet",
+      "common.no": "Hayır",
+      "common.high": "Yüksek",
+      "common.medium": "Orta",
+      "common.low": "Düşük",
+      "common.standard": "Standart",
+
+      // Units
+      "units.min": "dk",
+      "units.days": "gün",
+      "units.hours": "saat",
+      "units.scenes": "sahne",
+      "units.locations": "mekan",
+      "units.characters": "karakter",
+
+      // Analysis Extra
+      "analysis.activeAnalysis": "Aktif Analiz",
+      "analysis.analysisType": "Analiz Türü",
+      "analysis.specializedPrompt": "Özelleştirilmiş komut",
+      "analysis.clickToViewAnalysis": "Analizi görmek için tıklayın",
+      "analysis.totalScenes": "Toplam Sahne",
+      "analysis.estShootDays": "Tahmini Çekim Günü",
+
       // File Uploader
       "uploader.processing": "Dosya işleniyor...",
       "uploader.dropHere": "Senaryonuzu buraya bırakın",
       "uploader.extracting": "Metin çıkarılıyor ve temizleniyor...",
       "uploader.dragOrClick": "Senaryo dosyasını sürükleyip bırakın veya seçmek için tıklayın",
       "uploader.supportedFormats": "Desteklenen formatlar",
-      "uploader.selectFile": "Senaryo Dosyası Seç"
+      "uploader.selectFile": "Senaryo Dosyası Seç",
+      "uploader.enableOCR": "OCR (Optik Karakter Tanıma) Etkinleştir",
+      "uploader.ocrHint": "Taranmış PDF'ler veya metin çıkarılamayan görüntüler için OCR kullanın. İşlem daha uzun sürebilir.",
+      "uploader.ocrLanguage": "OCR Dili",
+      "uploader.turkishEnglish": "Türkçe + İngilizce",
+      "uploader.turkish": "Türkçe",
+      "uploader.english": "İngilizce",
+      "uploader.ocrPageProgress": "Sayfa {{current}} / {{total}}",
+
+      // Sidebar
+      "sidebar.scriptInfo": "Senaryo Bilgisi",
+      "sidebar.pages": "Sayfa",
+      "sidebar.scenes": "Sahne",
+      "sidebar.characters": "Karakter",
+      "sidebar.estRuntime": "Tahmini Süre",
+      "sidebar.totalWords": "Toplam Kelime",
+      "sidebar.readingTimes": "Okuma Süreleri",
+      "sidebar.traditionalReading": "Geleneksel Okuma",
+      "sidebar.normal": "Normal (200 WPM)",
+      "sidebar.slow": "Yavaş (150 WPM)",
+      "sidebar.fast": "Hızlı (300 WPM)",
+      "sidebar.perPage": "Sayfa Başına",
+      "sidebar.speedReading": "Hızlı Okuma",
+      "sidebar.totalTime": "Toplam Süre",
+      "sidebar.wordsPerPage": "Kelime/Sayfa",
+      "sidebar.timeSaved": "Kazanılan Zaman",
+      "sidebar.vsNormal": "Normal Okumaya Göre",
+      "sidebar.vsSlow": "Yavaş Okumaya Göre",
+      "sidebar.vsFast": "Hızlı Okumaya Göre",
+      "sidebar.slower": "daha yavaş",
+      "sidebar.efficiency": "Verimlilik",
+      "sidebar.speedMultiplier": "Hız Çarpanı",
+      "sidebar.pagesPerHour": "Sayfa / Saat",
+      "sidebar.productivityBoost": "Üretkenlik Artışı",
+      "sidebar.faster": "daha hızlı",
+      "sidebar.noScenes": "Sahne tespit edilmedi",
+      "sidebar.noCharacters": "Karakter tespit edilmedi",
+
+      // Header
+      "header.title": "ScriptMaster AI",
+      "header.closeScriptConfirm": "Bu senaryoyu kapatmak istediğinizden emin misiniz?",
+      "header.downloadAnalysis": "Analizi İndir (JSON)",
+      "header.aiProviderSettings": "AI Sağlayıcı Ayarları",
+      "header.enterFullscreen": "Tam Ekrana Geç (F11)",
+      "header.exitFullscreen": "Tam Ekrandan Çık (F11)",
+      "header.closeScript": "Senaryoyu Kapat",
+
+      // TextEditor
+      "editor.noScript": "Senaryo yüklenmedi",
+      "editor.uploadPrompt": "Başlamak için bir PDF senaryosu yükleyin",
+      "editor.cleaned": "Temizlenmiş",
+      "editor.original": "Orijinal",
+      "editor.edit": "Düzenle",
+      "editor.doneEditing": "Düzenleme Bitti",
+      "editor.cleanText": "Metni Temizle",
+      "editor.grammarSettings": "Dilbilgisi Ayarları",
+      "editor.grammarCorrection": "Dilbilgisi Düzeltme",
+      "editor.correctionStyle": "Düzeltme Stili",
+      "editor.using": "Kullanılan:",
+      "editor.fixGrammar": "Dilbilgisi Düzelt",
+      "editor.correcting": "Düzeltiliyor...",
+      "editor.export": "Dışa Aktar",
+      "editor.chunk": "Parça",
+      "editor.of": " / ",
+      "editor.viewingCleaned": "Temizlenmiş metin görüntüleniyor",
+      "editor.viewingOriginal": "Orijinal metin görüntüleniyor",
+      "editor.lines": "Satır",
+      "editor.words": "Kelime",
+      "editor.characters": "Karakter",
+      "editor.configureFirst": "Lütfen önce Ayarlarda AI sağlayıcınızı yapılandırın.",
+      "editor.grammarComplete": "Dilbilgisi düzeltme tamamlandı!",
+      "editor.grammarFailed": "Dilbilgisi düzeltme başarısız:",
+
+      // SpeedReader
+      "speedReader.loading": "Senaryo yükleniyor...",
+      "speedReader.uploadFirst": "Lütfen önce bir PDF yükleyin",
+      "speedReader.aiSummaryTitle": "Hızlı Okuma için AI Özeti",
+      "speedReader.aiSummaryDesc": "Bu AI destekli özet, temel noktalar ve ana fikirlerle hızlı okuma için optimize edilmiştir.",
+      "speedReader.summaryReady": "Özet hızlı okuma için hazır",
+      "speedReader.keepOriginal": "Orijinali Koru",
+      "speedReader.useSummary": "Hızlı Okuma için Özeti Kullan",
+      "speedReader.wpm": "WPM:",
+      "speedReader.size": "Boyut:",
+      "speedReader.page": "Sayfa:",
+      "speedReader.focus": "Odak:",
+      "speedReader.aiSummaryBtn": "AI Özeti",
+      "speedReader.generating": "Oluşturuluyor...",
+      "speedReader.focusMode": "Odak Modu",
+      "speedReader.settings": "Ayarlar (S)",
+      "speedReader.playPause": "Oynat/Duraklat (Boşluk)",
+      "speedReader.reset": "Başa Dön (Home)",
+      "speedReader.fullscreen": "Tam Ekran (F)",
+      "speedReader.exitFocus": "Odak Modundan Çık",
+      "speedReader.shortcuts.space": "BOŞLUK",
+      "speedReader.shortcuts.playPause": "oynat/duraklat",
+      "speedReader.shortcuts.skip": "Atla",
+      "speedReader.shortcuts.reset": "Sıfırla",
+      "speedReader.shortcuts.fullscreen": "Tam Ekran",
+      "speedReader.shortcuts.settings": "Ayarlar",
+      "speedReader.shortcuts.focus": "Odak",
+      "speedReader.configureFirst": "Lütfen önce AI sağlayıcısını yapılandırın",
+      "speedReader.noText": "Özet için metin mevcut değil",
+      "speedReader.failedSummary": "Özet oluşturulamadı:"
     }
   },
   en: {
@@ -239,7 +364,7 @@ const resources = {
       "nav.aiSettings": "AI Settings",
       "nav.promptsTab": "Prompts",
       "nav.providersTab": "Providers",
-      
+
       // Analysis Panel
       "analysis.title": "AI Analysis",
       "analysis.runAnalysis": "Run Analysis",
@@ -248,7 +373,7 @@ const resources = {
       "analysis.noAnalysisYet": "No Analysis Yet",
       "analysis.noAnalysisYetDesc": "Click 'Run Analysis' to get AI-powered production breakdown including scenes, locations, characters, and equipment needs.",
       "analysis.configureFirst": "Please configure your AI provider in Settings first",
-      
+
       // Analysis Configuration
       "analysis.config.title": "Analysis Configuration",
       "analysis.config.analysisMode": "Analysis Mode:",
@@ -257,7 +382,7 @@ const resources = {
       "analysis.config.selectCustom": "Select Custom Analysis Type:",
       "analysis.config.customDesc": "Custom Analysis: Uses your predefined prompts for specialized analysis. Results will appear in a dedicated Custom tab with formatted text output.",
       "analysis.config.standardDesc": "Standard Analysis: Comprehensive screenplay breakdown including characters, locations, scenes, and production requirements.",
-      
+
       // Analysis Tabs
       "analysis.tabs.overview": "Overview",
       "analysis.tabs.scenes": "Scenes",
@@ -273,20 +398,20 @@ const resources = {
       "analysis.tabs.trend": "Trends",
       "analysis.tabs.risk": "Risk & Opp",
       "analysis.tabs.customResults": "Custom Results",
-      
+
       // Export
       "export.json": "JSON (Data)",
       "export.pdf": "PDF (Report)",
       "export.docx": "Word Document",
       "export.success": "Analysis exported successfully as {{format}}!",
       "export.failed": "Export failed: {{error}}",
-      
+
       // Overview Tab
       "overview.title": "Production Overview",
       "overview.desc": "Comprehensive summary of screenplay analysis and production requirements",
       "overview.scenes": "Scenes",
       "overview.locations": "Locations",
-      "overview.characters": "Characters", 
+      "overview.characters": "Characters",
       "overview.shootDays": "Shoot Days",
       "overview.productionScope": "Production Scope",
       "overview.analysisSummary": "Analysis Summary",
@@ -298,7 +423,7 @@ const resources = {
       "overview.emotionScore": "Emotion Score:",
       "overview.targetDuration": "Target Duration:",
       "overview.primaryAudience": "Primary Audience:",
-      
+
       // Scenes Tab
       "scenes.title": "Scene Breakdown",
       "scenes.desc": "Detailed analysis of {{count}} scenes with production requirements",
@@ -306,7 +431,7 @@ const resources = {
       "scenes.technicalDetails": "Technical Details",
       "scenes.characters": "Characters",
       "scenes.noCharactersSpecified": "No characters specified",
-      
+
       // Locations Tab
       "locations.title": "Filming Locations",
       "locations.desc": "Production requirements for {{count}} unique locations",
@@ -315,7 +440,7 @@ const resources = {
       "locations.shootDays": "Shoot Days:",
       "locations.requirements": "Requirements",
       "locations.more": "+{{count}} more",
-      
+
       // Characters Tab
       "characters.title": "Character Analysis",
       "characters.desc": "Cast and character breakdown for {{count}} identified characters",
@@ -323,7 +448,7 @@ const resources = {
       "characters.sceneAppearances": "Scene Appearances",
       "characters.keyRelationships": "Key Relationships",
       "characters.notes": "Notes:",
-      
+
       // Equipment Tab
       "equipment.title": "Production Equipment",
       "equipment.desc": "Equipment requirements and technical needs for production",
@@ -332,7 +457,7 @@ const resources = {
       "equipment.requiredForScenes": "Required for scenes",
       "equipment.priority": "Priority",
       "equipment.estimatedCost": "Est. Cost:",
-      
+
       // VFX Tab
       "vfx.title": "VFX & SFX Requirements",
       "vfx.desc": "Visual and sound effects analysis for production planning",
@@ -350,7 +475,7 @@ const resources = {
       "vfx.recordingRequired": "Recording Required:",
       "vfx.yes": "Yes",
       "vfx.library": "Library",
-      
+
       // Virtual Production Tab
       "virtualProduction.title": "Virtual Production Assessment",
       "virtualProduction.desc": "Analysis of virtual production suitability and shooting techniques",
@@ -365,7 +490,7 @@ const resources = {
       "virtualProduction.realTimeRendering": "Real-time Rendering:",
       "virtualProduction.motionCapture": "Motion Capture:",
       "virtualProduction.cameraTracking": "Camera Tracking:",
-      
+
       // Evaluation Tab
       "evaluation.title": "Screenplay Evaluation",
       "evaluation.desc": "Comprehensive assessment of screenplay qualities and production metrics",
@@ -374,7 +499,7 @@ const resources = {
       "evaluation.primaryGenre": "Primary Genre",
       "evaluation.duration": "Duration",
       "evaluation.complexity": "Complexity",
-      
+
       // Audience Tab
       "audience.title": "Audience & Platform Analysis",
       "audience.desc": "Target audience demographics and platform suitability assessment",
@@ -431,14 +556,14 @@ const resources = {
       "analysis.tabs.risk.factors": "Risk Factors",
       "analysis.tabs.risk.opportunities": "Opportunities",
       "analysis.tabs.risk.impact": "Impact",
-      
+
       // Custom Analysis Tab
       "custom.title": "Custom Analysis Results",
       "custom.desc": "Specialized analysis results from your custom prompts",
       "custom.noResults": "No custom analysis results yet",
       "custom.runCustom": "Run a custom analysis to see results here",
       "custom.copyText": "Copy Text",
-      
+
       // Common
       "common.tbd": "TBD",
       "common.notScored": "Not Scored",
@@ -446,14 +571,139 @@ const resources = {
       "common.priority": "priority",
       "common.items": "items",
       "common.clickToView": "Click to view details",
-      
+      "common.unknownType": "Unknown Type",
+      "common.yes": "Yes",
+      "common.no": "No",
+      "common.high": "High",
+      "common.medium": "Medium",
+      "common.low": "Low",
+      "common.standard": "Standard",
+
+      // Units
+      "units.min": "min",
+      "units.days": "days",
+      "units.hours": "hours",
+      "units.scenes": "scenes",
+      "units.locations": "locations",
+      "units.characters": "characters",
+
+      // Analysis Extra
+      "analysis.activeAnalysis": "Active Analysis",
+      "analysis.analysisType": "Analysis Type",
+      "analysis.specializedPrompt": "Specialized prompt",
+      "analysis.clickToViewAnalysis": "Click to view analysis",
+      "analysis.totalScenes": "Total Scenes",
+      "analysis.estShootDays": "Est. Shoot Days",
+
       // File Uploader
       "uploader.processing": "Processing file...",
       "uploader.dropHere": "Drop your screenplay here",
       "uploader.extracting": "Extracting and cleaning text...",
       "uploader.dragOrClick": "Drag and drop a screenplay file, or click to browse",
       "uploader.supportedFormats": "Supported formats",
-      "uploader.selectFile": "Select Screenplay File"
+      "uploader.selectFile": "Select Screenplay File",
+      "uploader.enableOCR": "Enable OCR (Optical Character Recognition)",
+      "uploader.ocrHint": "Use OCR for scanned PDFs or images without extractable text. Processing may take longer.",
+      "uploader.ocrLanguage": "OCR Language",
+      "uploader.turkishEnglish": "Turkish + English",
+      "uploader.turkish": "Turkish",
+      "uploader.english": "English",
+      "uploader.ocrPageProgress": "Page {{current}} of {{total}}",
+
+      // Sidebar
+      "sidebar.scriptInfo": "Script Info",
+      "sidebar.pages": "Pages",
+      "sidebar.scenes": "Scenes",
+      "sidebar.characters": "Characters",
+      "sidebar.estRuntime": "Est. Runtime",
+      "sidebar.totalWords": "Total Words",
+      "sidebar.readingTimes": "Reading Times",
+      "sidebar.traditionalReading": "Traditional Reading",
+      "sidebar.normal": "Normal (200 WPM)",
+      "sidebar.slow": "Slow (150 WPM)",
+      "sidebar.fast": "Fast (300 WPM)",
+      "sidebar.perPage": "Per Page",
+      "sidebar.speedReading": "Speed Reading",
+      "sidebar.totalTime": "Total Time",
+      "sidebar.wordsPerPage": "Words/Page",
+      "sidebar.timeSaved": "Time Saved",
+      "sidebar.vsNormal": "vs Normal Reading",
+      "sidebar.vsSlow": "vs Slow Reading",
+      "sidebar.vsFast": "vs Fast Reading",
+      "sidebar.slower": "slower",
+      "sidebar.efficiency": "Efficiency",
+      "sidebar.speedMultiplier": "Speed Multiplier",
+      "sidebar.pagesPerHour": "Pages / Hour",
+      "sidebar.productivityBoost": "Productivity Boost",
+      "sidebar.faster": "faster",
+      "sidebar.noScenes": "No scenes detected",
+      "sidebar.noCharacters": "No characters detected",
+
+      // Header
+      "header.title": "ScriptMaster AI",
+      "header.closeScriptConfirm": "Are you sure you want to close this script?",
+      "header.downloadAnalysis": "Download Analysis (JSON)",
+      "header.aiProviderSettings": "AI Provider Settings",
+      "header.enterFullscreen": "Enter Fullscreen (F11)",
+      "header.exitFullscreen": "Exit Fullscreen (F11)",
+      "header.closeScript": "Close Script",
+
+      // TextEditor
+      "editor.noScript": "No script loaded",
+      "editor.uploadPrompt": "Upload a PDF script to get started",
+      "editor.cleaned": "Cleaned",
+      "editor.original": "Original",
+      "editor.edit": "Edit",
+      "editor.doneEditing": "Done Editing",
+      "editor.cleanText": "Clean Text",
+      "editor.grammarSettings": "Grammar Settings",
+      "editor.grammarCorrection": "Grammar Correction",
+      "editor.correctionStyle": "Correction Style",
+      "editor.using": "Using:",
+      "editor.fixGrammar": "Fix Grammar",
+      "editor.correcting": "Correcting...",
+      "editor.export": "Export",
+      "editor.chunk": "Chunk",
+      "editor.of": " / ",
+      "editor.viewingCleaned": "Viewing cleaned text",
+      "editor.viewingOriginal": "Viewing original text",
+      "editor.lines": "Lines",
+      "editor.words": "Words",
+      "editor.characters": "Characters",
+      "editor.configureFirst": "Please configure your AI provider in Settings first.",
+      "editor.grammarComplete": "Grammar correction completed!",
+      "editor.grammarFailed": "Grammar correction failed:",
+
+      // SpeedReader
+      "speedReader.loading": "Loading screenplay...",
+      "speedReader.uploadFirst": "Please upload a PDF first",
+      "speedReader.aiSummaryTitle": "AI Summary for Speed Reading",
+      "speedReader.aiSummaryDesc": "This AI-generated summary is optimized for speed reading with key points and main ideas.",
+      "speedReader.summaryReady": "Summary ready for speed reading",
+      "speedReader.keepOriginal": "Keep Original",
+      "speedReader.useSummary": "Use Summary for Speed Reading",
+      "speedReader.wpm": "WPM:",
+      "speedReader.size": "Size:",
+      "speedReader.page": "Page:",
+      "speedReader.focus": "Focus:",
+      "speedReader.aiSummaryBtn": "AI Summary",
+      "speedReader.generating": "Generating...",
+      "speedReader.focusMode": "Focus Mode",
+      "speedReader.settings": "Settings (S)",
+      "speedReader.playPause": "Play/Pause (Space)",
+      "speedReader.reset": "Reset (Home)",
+      "speedReader.fullscreen": "Fullscreen (F)",
+      "speedReader.exitFocus": "Exit Focus Mode",
+      "speedReader.shortcuts.space": "SPACE",
+      "speedReader.shortcuts.playPause": "play/pause",
+      "speedReader.shortcuts.skip": "Skip",
+      "speedReader.shortcuts.reset": "Reset",
+      "speedReader.shortcuts.fullscreen": "Fullscreen",
+      "speedReader.shortcuts.settings": "Settings",
+      "speedReader.shortcuts.focus": "Focus",
+      "speedReader.configureFirst": "Please configure AI provider first",
+      "speedReader.noText": "No text available for summary",
+      "speedReader.failedSummary": "Failed to generate summary:"
     }
   }
 };
@@ -465,11 +715,11 @@ i18n
     resources,
     fallbackLng: 'en',
     debug: false,
-    
+
     interpolation: {
       escapeValue: false, // React already does escaping
     },
-    
+
     detection: {
       order: ['localStorage', 'navigator'],
       caches: ['localStorage'],

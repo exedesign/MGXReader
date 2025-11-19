@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const pdfParse = require('pdf-parse');
+const poppler = require('pdf-poppler');
 
 let mainWindow;
 
@@ -205,6 +206,63 @@ ipcMain.handle('pdf:parse', async (event, filePath) => {
       success: false,
       error: error.message,
     };
+  }
+});
+
+// Convert PDF pages to images for OCR
+ipcMain.handle('pdf:toImages', async (event, filePath) => {
+  try {
+    const tmpDir = path.join(app.getPath('temp'), 'mgx-ocr-' + Date.now());
+    await fs.mkdir(tmpDir, { recursive: true });
+
+    // Convert PDF to PNG images
+    const options = {
+      format: 'png',
+      out_dir: tmpDir,
+      out_prefix: 'page',
+      page: null // All pages
+    };
+
+    await poppler.convert(filePath, options);
+
+    // Read all generated images
+    const files = await fs.readdir(tmpDir);
+    const imageFiles = files.filter(f => f.endsWith('.png')).sort();
+
+    const images = [];
+    for (const file of imageFiles) {
+      const imagePath = path.join(tmpDir, file);
+      const imageBuffer = await fs.readFile(imagePath);
+      images.push({
+        data: imageBuffer.toString('base64'),
+        path: imagePath
+      });
+    }
+
+    return {
+      success: true,
+      pages: images,
+      tmpDir // Return temp dir for cleanup
+    };
+  } catch (error) {
+    console.error('PDF to images conversion error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// Cleanup OCR temp directory
+ipcMain.handle('ocr:cleanup', async (event, tmpDir) => {
+  try {
+    if (tmpDir && tmpDir.includes('mgx-ocr-')) {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('OCR cleanup error:', error);
+    return { success: false, error: error.message };
   }
 });
 

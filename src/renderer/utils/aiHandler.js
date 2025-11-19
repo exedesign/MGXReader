@@ -5,8 +5,6 @@
 
 import axios from 'axios';
 import { splitTextForAnalysis, getOptimalChunkSize } from './textProcessing.js';
-import { createDramaturgyAnalyzer } from './dramaturgyAnalyzer.js';
-import { createCharacterDialogueAnalyzer } from './characterDialogueAnalyzer.js';
 import { createEnhancedAnalysisEngine } from './enhancedAnalysisEngine.js';
 
 export const AI_PROVIDERS = {
@@ -17,20 +15,21 @@ export const AI_PROVIDERS = {
 };
 
 export const OPENAI_MODELS = [
-  { id: 'gpt-4-turbo-preview', name: 'GPT-4 Turbo', contextWindow: 128000 },
+  { id: 'gpt-4o', name: 'GPT-4o', contextWindow: 128000, recommended: true },
+  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', contextWindow: 128000 },
   { id: 'gpt-4', name: 'GPT-4', contextWindow: 8192 },
   { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', contextWindow: 16385 },
 ];
 
 export const GEMINI_MODELS = [
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash - Recommended 🚀', contextWindow: 1000000, recommended: true, fast: true },
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro - Advanced Reasoning 🧠', contextWindow: 2000000 },
-  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite - Ultra Fast ⚡', contextWindow: 1000000, fast: true },
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash - Workhorse Model', contextWindow: 1000000 },
-  { id: 'gemini-flash-latest', name: 'Gemini Flash (Latest) - Auto-Updated', contextWindow: 1000000, fast: true },
-  { id: 'gemini-pro-latest', name: 'Gemini Pro (Latest) - Auto-Updated', contextWindow: 2000000 },
-  { id: 'gemini-1.5-flash-latest', name: 'Gemini 1.5 Flash (Legacy)', contextWindow: 1000000, deprecated: true },
-  { id: 'gemini-1.5-pro-latest', name: 'Gemini 1.5 Pro (Legacy)', contextWindow: 2000000, deprecated: true },
+  { id: 'gemini-3.0-pro', name: 'Gemini 3.0 Pro - New! 🚀', contextWindow: 2000000, recommended: true },
+  { id: 'gemini-3.0-deep-think', name: 'Gemini 3.0 Deep Think - Reasoning 🧠', contextWindow: 1000000 },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash - Fast', contextWindow: 1000000, fast: true },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', contextWindow: 2000000 },
+  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', contextWindow: 1000000, fast: true },
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', contextWindow: 1000000 },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', contextWindow: 1000000, fast: true },
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', contextWindow: 2000000 },
 ];
 
 export const MLX_MODELS = [
@@ -52,15 +51,10 @@ export class AIHandler {
     this.mlxEndpoint = config.mlxEndpoint || 'http://localhost:8080';
     this.mlxModel = config.mlxModel || 'mlx-community/Llama-3.2-3B-Instruct-4bit';
     this.temperature = config.temperature || 0.3;
-    
+
     // Initialize advanced analysis engines
-    this.dramaturgyAnalyzer = createDramaturgyAnalyzer();
-    this.characterDialogueAnalyzer = createCharacterDialogueAnalyzer();
-    this.enhancedAnalysisEngine = createEnhancedAnalysisEngine(
-      this,
-      this.dramaturgyAnalyzer,
-      this.characterDialogueAnalyzer
-    );
+    // Initialize advanced analysis engines
+    this.enhancedAnalysisEngine = createEnhancedAnalysisEngine(this);
   }
 
   /**
@@ -74,16 +68,16 @@ export class AIHandler {
       switch (this.provider) {
         case AI_PROVIDERS.OPENAI:
           return await this.callOpenAI(systemPrompt, userPrompt, temperature, maxTokens);
-        
+
         case AI_PROVIDERS.GEMINI:
           return await this.callGemini(systemPrompt, userPrompt, temperature, maxTokens);
-        
+
         case AI_PROVIDERS.LOCAL:
           return await this.callLocalAI(systemPrompt, userPrompt, temperature, maxTokens);
-        
+
         case AI_PROVIDERS.MLX:
           return await this.callMLX(systemPrompt, userPrompt, temperature, maxTokens);
-        
+
         default:
           throw new Error(`Unknown AI provider: ${this.provider}`);
       }
@@ -104,7 +98,7 @@ export class AIHandler {
     const response = await axios.post(
       'https://api.openai.com/v1/chat/completions',
       {
-        model: this.model || 'gpt-4-turbo-preview',
+        model: this.model || 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -134,7 +128,7 @@ export class AIHandler {
 
     // Use the latest v1beta API endpoint
     let model = this.model || 'gemini-2.5-flash';
-    
+
     // Model names are correct for v1beta API
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
@@ -215,7 +209,7 @@ export class AIHandler {
       // Handle response
       if (response.data.candidates && response.data.candidates.length > 0) {
         const candidate = response.data.candidates[0];
-        
+
         // Check if response was blocked
         if (candidate.finishReason === 'SAFETY') {
           throw new Error('Response blocked by Gemini safety filters. Try rephrasing your request.');
@@ -246,12 +240,12 @@ export class AIHandler {
           headers: error.config?.headers
         }
       });
-      
+
       if (error.response) {
         // API returned an error response
         const status = error.response.status;
         const errorData = error.response.data;
-        
+
         if (status === 400) {
           if (errorData?.error?.message?.includes('model not found')) {
             throw new Error(`Gemini Model '${model}' not found. Please check if the model exists in your region.`);
@@ -260,23 +254,23 @@ export class AIHandler {
             throw new Error('Invalid Gemini API key. Please check your API key.');
           }
         }
-        
+
         if (status === 403) {
           throw new Error('Gemini API access denied. Please check your API key permissions.');
         }
-        
+
         if (status === 429) {
           throw new Error('Gemini API rate limit exceeded. Please try again later.');
         }
-        
+
         const errorMessage = errorData?.error?.message || error.response.statusText;
         throw new Error(`Gemini API Error (${status}): ${errorMessage}`);
       }
-      
+
       if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
         throw new Error('Network error: Cannot connect to Gemini API. Please check your internet connection.');
       }
-      
+
       throw error;
     }
   }
@@ -353,10 +347,10 @@ export class AIHandler {
   async testConnection() {
     try {
       console.log(`Testing ${this.provider} connection...`);
-      
+
       // Simple test for different providers
       let testPrompt, systemPrompt;
-      
+
       if (this.provider === AI_PROVIDERS.GEMINI) {
         systemPrompt = 'You are a helpful assistant. Respond concisely.';
         testPrompt = 'Say "OK" if you can read this message.';
@@ -364,15 +358,15 @@ export class AIHandler {
         systemPrompt = 'You are a helpful assistant.';
         testPrompt = 'Reply with only the word "OK" if you can read this.';
       }
-      
+
       const response = await this.generateText(
         systemPrompt,
         testPrompt,
         { maxTokens: 20, temperature: 0 }
       );
-      
+
       console.log(`${this.provider} test successful:`, response);
-      
+
       return {
         success: true,
         response: response.trim(),
@@ -380,7 +374,7 @@ export class AIHandler {
       };
     } catch (error) {
       console.error(`${this.provider} test failed:`, error);
-      
+
       return {
         success: false,
         error: error.message,
@@ -431,42 +425,42 @@ export class AIHandler {
       level = GRAMMAR_LEVELS.STANDARD,
       useChunking = true,
       maxChunkSize = 3000, // Smaller chunks for grammar correction
-      onProgress = () => {},
+      onProgress = () => { },
     } = options;
 
     try {
       // For small texts or when chunking is disabled, process directly
       if (!useChunking || text.length <= maxChunkSize) {
         onProgress({ step: 'correcting', progress: 0, message: 'Correcting grammar...' });
-        
+
         const systemPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.system[level];
         const userPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.buildUserPrompt(text, level);
-        
+
         const correctedText = await this.generateText(systemPrompt, userPrompt, {
           maxTokens: Math.min(4000, Math.ceil(text.length * 1.2)), // Allow some expansion
           temperature: 0.1, // Low temperature for consistent corrections
         });
-        
+
         // Cloud LLM'lerin yorum cevaplarını temizle
         const cleanedResult = this.cleanCloudLLMComments(correctedText.trim());
-        
+
         onProgress({ step: 'complete', progress: 100, message: 'Grammar correction complete' });
         return cleanedResult;
       }
 
       // Split large text into chunks
-      onProgress({ 
-        step: 'chunking', 
-        progress: 5, 
-        message: 'Splitting text into chunks...' 
+      onProgress({
+        step: 'chunking',
+        progress: 5,
+        message: 'Splitting text into chunks...'
       });
 
       const chunks = this.splitTextForGrammarCorrection(text, maxChunkSize);
-      
-      onProgress({ 
-        step: 'correcting_chunks', 
-        progress: 10, 
-        message: `Correcting ${chunks.length} chunks...` 
+
+      onProgress({
+        step: 'correcting_chunks',
+        progress: 10,
+        message: `Correcting ${chunks.length} chunks...`
       });
 
       const correctedChunks = [];
@@ -474,7 +468,7 @@ export class AIHandler {
 
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
-        
+
         onProgress({
           step: 'correcting_chunk',
           progress: 10 + (i / totalChunks) * 80,
@@ -486,7 +480,7 @@ export class AIHandler {
         try {
           const systemPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.system[level];
           const userPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.buildUserPrompt(chunk.text, level);
-          
+
           const correctedChunk = await this.generateText(systemPrompt, userPrompt, {
             maxTokens: Math.min(4000, Math.ceil(chunk.text.length * 1.2)),
             temperature: 0.1,
@@ -516,10 +510,10 @@ export class AIHandler {
         }
       }
 
-      onProgress({ 
-        step: 'combining', 
-        progress: 95, 
-        message: 'Combining corrected chunks...' 
+      onProgress({
+        step: 'combining',
+        progress: 95,
+        message: 'Combining corrected chunks...'
       });
 
       // Combine corrected chunks back into full text
@@ -527,20 +521,20 @@ export class AIHandler {
         .map(chunk => chunk.correctedText)
         .join(chunk => chunk.preserveSpacing ? '\n\n' : ' '); // Maintain original spacing
 
-      onProgress({ 
-        step: 'complete', 
-        progress: 100, 
-        message: 'Grammar correction complete' 
+      onProgress({
+        step: 'complete',
+        progress: 100,
+        message: 'Grammar correction complete'
       });
 
       return finalText;
 
     } catch (error) {
       console.error('Grammar correction failed:', error);
-      onProgress({ 
-        step: 'error', 
-        progress: 0, 
-        message: `Correction failed: ${error.message}` 
+      onProgress({
+        step: 'error',
+        progress: 0,
+        message: `Correction failed: ${error.message}`
       });
       throw error;
     }
@@ -559,22 +553,22 @@ export class AIHandler {
 
     // Yaygın LLM yorum kalıplarını temizle
     let cleaned = text;
-    
+
     // "Harika bir metin! Bu metni..." tarzı başlangıçları kaldır
     cleaned = cleaned.replace(/^.*?(düzeltme|düzenleme|analiz|geliştirme).*?(yaptım|yapıyorum|sunuyorum).*?[:.!]\s*/i, '');
-    
+
     // "İşte geliştirilmiş versiyon:" tarzı ifadeleri kaldır
     cleaned = cleaned.replace(/^.*?(işte|burada|aşağıda).*?(geliştirilmiş|düzeltilmiş|düzenlenmiş).*?(versiyon|metin|sonuç).*?[:.!]\s*/im, '');
-    
+
     // "Sizin için düzeltmeyi yaptım" tarzı ifadeleri kaldır
     cleaned = cleaned.replace(/^.*?(sizin için|size).*?(düzeltme|düzenleme).*?(yaptım|hazırladım).*?[:.!]\s*/im, '');
-    
+
     // "Bu metni daha etkileyici..." tarzı açıklamaları kaldır
     cleaned = cleaned.replace(/^.*?(bu metni|metni).*?(daha|daha etkileyici|akıcı|edebi).*?[:.!]\s*/im, '');
-    
+
     // Başlangıçtaki genel açıklamaları temizle
     cleaned = cleaned.replace(/^[^.!?]*?(düzeltme|analiz|geliştirme|iyileştirme)[^.!?]*?[.!?]\s*/i, '');
-    
+
     return cleaned.trim();
   }
 
@@ -586,10 +580,10 @@ export class AIHandler {
    */
   splitTextForGrammarCorrection(text, maxChunkSize) {
     const chunks = [];
-    
+
     // Split by paragraphs first to preserve structure
     const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-    
+
     let currentChunk = '';
     let chunkIndex = 0;
 
@@ -681,14 +675,14 @@ export class AIHandler {
   async analyzeScreenplayWithChunking(text, options = {}) {
     const {
       useChunking = true,
-      onProgress = () => {},
+      onProgress = () => { },
       forceChunking = false,
     } = options;
 
     try {
       // Determine if chunking is needed
       const shouldChunk = this.shouldUseChunking(text, forceChunking);
-      
+
       if (!useChunking || !shouldChunk) {
         onProgress({ step: 'analyzing', progress: 0, message: 'Analyzing screenplay...' });
         const result = await this.analyzeScreenplay(text);
@@ -698,16 +692,16 @@ export class AIHandler {
 
       // Get optimal chunk configuration for current provider
       const chunkConfig = getOptimalChunkSize(this.provider, this.model);
-      
-      onProgress({ 
-        step: 'chunking', 
-        progress: 5, 
-        message: 'Splitting screenplay into manageable chunks...' 
+
+      onProgress({
+        step: 'chunking',
+        progress: 5,
+        message: 'Splitting screenplay into manageable chunks...'
       });
 
       // Split text into chunks
       const chunks = splitTextForAnalysis(text, chunkConfig);
-      
+
       if (chunks.length === 0) {
         throw new Error('Failed to create text chunks');
       }
@@ -720,10 +714,10 @@ export class AIHandler {
         return result;
       }
 
-      onProgress({ 
-        step: 'analyzing_chunks', 
-        progress: 10, 
-        message: `Analyzing ${chunks.length} chunks...` 
+      onProgress({
+        step: 'analyzing_chunks',
+        progress: 10,
+        message: `Analyzing ${chunks.length} chunks...`
       });
 
       // Analyze each chunk
@@ -732,7 +726,7 @@ export class AIHandler {
 
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
-        
+
         onProgress({
           step: 'analyzing_chunk',
           progress: 10 + (i / totalChunks) * 70,
@@ -774,29 +768,29 @@ export class AIHandler {
         }
       }
 
-      onProgress({ 
-        step: 'combining', 
-        progress: 85, 
-        message: 'Combining analysis results...' 
+      onProgress({
+        step: 'combining',
+        progress: 85,
+        message: 'Combining analysis results...'
       });
 
       // Combine results
       const combinedResult = this.combineChunkAnalyses(chunkResults, text);
 
-      onProgress({ 
-        step: 'complete', 
-        progress: 100, 
-        message: 'Analysis complete' 
+      onProgress({
+        step: 'complete',
+        progress: 100,
+        message: 'Analysis complete'
       });
 
       return combinedResult;
 
     } catch (error) {
       console.error('Chunked analysis failed:', error);
-      onProgress({ 
-        step: 'error', 
-        progress: 0, 
-        message: `Analysis failed: ${error.message}` 
+      onProgress({
+        step: 'error',
+        progress: 0,
+        message: `Analysis failed: ${error.message}`
       });
       throw error;
     }
@@ -838,39 +832,40 @@ export class AIHandler {
    * @returns {Promise<string>} - Analysis result
    */
   async analyzeWithCustomPrompt(text, options = {}) {
-    const { 
-      systemPrompt, 
-      userPrompt, 
-      useChunking = false, 
-      onProgress = () => {} 
+    const {
+      systemPrompt,
+      userPrompt,
+      useChunking = false,
+      onProgress = () => { },
+      language = 'en'
     } = options;
 
     if (!systemPrompt || !userPrompt) {
       throw new Error('Both systemPrompt and userPrompt are required for custom analysis');
     }
 
-    onProgress({ 
-      step: 'start', 
-      progress: 0, 
-      message: 'Starting custom analysis...' 
+    onProgress({
+      step: 'start',
+      progress: 0,
+      message: 'Starting custom analysis...'
     });
 
     try {
       // Cloud APIs (OpenAI, Gemini) have large context windows - no chunking needed
       const isCloudProvider = this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI;
       const shouldUseChunking = useChunking && !isCloudProvider && text.length > 15000;
-      
+
       if (!shouldUseChunking) {
         // Single prompt analysis - recommended for cloud providers
-        onProgress({ 
-          step: 'analyzing', 
-          progress: 50, 
-          message: 'Analyzing with custom prompt...' 
+        onProgress({
+          step: 'analyzing',
+          progress: 50,
+          message: 'Analyzing with custom prompt...'
         });
 
-        const combinedUserPrompt = `${userPrompt}\n\nText to analyze:\n${text}`;
+        const combinedUserPrompt = `${userPrompt}\n\nIMPORTANT: Provide the response in ${language} language.\n\nText to analyze:\n${text}`;
         const maxTokens = isCloudProvider ? 8000 : 4000; // Cloud providers can handle larger responses
-        
+
         const result = await this.generateText(systemPrompt, combinedUserPrompt, {
           maxTokens,
           temperature: 0.1,
@@ -879,27 +874,27 @@ export class AIHandler {
         // Cloud provider'lar için yorum cevaplarını temizle
         const cleanedResult = this.cleanCloudLLMComments(result);
 
-        onProgress({ 
-          step: 'complete', 
-          progress: 100, 
-          message: 'Custom analysis complete!' 
+        onProgress({
+          step: 'complete',
+          progress: 100,
+          message: 'Custom analysis complete!'
         });
 
         return cleanedResult;
       } else {
         // Chunked analysis - only for local providers with long text
-        onProgress({ 
-          step: 'info', 
-          progress: 5, 
-          message: 'Using chunked analysis for local provider...' 
+        onProgress({
+          step: 'info',
+          progress: 5,
+          message: 'Using chunked analysis for local provider...'
         });
-        return await this.analyzeWithCustomPromptChunked(text, systemPrompt, userPrompt, onProgress);
+        return await this.analyzeWithCustomPromptChunked(text, systemPrompt, userPrompt, onProgress, language);
       }
     } catch (error) {
-      onProgress({ 
-        step: 'error', 
-        progress: 0, 
-        message: `Custom analysis failed: ${error.message}` 
+      onProgress({
+        step: 'error',
+        progress: 0,
+        message: `Custom analysis failed: ${error.message}`
       });
       throw error;
     }
@@ -913,36 +908,35 @@ export class AIHandler {
    * @param {Function} onProgress - Progress callback
    * @returns {Promise<string>} - Combined analysis result
    */
-  async analyzeWithCustomPromptChunked(text, systemPrompt, userPrompt, onProgress) {
-    const chunks = this.chunkText(text, { 
+  async analyzeWithCustomPromptChunked(text, systemPrompt, userPrompt, onProgress, language = 'en') {
+    const chunks = this.chunkText(text, {
       preserveScenes: false, // For custom analysis, simple chunking is usually better
-      maxTokens: 3000 
+      maxTokens: 3000
     });
 
     const chunkResults = [];
     const totalChunks = chunks.length;
 
-    onProgress({ 
-      step: 'chunking', 
-      progress: 10, 
-      message: `Split into ${totalChunks} chunks. Analyzing...` 
+    onProgress({
+      step: 'chunking',
+      progress: 10,
+      message: `Split into ${totalChunks} chunks. Analyzing...`
     });
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       const chunkNumber = i + 1;
-      
-      onProgress({ 
-        step: 'chunk', 
-        progress: 10 + (60 * i / totalChunks), 
+
+      onProgress({
+        step: 'chunk',
+        progress: 10 + (60 * i / totalChunks),
         message: `Analyzing chunk ${chunkNumber}/${totalChunks}...`,
         chunkNumber,
-        totalChunks 
       });
 
       const combinedUserPrompt = `${userPrompt}
 
-This is chunk ${chunkNumber} of ${totalChunks} from a larger text. Please analyze this section:
+This is chunk ${chunkNumber} of ${totalChunks} from a larger text. Please analyze this section. IMPORTANT: Provide the response in ${language} language.
 
 ${chunk.text}`;
 
@@ -963,19 +957,19 @@ ${chunk.text}`;
       }
     }
 
-    onProgress({ 
-      step: 'combining', 
-      progress: 80, 
-      message: 'Combining chunk results...' 
+    onProgress({
+      step: 'combining',
+      progress: 80,
+      message: 'Combining chunk results...'
     });
 
     // Combine all chunk results
-    const combinedResult = await this.combineCustomPromptResults(chunkResults, systemPrompt);
+    const combinedResult = await this.combineCustomPromptResults(chunkResults, systemPrompt, language);
 
-    onProgress({ 
-      step: 'complete', 
-      progress: 100, 
-      message: 'Custom analysis complete!' 
+    onProgress({
+      step: 'complete',
+      progress: 100,
+      message: 'Custom analysis complete!'
     });
 
     return combinedResult;
@@ -985,9 +979,10 @@ ${chunk.text}`;
    * Combine results from custom prompt chunks
    * @param {Array} chunkResults - Results from each chunk
    * @param {string} systemPrompt - Original system prompt for context
+   * @param {string} language - Language for the output
    * @returns {Promise<string>} - Combined result
    */
-  async combineCustomPromptResults(chunkResults, systemPrompt) {
+  async combineCustomPromptResults(chunkResults, systemPrompt, language = 'en') {
     const combinerSystemPrompt = `You are an expert text analyst. Your task is to combine and synthesize analysis results from multiple chunks of text into a comprehensive final analysis.
 
 Original analysis instructions: ${systemPrompt}
@@ -998,9 +993,9 @@ Please create a cohesive, comprehensive analysis by:
 3. Creating a logical flow and structure
 4. Maintaining the analytical depth and quality
 
-Return a well-structured, comprehensive analysis.`;
+IMPORTANT: The final output MUST be in ${language} language.`;
 
-    const chunkSummaries = chunkResults.map(result => 
+    const chunkSummaries = chunkResults.map(result =>
       `Chunk ${result.chunkNumber}:\n${result.content}\n`
     ).join('\n---\n\n');
 
@@ -1097,14 +1092,14 @@ ${chunk.text}`;
    */
   shouldUseChunking(text, forceChunking = false) {
     if (forceChunking) return true;
-    
+
     // Cloud providers (OpenAI, Gemini) have very large context windows
     // No need for chunking - they handle long texts efficiently
     if (this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI) {
       console.log(`Skipping chunking for cloud provider: ${this.provider} (large context window)`);
       return false;
     }
-    
+
     // Only chunk for local providers with very long texts
     const thresholds = {
       [AI_PROVIDERS.LOCAL]: 20000,   // ~5000 tokens (local models need smaller chunks)
@@ -1113,11 +1108,11 @@ ${chunk.text}`;
 
     const threshold = thresholds[this.provider] || 20000;
     const shouldChunk = text.length > threshold;
-    
+
     if (shouldChunk) {
       console.log(`Text length ${text.length} > threshold ${threshold}, using chunking for local provider`);
     }
-    
+
     return shouldChunk;
   }
 
@@ -1129,7 +1124,7 @@ ${chunk.text}`;
    */
   combineChunkAnalyses(chunkResults, originalText) {
     const validResults = chunkResults.filter(result => !result.error);
-    
+
     if (validResults.length === 0) {
       throw new Error('No valid chunk analyses to combine');
     }
@@ -1253,7 +1248,7 @@ ${chunk.text}`;
  */
 export const GRAMMAR_LEVELS = {
   BASIC: 'basic',
-  STANDARD: 'standard', 
+  STANDARD: 'standard',
   ADVANCED: 'advanced',
   PRESERVE_STYLE: 'preserve_style',
 };
@@ -1264,63 +1259,103 @@ export const GRAMMAR_LEVELS = {
 export const SCREENPLAY_PROMPTS = {
   GRAMMAR_CORRECTION: {
     system: {
-      [GRAMMAR_LEVELS.BASIC]: `You are a helpful assistant. Fix only the most obvious spelling and grammar mistakes in the text. Do NOT change the writing style, format, or structure. Keep everything exactly the same except fix clear errors.
+      [GRAMMAR_LEVELS.BASIC]: `Sen bir metin düzeltme asistanısın. SADECE açık yazım hatalarını düzelt, METNİN TAMAMINI AYNEN KORU.
 
-SIMPLE RULES:
-- Fix spelling mistakes
-- Fix basic grammar errors (like wrong verb forms)
-- Keep all formatting exactly the same
-- Do not rewrite sentences
-- Return only the corrected text, nothing else`,
+KESİN KURALLAR:
+- SADECE yanlış yazılmış kelimeleri düzelt (örn: "teh" → "the", "oalcak" → "olacak")
+- SADECE bariz dilbilgisi hatalarını düzelt
+- TÜM metni AYNEN koru - hiçbir kelime, cümle veya satır kaybetme
+- TÜM formatı AYNEN koru
+- Cümleleri yeniden YAZMA
+- YORUM YAPMA, açıklama EKLEME
+- Girdi metnin TAMAMEN aynı uzunlukta olmasını sağla
+- SADECE düzeltilmiş metni döndür
 
-      [GRAMMAR_LEVELS.STANDARD]: `You are an expert screenplay editor. Your task is to correct grammar and spelling errors in screenplay text while maintaining the original formatting, structure, and style. 
-
-IMPORTANT RULES:
-- Keep ALL formatting intact (scene headings, character names, parentheticals, etc.)
-- Only fix obvious grammar, spelling, and punctuation errors
-- Do NOT change the writing style or creative choices
-- Do NOT add or remove scenes
-- Preserve the screenplay format (INT/EXT, character names in CAPS, etc.)
-- Return ONLY the corrected text, no explanations`,
-
-      [GRAMMAR_LEVELS.ADVANCED]: `You are a professional screenplay editor with expertise in both grammar and screenplay formatting. Your task is to:
-
-1. GRAMMAR & SPELLING: Correct all grammar, spelling, and punctuation errors
-2. SCREENPLAY FORMAT: Ensure proper screenplay formatting standards
-3. STYLE CONSISTENCY: Maintain consistent writing style throughout
+You are a text correction assistant. Fix ONLY obvious typos, KEEP ALL TEXT EXACTLY.
 
 STRICT RULES:
-- Keep ALL original formatting structure intact
-- Fix grammar, spelling, punctuation, and formatting inconsistencies
-- Maintain the author's voice and creative choices
-- Preserve all scene headers, character names (CAPS), and parentheticals
-- Return ONLY the corrected text, no explanations or comments`,
+- Fix ONLY misspelled words
+- Fix ONLY obvious grammar errors
+- Keep ALL text EXACTLY - do not lose any words, sentences, or lines
+- Keep ALL formatting EXACTLY
+- Do NOT rewrite sentences
+- Do NOT add comments
+- Ensure output is EXACTLY same length as input
+- Return ONLY the corrected text`,
 
-      [GRAMMAR_LEVELS.PRESERVE_STYLE]: `You are a gentle text editor. Your only job is to fix clear mistakes while keeping everything else exactly the same.
+      [GRAMMAR_LEVELS.STANDARD]: `Sen profesyonel bir metin editörüsün. SADECE yazım hatalarını düzelt, METNİ TAMAMEN KORU.
 
-WHAT TO FIX:
-- Wrong spelled words (like "teh" → "the")  
-- Basic grammar mistakes (like "they was" → "they were")
-- Missing punctuation at end of sentences
+KESİN KURALLAR:
+- HER SATIRI AYNEN koru - hiçbir satır kaybetme
+- TÜM formatı koru (sahne başlıkları, karakter isimleri, parantezler)
+- SADECE yazım, dilbilgisi, noktalama hatalarını düzelt
+- Yazım stilini DEĞİŞTİRME
+- Sahne ekleme/çıkarma YAPMA
+- YORUM YAPMA, açıklama EKLEME
+- Girdi ile çıktı aynı uzunlukta olmalı
+- SADECE düzeltilmiş metni döndür
 
-WHAT NOT TO CHANGE:
-- Writing style or tone
-- Sentence structure
-- Word choices
-- Any formatting
-- Creative language choices
+You are a professional text editor. Fix ONLY typos, keep text COMPLETELY intact.
 
-Keep it simple and only fix obvious errors. Return only the corrected text.`,
+STRICT RULES:
+- Keep EVERY LINE EXACTLY - do not lose any lines
+- Keep ALL formatting
+- Fix ONLY spelling, grammar, punctuation errors
+- Do NOT change style
+- Do NOT add/remove content
+- Do NOT add comments
+- Output must be same length as input
+- Return ONLY corrected text`,
+
+      [GRAMMAR_LEVELS.ADVANCED]: `Sen profesyonel senaryo editörüsün. Düzelt ama TÜM içeriği AYNEN koru.
+
+KESİN KURALLAR:
+- TÜM format yapısını AYNEN koru
+- HER KELİMEYİ koru - hiçbir kelime kaybetme
+- Yazarın sesini koru
+- Tüm sahne başlıklarını, karakter isimlerini koru
+- SADECE düzeltilmiş metni döndür, yorum EKLEME
+- Girdi ve çıktı aynı uzunlukta olmalı
+
+You are a professional screenplay editor. Fix but keep ALL content EXACTLY.
+
+STRICT RULES:
+- Keep ALL format structure EXACTLY
+- Keep EVERY WORD - do not lose any words
+- Maintain author's voice
+- Preserve all scene headers, character names
+- Return ONLY corrected text, NO comments
+- Input and output must be same length`,
+
+      [GRAMMAR_LEVELS.PRESERVE_STYLE]: `Sen nazik bir metin editörüsün. SADECE açık hataları düzelt, TÜM metni AYNEN koru.
+
+NE DÜZELT:
+- Yanlış yazılmış kelimeler ("teh" → "the", "oalcak" → "olacak")
+- Temel dilbilgisi hataları
+
+NE DEĞİŞTİRME:
+- Yazım stili
+- Cümle yapısı
+- Kelime seçimleri
+- Format
+- HİÇBİR YORUMLAMA YAPMA
+- Hiçbir içerik kaybetme
+
+SADECE düzeltilmiş metni döndür, girdi uzunluğunu koru.
+
+You are a gentle text editor. Fix ONLY clear mistakes, keep ALL text EXACTLY.
+
+Return ONLY corrected text, preserve input length.`,
     },
-    
+
     buildUserPrompt: (text, level = GRAMMAR_LEVELS.STANDARD) => {
       const prompts = {
-        [GRAMMAR_LEVELS.BASIC]: `Fix only obvious spelling and grammar mistakes in this text:\n\n${text}`,
-        [GRAMMAR_LEVELS.STANDARD]: `Please correct any grammar and spelling errors in the following screenplay text:\n\n${text}`,
-        [GRAMMAR_LEVELS.ADVANCED]: `Please correct grammar, spelling, and ensure proper screenplay formatting in the following text:\n\n${text}`,
-        [GRAMMAR_LEVELS.PRESERVE_STYLE]: `Fix only clear mistakes in this text, keep everything else the same:\n\n${text}`,
+        [GRAMMAR_LEVELS.BASIC]: `SADECE bariz yazım hatalarını düzelt, TÜM metni AYNEN koru, YORUM YAPMA, AYNI UZUNLUKTA DÖNDÜR:\n\nFix ONLY obvious typos, keep ALL text EXACTLY, NO comments, RETURN SAME LENGTH:\n\n${text}`,
+        [GRAMMAR_LEVELS.STANDARD]: `SADECE yazım hatalarını düzelt, TÜM içeriği AYNEN koru, YORUMLAMA, AYNI UZUNLUKTA:\n\nFix ONLY typos, keep ALL content EXACTLY, NO interpretation, SAME LENGTH:\n\n${text}`,
+        [GRAMMAR_LEVELS.ADVANCED]: `Düzelt ama TÜM kelime ve satırları AYNEN koru, YORUM YOK, AYNI UZUNLUK:\n\nFix but keep ALL words and lines EXACTLY, NO comments, SAME LENGTH:\n\n${text}`,
+        [GRAMMAR_LEVELS.PRESERVE_STYLE]: `SADECE açık hataları düzelt, geri kalanı AYNEN koru, YORUM YAPMA, AYNI UZUNLUK:\n\nFix ONLY clear errors, keep rest EXACTLY, NO comments, SAME LENGTH:\n\n${text}`,
       };
-      
+
       return prompts[level] || prompts[GRAMMAR_LEVELS.STANDARD];
     },
   },
@@ -1372,8 +1407,8 @@ Return a valid JSON object with the following structure:
 }
 
 Return ONLY valid JSON, no additional text or markdown.`,
-    
-    buildUserPrompt: (text) => 
+
+    buildUserPrompt: (text) =>
       `Analyze this screenplay and provide a detailed breakdown:\n\n${text.substring(0, 50000)}`,
   },
 };

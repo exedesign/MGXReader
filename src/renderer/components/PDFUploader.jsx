@@ -3,10 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { useScriptStore } from '../store/scriptStore';
 import { cleanScreenplayText, parseScenes } from '../utils/textProcessing';
 import { parseScreenplayFile } from '../utils/screenplayParser';
+import { performPDFOCR, isOCRAvailable } from '../utils/ocrService';
 
 export default function PDFUploader() {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [useOCR, setUseOCR] = useState(false);
+  const [ocrLanguage, setOcrLanguage] = useState('tur+eng');
+  const [ocrProgress, setOcrProgress] = useState(null);
   const { setScriptText, setOriginalFileName, setPageCount, setError } = useScriptStore();
   const { t } = useTranslation();
 
@@ -25,6 +29,40 @@ export default function PDFUploader() {
         // Handle PDF files with existing logic
         result = await window.electronAPI.parsePDF(filePath);
         
+        // If PDF parsing failed or returned no text, try OCR if enabled
+        if ((!result.success || !result.text || result.text.trim().length < 50) && useOCR) {
+          console.log('PDF text extraction failed or insufficient, attempting OCR...');
+          
+          try {
+            setOcrProgress({ status: 'starting', progress: 0, message: 'Starting OCR...' });
+            
+            const ocrResult = await performPDFOCR(filePath, ocrLanguage, (progress) => {
+              setOcrProgress(progress);
+            });
+            
+            if (ocrResult.success && ocrResult.text) {
+              result = {
+                success: true,
+                text: ocrResult.text,
+                pages: ocrResult.pages,
+                metadata: { extractedViaOCR: true, ocrLanguage: ocrResult.language }
+              };
+              console.log('OCR extraction successful:', {
+                pages: ocrResult.pages,
+                textLength: ocrResult.text.length
+              });
+            }
+            
+            setOcrProgress(null);
+          } catch (ocrError) {
+            console.error('OCR failed:', ocrError);
+            setOcrProgress(null);
+            if (!result.success || !result.text) {
+              throw new Error(`PDF extraction and OCR both failed: ${ocrError.message}`);
+            }
+          }
+        }
+        
         if (!result.success) {
           throw new Error(result.error || 'Failed to parse PDF');
         }
@@ -40,6 +78,7 @@ export default function PDFUploader() {
         console.log('PDF loaded successfully:', {
           pages: result.pages,
           textLength: result.text.length,
+          extractedViaOCR: result.metadata?.extractedViaOCR
         });
 
       } else if (['fdx', 'celtx', 'txt', 'docx'].includes(extension)) {
@@ -159,6 +198,73 @@ export default function PDFUploader() {
   return (
     <div className="flex items-center justify-center h-full bg-cinema-black p-8">
       <div className="max-w-2xl w-full">
+        {/* OCR Settings */}
+        {isOCRAvailable() && (
+          <div className="mb-6 p-4 bg-cinema-dark rounded-lg border border-cinema-gray">
+            <div className="flex items-start gap-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="enableOCR"
+                  checked={useOCR}
+                  onChange={(e) => setUseOCR(e.target.checked)}
+                  className="w-5 h-5 rounded border-cinema-gray bg-cinema-gray-light text-cinema-accent focus:ring-2 focus:ring-cinema-accent cursor-pointer"
+                />
+              </div>
+              <div className="flex-1">
+                <label htmlFor="enableOCR" className="text-sm font-medium text-cinema-text cursor-pointer block mb-1">
+                  {t('uploader.enableOCR', 'Enable OCR (Optical Character Recognition)')}
+                </label>
+                <p className="text-xs text-cinema-text-dim mb-3">
+                  {t('uploader.ocrHint', 'Use OCR for scanned PDFs or images without extractable text. Processing may take longer.')}
+                </p>
+                
+                {useOCR && (
+                  <div className="flex items-center gap-3">
+                    <label htmlFor="ocrLanguage" className="text-xs text-cinema-text-dim">
+                      {t('uploader.ocrLanguage', 'OCR Language')}:
+                    </label>
+                    <select
+                      id="ocrLanguage"
+                      value={ocrLanguage}
+                      onChange={(e) => setOcrLanguage(e.target.value)}
+                      className="px-3 py-1 bg-cinema-gray border border-cinema-gray-light rounded text-sm text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:outline-none"
+                    >
+                      <option value="tur+eng">{t('uploader.turkishEnglish', 'Turkish + English')}</option>
+                      <option value="tur">{t('uploader.turkish', 'Turkish')}</option>
+                      <option value="eng">{t('uploader.english', 'English')}</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* OCR Progress Indicator */}
+        {ocrProgress && (
+          <div className="mb-6 p-4 bg-cinema-dark rounded-lg border border-cinema-accent">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="animate-spin rounded-full h-5 w-5 border-2 border-cinema-accent border-t-transparent"></div>
+              <span className="text-sm font-medium text-cinema-text">{ocrProgress.message}</span>
+            </div>
+            <div className="w-full bg-cinema-gray rounded-full h-2">
+              <div 
+                className="bg-cinema-accent rounded-full h-2 transition-all duration-300"
+                style={{ width: `${ocrProgress.progress}%` }}
+              ></div>
+            </div>
+            {ocrProgress.totalPages && (
+              <p className="text-xs text-cinema-text-dim mt-2">
+                {t('uploader.ocrPageProgress', 'Page {{current}} of {{total}}', { 
+                  current: ocrProgress.page || 0, 
+                  total: ocrProgress.totalPages 
+                })}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Drop zone */}
         <div
           onDragOver={handleDragOver}
