@@ -3,7 +3,7 @@
  * Provides text extraction from images with Turkish and English support
  */
 
-import { createWorker } from 'tesseract.js';
+import Tesseract from 'tesseract.js/dist/tesseract.esm.min.js';
 
 /**
  * Perform OCR on PDF by converting pages to images
@@ -36,8 +36,11 @@ export async function performPDFOCR(filePath, language = 'tur+eng', onProgress =
       totalPages 
     });
 
-    // Create worker with local paths
-    worker = await createWorker(language, 1, {
+    // Create worker with CDN paths (simplest approach for Electron)
+    worker = await Tesseract.createWorker(language, 1, {
+      workerPath: '/tesseract/worker.min.js',
+      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+      corePath: 'https://unpkg.com/tesseract.js-core@v5.0.0',
       logger: (m) => {
         console.log('OCR Worker:', m);
         if (m.status === 'loading tesseract core') {
@@ -140,7 +143,7 @@ export async function performPDFOCR(filePath, language = 'tur+eng', onProgress =
  */
 export function isOCRAvailable() {
   try {
-    return typeof createWorker !== 'undefined';
+    return typeof Tesseract !== 'undefined' && typeof Tesseract.createWorker === 'function';
   } catch {
     return false;
   }

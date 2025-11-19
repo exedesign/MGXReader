@@ -20,6 +20,10 @@ export default defineConfig({
     port: 3000,
     host: 'localhost',
     strictPort: false,
+    fs: {
+      // Allow serving files from node_modules
+      allow: ['..']
+    }
   },
   build: {
     outDir: 'build',
@@ -30,4 +34,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    include: ['tesseract.js']
+  }
 });
