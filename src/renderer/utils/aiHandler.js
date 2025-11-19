@@ -267,6 +267,132 @@ export class AIHandler {
   }
 
   /**
+   * Chunk-based Analysis for Local Models (MLX, Ollama)
+   * Splits long text into manageable chunks for better analysis
+   */
+  async analyzeWithChunks(systemPrompt, fullText, options = {}) {
+    const {
+      chunkSize = 3000, // ~3000 characters per chunk (~750 words)
+      overlapSize = 300, // Overlap to maintain context
+      maxTokensPerChunk = 2000,
+      temperature = this.temperature,
+    } = options;
+
+    // Check if we need chunking (only for MLX and LOCAL providers)
+    const needsChunking = (this.provider === AI_PROVIDERS.MLX || this.provider === AI_PROVIDERS.LOCAL) 
+                          && fullText.length > chunkSize;
+
+    if (!needsChunking) {
+      // For short texts or cloud providers, use normal flow
+      return await this.generateText(systemPrompt, fullText, { temperature, maxTokens: 4000 });
+    }
+
+    console.log(`📦 Chunking enabled: Text length ${fullText.length} chars`);
+
+    // Split text into chunks
+    const chunks = this._splitIntoChunks(fullText, chunkSize, overlapSize);
+    console.log(`📦 Created ${chunks.length} chunks for analysis`);
+
+    // Analyze each chunk
+    const chunkResults = [];
+    for (let i = 0; i < chunks.length; i++) {
+      console.log(`📦 Analyzing chunk ${i + 1}/${chunks.length}...`);
+      
+      const chunkPrompt = `${systemPrompt}
+
+IMPORTANT: You are analyzing PART ${i + 1} of ${chunks.length} of a larger screenplay.
+Focus on extracting structured data from this section only.
+
+Text to analyze:
+${chunks[i]}`;
+
+      try {
+        const result = await this.generateText(
+          'You are a screenplay analysis expert.',
+          chunkPrompt,
+          { temperature, maxTokens: maxTokensPerChunk }
+        );
+        chunkResults.push(result);
+        
+        // Small delay to prevent overwhelming the local model
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error(`Error analyzing chunk ${i + 1}:`, error);
+        chunkResults.push(`Error in chunk ${i + 1}: ${error.message}`);
+      }
+    }
+
+    // Merge results
+    console.log(`📦 Merging ${chunkResults.length} chunk results...`);
+    const mergedResult = await this._mergeChunkResults(systemPrompt, chunkResults, temperature);
+    
+    return mergedResult;
+  }
+
+  /**
+   * Split text into overlapping chunks
+   */
+  _splitIntoChunks(text, chunkSize, overlapSize) {
+    const chunks = [];
+    let start = 0;
+
+    while (start < text.length) {
+      const end = Math.min(start + chunkSize, text.length);
+      const chunk = text.substring(start, end);
+      
+      // Try to break at sentence boundaries
+      let breakPoint = end;
+      if (end < text.length) {
+        const lastPeriod = chunk.lastIndexOf('.');
+        const lastNewline = chunk.lastIndexOf('\n\n');
+        breakPoint = Math.max(lastPeriod, lastNewline);
+        
+        if (breakPoint > start + (chunkSize * 0.7)) {
+          chunks.push(text.substring(start, start + breakPoint + 1));
+          start = start + breakPoint + 1 - overlapSize;
+        } else {
+          chunks.push(chunk);
+          start = end - overlapSize;
+        }
+      } else {
+        chunks.push(chunk);
+        break;
+      }
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Merge chunk analysis results into a coherent final analysis
+   */
+  async _mergeChunkResults(systemPrompt, chunkResults, temperature) {
+    const mergePrompt = `You have analyzed a screenplay in ${chunkResults.length} parts. 
+Now merge these partial analyses into ONE complete, coherent JSON response.
+
+Combine all scenes, characters, locations, and equipment from all parts.
+Remove duplicates and create a unified analysis.
+
+Partial analyses:
+${chunkResults.map((result, i) => `\n--- Part ${i + 1} ---\n${result}`).join('\n')}
+
+Provide the final merged analysis as a single valid JSON object following the original format.`;
+
+    try {
+      const merged = await this.generateText(
+        'You are merging screenplay analysis data.',
+        mergePrompt,
+        { temperature: 0.1, maxTokens: 3000 } // Low temperature for consistent merging
+      );
+      return merged;
+    } catch (error) {
+      console.error('Error merging chunks:', error);
+      // Fallback: return concatenated results
+      return chunkResults.join('\n\n---\n\n');
+    }
+  }
+
+  /**
    * Test connection to AI provider
    */
   async testConnection() {

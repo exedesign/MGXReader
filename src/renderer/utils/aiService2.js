@@ -47,17 +47,42 @@ export async function correctScreenplayText(text) {
 
 /**
  * Analyze screenplay for production breakdown
+ * Uses chunk-based analysis for MLX and local models
  */
 export async function analyzeScreenplay(text) {
   const handler = getAIHandler();
   const { system, buildUserPrompt } = SCREENPLAY_PROMPTS.SCENE_ANALYSIS;
+  const config = useAIStore.getState().getCurrentConfig();
   
   try {
-    const response = await handler.generateText(
-      system,
-      buildUserPrompt(text),
-      { maxTokens: 8000 }
-    );
+    let response;
+    
+    // Use chunk-based analysis for MLX and Local AI with long texts
+    const isLocalModel = config.provider === 'mlx' || config.provider === 'local';
+    const isLongText = text.length > 3000;
+    
+    if (isLocalModel && isLongText) {
+      console.log('🔄 Using chunk-based analysis for local model...');
+      
+      // Use analyzeWithChunks for better results on local models
+      response = await handler.analyzeWithChunks(
+        system,
+        text,
+        {
+          chunkSize: 3000,      // ~3000 chars per chunk
+          overlapSize: 300,      // 300 chars overlap
+          maxTokensPerChunk: 2000,
+          temperature: 0.3,
+        }
+      );
+    } else {
+      // Standard analysis for cloud providers or short texts
+      response = await handler.generateText(
+        system,
+        buildUserPrompt(text),
+        { maxTokens: 8000 }
+      );
+    }
     
     // Parse JSON response
     const cleanedResponse = response
