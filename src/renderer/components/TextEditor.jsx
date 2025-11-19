@@ -1,104 +1,77 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useScriptStore } from '../store/scriptStore';
-import { useAIStore } from '../store/aiStore';
-import { usePromptStore } from '../store/promptStore';
+import { useReaderStore } from '../store/readerStore';
 import { cleanScreenplayText } from '../utils/textProcessing';
 
 export default function TextEditor() {
   const { t } = useTranslation();
   const { scriptText, cleanedText, setCleanedText } = useScriptStore();
-  const { isConfigured, provider, getAIHandler } = useAIStore();
-  const { getActivePrompt, getPromptTypes, setActivePrompt, activePrompts } = usePromptStore();
+  const { wordFilter, wordFilterEnabled, setWordFilterEnabled, setWordFilter } = useReaderStore();
   const [isEditing, setIsEditing] = useState(false);
   const [viewMode, setViewMode] = useState('cleaned'); // 'raw' or 'cleaned'
-  const [isCorrectingGrammar, setIsCorrectingGrammar] = useState(false);
-  const [grammarProgress, setGrammarProgress] = useState(null);
-  const [showGrammarSettings, setShowGrammarSettings] = useState(false);
-  const grammarSettingsRef = useRef(null);
+  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, selectedText: '' });
 
-  const displayText = viewMode === 'raw' ? scriptText : cleanedText;
+  const baseDisplayText = viewMode === 'raw' ? scriptText : cleanedText;
 
-  // Close grammar settings when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (grammarSettingsRef.current && !grammarSettingsRef.current.contains(event.target)) {
-        setShowGrammarSettings(false);
-      }
-    };
-
-    const handleEscKey = (event) => {
-      if (event.key === 'Escape') {
-        setShowGrammarSettings(false);
-      }
-    };
-
-    if (showGrammarSettings) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscKey);
+  // Apply word filter automatically if words exist
+  const finalDisplayText = useMemo(() => {
+    if (!wordFilter?.length || !baseDisplayText) {
+      return baseDisplayText;
     }
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscKey);
-    };
-  }, [showGrammarSettings]);
+    let filteredText = baseDisplayText;
+    wordFilter.forEach(word => {
+      if (word?.trim()) {
+        const regex = new RegExp(`\\b${word.trim()}\\b`, 'gi');
+        filteredText = filteredText.replace(regex, '');
+      }
+    });
+
+    // Clean up extra whitespace
+    return filteredText.replace(/\s+/g, ' ').trim();
+  }, [baseDisplayText, wordFilter]);
+
+  // Context menu handlers
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+    
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+    
+    if (selectedText) {
+      setContextMenu({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        selectedText
+      });
+    }
+  };
+
+  const handleAddToFilter = () => {
+    if (contextMenu.selectedText && !wordFilter.includes(contextMenu.selectedText)) {
+      const newFilter = [...(wordFilter || []), contextMenu.selectedText];
+      setWordFilter(newFilter);
+    }
+    setContextMenu({ visible: false, x: 0, y: 0, selectedText: '' });
+  };
+
+  const handleCloseContextMenu = () => {
+    setContextMenu({ visible: false, x: 0, y: 0, selectedText: '' });
+  };
+
+  // Close context menu when clicking outside
+  React.useEffect(() => {
+    const handleClick = () => handleCloseContextMenu();
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
 
   const handleClean = () => {
     const cleaned = cleanScreenplayText(scriptText);
     setCleanedText(cleaned);
     setViewMode('cleaned');
-  };
-
-  const handleGrammarCorrection = async () => {
-    if (!isConfigured()) {
-      alert(t('editor.configureFirst'));
-      return;
-    }
-
-    setIsCorrectingGrammar(true);
-    setGrammarProgress(null);
-
-    try {
-      const aiHandler = getAIHandler();
-      const textToCorrect = cleanedText || scriptText;
-
-      // Get active custom prompt for grammar correction
-      const customPrompt = getActivePrompt('grammar');
-
-      let correctedText;
-      if (customPrompt && customPrompt.system && customPrompt.user) {
-        // Use custom prompt
-        correctedText = await aiHandler.analyzeWithCustomPrompt(textToCorrect, {
-          systemPrompt: customPrompt.system,
-          userPrompt: customPrompt.user,
-          useChunking: textToCorrect.length > 3000,
-          onProgress: (progress) => {
-            setGrammarProgress(progress);
-          },
-        });
-      } else {
-        // Fallback to standard grammar correction
-        correctedText = await aiHandler.correctGrammar(textToCorrect, {
-          level: grammarLevel,
-          useChunking: textToCorrect.length > 3000,
-          onProgress: (progress) => {
-            setGrammarProgress(progress);
-          },
-        });
-      }
-
-      setCleanedText(correctedText);
-      setViewMode('cleaned');
-      setGrammarProgress(null);
-      alert(t('editor.grammarComplete'));
-    } catch (error) {
-      console.error('Grammar correction failed:', error);
-      alert(t('editor.grammarFailed') + ' ' + error.message);
-      setGrammarProgress(null);
-    } finally {
-      setIsCorrectingGrammar(false);
-    }
   };
 
   const handleTextChange = (e) => {
@@ -108,7 +81,7 @@ export default function TextEditor() {
   };
 
   const handleExport = () => {
-    const textToExport = displayText;
+    const textToExport = finalDisplayText;
     const element = document.createElement('a');
     const file = new Blob([textToExport], { type: 'text/plain' });
     element.href = URL.createObjectURL(file);
@@ -166,6 +139,21 @@ export default function TextEditor() {
             >
               {isEditing ? '✓ ' + t('editor.doneEditing') : '✏️ ' + t('editor.edit')}
             </button>
+            
+            {/* Kelime Filtreleme Ayarları */}
+            <button
+              onClick={() => {
+                // UnifiedSettings modal'ını aç ve Reader tabına git
+                const settingsEvent = new CustomEvent('openUnifiedSettings', {
+                  detail: { activeTab: 'reader' }
+                });
+                window.dispatchEvent(settingsEvent);
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+              title="Kelime filtreleme ayarlarını düzenle"
+            >
+              ⚙️ Kelime Filtresi
+            </button>
           </div>
 
           {/* Right side - Actions */}
@@ -176,83 +164,11 @@ export default function TextEditor() {
               </button>
             )}
 
-            {/* Grammar Settings */}
-            <div className="relative" ref={grammarSettingsRef}>
-              <button
-                onClick={() => setShowGrammarSettings(!showGrammarSettings)}
-                className="btn-secondary text-sm flex items-center gap-2"
-                disabled={isCorrectingGrammar}
-              >
-                ⚙️ {t('editor.grammarSettings')}
-              </button>
-
-              {showGrammarSettings && (
-                <div className="absolute right-0 top-full mt-2 w-72 bg-cinema-dark border border-cinema-gray rounded-lg shadow-lg z-10">
-                  <div className="p-4">
-                    <h4 className="text-sm font-medium text-cinema-text mb-3">{t('editor.grammarCorrection')}</h4>
-
-                    {/* Custom Prompt Selector */}
-                    <div className="mb-4">
-                      <label className="block text-xs text-cinema-text-dim mb-2">
-                        {t('editor.correctionStyle')}
-                      </label>
-                      <select
-                        value={activePrompts.grammar}
-                        onChange={(e) => setActivePrompt('grammar', e.target.value)}
-                        className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded text-sm text-cinema-text focus:outline-none focus:border-cinema-accent"
-                      >
-                        {getPromptTypes('grammar').map(({ key, name, isCustom }) => (
-                          <option key={key} value={key}>
-                            {name} {isCustom ? '(Custom)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="text-xs text-cinema-text-dim mt-1">
-                        {t('editor.using')} {getActivePrompt('grammar')?.name}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={handleGrammarCorrection}
-              disabled={isCorrectingGrammar || !displayText}
-              className="btn-primary text-sm"
-            >
-              {isCorrectingGrammar
-                ? grammarProgress?.message || t('editor.correcting')
-                : '✨ ' + t('editor.fixGrammar')
-              }
-            </button>
-
             <button onClick={handleExport} className="btn-primary text-sm">
               💾 {t('editor.export')}
             </button>
           </div>
         </div>
-
-        {/* Progress Bar for Grammar Correction */}
-        {isCorrectingGrammar && grammarProgress && (
-          <div className="mt-3">
-            <div className="flex items-center justify-between text-sm text-cinema-text-dim mb-1">
-              <span>{grammarProgress.message}</span>
-              {grammarProgress.currentChunk && grammarProgress.totalChunks && (
-                <span>
-                  {t('editor.chunk')} {grammarProgress.currentChunk} {t('editor.of')} {grammarProgress.totalChunks}
-                </span>
-              )}
-              <span>{Math.round(grammarProgress.progress || 0)}%</span>
-            </div>
-            <div className="w-full bg-cinema-gray-light rounded-full h-2">
-              <div
-                className="bg-cinema-accent h-2 rounded-full transition-all duration-300"
-                style={{ width: `${grammarProgress.progress || 0}%` }}
-              />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Text Display/Editor */}
@@ -260,15 +176,19 @@ export default function TextEditor() {
         <div className="max-w-4xl mx-auto">
           {isEditing ? (
             <textarea
-              value={displayText}
+              value={finalDisplayText}
               onChange={handleTextChange}
+              onContextMenu={handleContextMenu}
               className="w-full h-full min-h-[600px] p-6 bg-cinema-dark border border-cinema-gray rounded-lg text-cinema-text screenplay-text resize-none focus:outline-none focus:border-cinema-accent"
               spellCheck="false"
             />
           ) : (
-            <div className="bg-cinema-dark border border-cinema-gray rounded-lg p-6">
+            <div 
+              className="bg-cinema-dark border border-cinema-gray rounded-lg p-6"
+              onContextMenu={handleContextMenu}
+            >
               <pre className="screenplay-text text-cinema-text whitespace-pre-wrap">
-                {displayText}
+                {finalDisplayText}
               </pre>
             </div>
           )}
@@ -279,15 +199,31 @@ export default function TextEditor() {
       <div className="bg-cinema-dark border-t border-cinema-gray p-3 px-6">
         <div className="flex items-center justify-between text-xs text-cinema-text-dim">
           <div className="flex gap-6">
-            <span>{t('editor.characters')}: {displayText?.length.toLocaleString()}</span>
-            <span>{t('editor.words')}: {displayText?.split(/\s+/).length.toLocaleString()}</span>
-            <span>{t('editor.lines')}: {displayText?.split('\n').length.toLocaleString()}</span>
+            <span>{t('editor.characters')}: {finalDisplayText?.length.toLocaleString()}</span>
+            <span>{t('editor.words')}: {finalDisplayText?.split(/\s+/).filter(w => w.length > 0).length.toLocaleString()}</span>
+            <span>{t('editor.lines')}: {finalDisplayText?.split('\n').length.toLocaleString()}</span>
           </div>
           <div>
             {viewMode === 'cleaned' ? t('editor.viewingCleaned') : t('editor.viewingOriginal')}
           </div>
         </div>
       </div>
+      
+      {/* Context Menu */}
+      {contextMenu.visible && (
+        <div
+          className="fixed bg-cinema-gray border border-cinema-gray-light rounded-lg shadow-lg py-2 z-50"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={handleAddToFilter}
+            className="w-full px-4 py-2 text-left text-cinema-text hover:bg-cinema-gray-light transition-colors flex items-center gap-2 text-sm"
+          >
+            🔍 "{contextMenu.selectedText}" filtreye ekle
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,14 +2,41 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useScriptStore } from '../store/scriptStore';
 import { useAIStore } from '../store/aiStore';
-import AISettings from './AISettings';
+import UnifiedSettings from './UnifiedSettings';
 
 export default function Header({ sidebarOpen, setSidebarOpen }) {
   const { originalFileName, currentView, setCurrentView, clearScript, analysisData } = useScriptStore();
-  const { provider, isConfigured } = useAIStore();
+  const { provider, isConfigured, openaiModel, geminiModel, localModel, mlxModel } = useAIStore();
   const { t, i18n } = useTranslation();
-  const [showAISettings, setShowAISettings] = useState(false);
+  const [showUnifiedSettings, setShowUnifiedSettings] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [customLogo, setCustomLogo] = useState('');
+
+  // Load custom logo from localStorage
+  useEffect(() => {
+    const savedLogo = localStorage.getItem('customLogo');
+    if (savedLogo) {
+      setCustomLogo(savedLogo);
+    }
+  }, [showUnifiedSettings]); // Refresh when settings are closed
+
+  // Listen for unified settings open events
+  useEffect(() => {
+    const handleOpenUnifiedSettings = (event) => {
+      setShowUnifiedSettings(true);
+      // Eğer belirli bir tab belirtilmişse, onu UnifiedSettings'e geçirebiliriz
+      if (event.detail?.activeTab) {
+        // Bu bilgiyi UnifiedSettings'e props olarak geçirmek için state ekleyebiliriz
+        localStorage.setItem('unifiedSettingsActiveTab', event.detail.activeTab);
+      }
+    };
+
+    window.addEventListener('openUnifiedSettings', handleOpenUnifiedSettings);
+    
+    return () => {
+      window.removeEventListener('openUnifiedSettings', handleOpenUnifiedSettings);
+    };
+  }, []);
 
   // Check fullscreen status
   useEffect(() => {
@@ -113,7 +140,16 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
         </button>
 
         <div className="flex items-center gap-2 lg:gap-3 min-w-0">
-          <div className="text-xl lg:text-2xl flex-shrink-0">🎬</div>
+          {/* Custom Logo or Default Icon */}
+          {customLogo ? (
+            <img 
+              src={customLogo} 
+              alt="Custom Logo" 
+              className="w-12 h-12 lg:w-14 lg:h-14 object-contain flex-shrink-0"
+            />
+          ) : (
+            <div className="text-3xl lg:text-4xl flex-shrink-0">🎬</div>
+          )}
           <div className="min-w-0">
             <h1 className="text-lg lg:text-xl font-bold text-cinema-accent truncate">{t('header.title')}</h1>
             {originalFileName && (
@@ -182,9 +218,39 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
           </button>
         )}
 
-        {/* AI Settings Button */}
+        {/* AI Provider Info Display */}
+        {isConfigured() && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-cinema-gray/50 rounded-lg text-cinema-text">
+            {provider === 'openai' && (
+              <>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997L9.4041 13.5V10.4976z"/>
+                </svg>
+                <span className="text-xs font-medium">OpenAI {openaiModel}</span>
+              </>
+            )}
+            {provider === 'gemini' && (
+              <>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2L13.09 8.26L20 9L13.09 9.74L12 16L10.91 9.74L4 9L10.91 8.26L12 2Z"/>
+                </svg>
+                <span className="text-xs font-medium">Gemini {geminiModel}</span>
+              </>
+            )}
+            {provider === 'local' && (
+              <>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                <span className="text-xs font-medium">Local {localModel || mlxModel || 'AI'}</span>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Settings Button */}
         <button
-          onClick={() => setShowAISettings(true)}
+          onClick={() => setShowUnifiedSettings(true)}
           className={`p-2 rounded-lg transition-colors flex items-center gap-2 ${isConfigured()
               ? 'bg-cinema-gray hover:bg-cinema-gray-light text-cinema-text'
               : 'bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400'
@@ -194,10 +260,8 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
           </svg>
-          <span className="text-xs font-medium hidden lg:inline">
-            {provider === 'openai' && 'OpenAI'}
-            {provider === 'gemini' && 'Gemini'}
-            {provider === 'local' && 'Local AI'}
+          <span className="text-sm font-medium">
+            Ayarlar
           </span>
           {!isConfigured() && (
             <svg className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
@@ -240,7 +304,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
       </div>
 
       {/* AI Settings Modal */}
-      {showAISettings && <AISettings onClose={() => setShowAISettings(false)} />}
+      {showUnifiedSettings && <UnifiedSettings onClose={() => setShowUnifiedSettings(false)} />}
     </header>
   );
 }

@@ -18,6 +18,11 @@ export const useReaderStore = create(
       orpOffset: 0, // -3 to +3, adjust the ORP position left or right
       showSettings: false,
 
+      // Additional reader settings for UnifiedSettings compatibility
+      wordsPerMinute: 200,
+      highlightColor: '#ffd700',
+      wordFilter: [],
+
       // Advanced Typography Settings
       fontFamily: 'Courier Prime', // 'Courier Prime' | 'Roboto Mono' | 'Fira Code' | 'OpenDyslexic' | 'JetBrains Mono'
       fontWeight: 400, // 300 | 400 | 500 | 700
@@ -29,6 +34,11 @@ export const useReaderStore = create(
 
       // Actions
       setWPM: (wpm) => set({ wpm }),
+
+      // UnifiedSettings compatibility functions
+      setWordsPerMinute: (wpm) => set({ wordsPerMinute: wpm, wpm }),
+      setHighlightColor: (color) => set({ highlightColor: color }),
+      setWordFilter: (filter) => set({ wordFilter: filter }),
 
       setWords: (input) => {
         // Accept either array of word objects or text string
@@ -137,6 +147,9 @@ export const useReaderStore = create(
         letterSpacing: state.letterSpacing,
         theme: state.theme,
         blacklist: state.blacklist,
+        wordsPerMinute: state.wordsPerMinute,
+        highlightColor: state.highlightColor,
+        wordFilter: state.wordFilter,
       }),
     }
   )

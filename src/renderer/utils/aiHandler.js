@@ -853,7 +853,7 @@ export class AIHandler {
     try {
       // Cloud APIs (OpenAI, Gemini) have large context windows - no chunking needed
       const isCloudProvider = this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI;
-      const shouldUseChunking = useChunking && !isCloudProvider && text.length > 15000;
+      const shouldUseChunking = useChunking && !isCloudProvider && text.length > 6000; // Lower threshold for local AI
 
       if (!shouldUseChunking) {
         // Single prompt analysis - recommended for cloud providers
@@ -911,7 +911,7 @@ export class AIHandler {
   async analyzeWithCustomPromptChunked(text, systemPrompt, userPrompt, onProgress, language = 'en') {
     const chunks = this.chunkText(text, {
       preserveScenes: false, // For custom analysis, simple chunking is usually better
-      maxTokens: 3000
+      maxTokens: 2000 // Smaller chunks for local AI reliability
     });
 
     const chunkResults = [];
@@ -932,6 +932,7 @@ export class AIHandler {
         progress: 10 + (60 * i / totalChunks),
         message: `Analyzing chunk ${chunkNumber}/${totalChunks}...`,
         chunkNumber,
+        totalChunks
       });
 
       const combinedUserPrompt = `${userPrompt}
@@ -1100,10 +1101,10 @@ ${chunk.text}`;
       return false;
     }
 
-    // Only chunk for local providers with very long texts
+    // Only chunk for local providers with moderately long texts
     const thresholds = {
-      [AI_PROVIDERS.LOCAL]: 20000,   // ~5000 tokens (local models need smaller chunks)
-      [AI_PROVIDERS.MLX]: 20000,     // ~5000 tokens (local models need smaller chunks)
+      [AI_PROVIDERS.LOCAL]: 8000,   // ~2000 tokens (local models benefit from smaller chunks)
+      [AI_PROVIDERS.MLX]: 8000,     // ~2000 tokens (local models benefit from smaller chunks)
     };
 
     const threshold = thresholds[this.provider] || 20000;

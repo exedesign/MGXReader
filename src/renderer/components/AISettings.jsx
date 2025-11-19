@@ -5,7 +5,7 @@ import { AI_PROVIDERS, AIHandler, OPENAI_MODELS, GEMINI_MODELS, MLX_MODELS } fro
 import ProvidersTab from './ProvidersTab';
 import PromptsTab from './PromptsTab';
 
-export default function AISettings({ onClose }) {
+export default function AISettings({ onClose, initialTab = 'prompts' }) {
   const {
     provider,
     openaiApiKey,
@@ -44,7 +44,7 @@ export default function AISettings({ onClose }) {
 
   const [testStatus, setTestStatus] = useState(null);
   const [isTesting, setIsTesting] = useState(false);
-  const [activeTab, setActiveTab] = useState('providers'); // 'providers' veya 'prompts'
+  const [activeTab, setActiveTab] = useState(initialTab); // 'providers' veya 'prompts'
 
   // Local state for form inputs
   const [localOpenAIKey, setLocalOpenAIKey] = useState(openaiApiKey);
@@ -148,8 +148,14 @@ export default function AISettings({ onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-cinema-dark border border-cinema-gray rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-2xl">
+    <div 
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-cinema-dark border border-cinema-gray rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-2xl relative z-[10000]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="sticky top-0 bg-cinema-dark border-b border-cinema-gray p-6 z-10">
           <div className="flex items-center justify-between mb-4">
@@ -194,7 +200,7 @@ export default function AISettings({ onClose }) {
                   : 'text-cinema-text-dim hover:text-white hover:bg-cinema-gray'
               }`}
             >
-              Custom Prompts
+              AI Analiz Ayarları
             </button>
           </div>
         </div>

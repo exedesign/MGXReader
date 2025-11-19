@@ -4,11 +4,12 @@ import { useScriptStore } from '../store/scriptStore';
 import { useAIStore } from '../store/aiStore';
 import { usePromptStore } from '../store/promptStore';
 import AIHandler from '../utils/aiHandler';
+import PDFExportService from '../utils/pdfExportService';
 
 export default function AnalysisPanel() {
   const { cleanedText, scriptText, analysisData, setAnalysisData } = useScriptStore();
   const { isConfigured, provider, getAIHandler } = useAIStore();
-  const { getActivePrompt, getPromptTypes, activePrompts } = usePromptStore();
+  const { getActivePrompt, getPromptTypes, activePrompts, getPrompt } = usePromptStore();
   const { t } = useTranslation();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(null);
@@ -16,6 +17,19 @@ export default function AnalysisPanel() {
   const [useCustomAnalysis, setUseCustomAnalysis] = useState(false);
   const [selectedCustomPrompt, setSelectedCustomPrompt] = useState('character');
   const [customResults, setCustomResults] = useState({});
+  const [showAnalysisDropdown, setShowAnalysisDropdown] = useState(false);
+  
+  // Multi-analysis selection - Dynamically initialize with all available types
+  const [selectedAnalysisTypes, setSelectedAnalysisTypes] = useState(() => {
+    const allTypes = {};
+    // Get all available analysis types
+    const types = getPromptTypes('analysis');
+    types.forEach(({ key }) => {
+      // Default selection: main analysis types are selected, llama variants are unselected
+      allTypes[key] = !key.includes('llama');
+    });
+    return allTypes;
+  });
 
   const handleAnalyze = async () => {
     if (!isConfigured()) {
@@ -34,70 +48,94 @@ export default function AnalysisPanel() {
 
       // Optimal chunking settings per provider
       const isCloudProvider = provider === 'openai' || provider === 'gemini';
-      const useChunking = !isCloudProvider && text.length > 15000;
+      const useChunking = !isCloudProvider && text.length > 8000; // Lower threshold for chunking
 
-      let result;
-
-      if (useCustomAnalysis) {
-        console.log('Running custom prompt analysis');
-
-        // Get active custom prompt
-        const customPrompt = getActivePrompt('analysis');
-
-        if (!customPrompt || !customPrompt.system || !customPrompt.user) {
-          throw new Error('Custom prompt not properly configured');
-        }
-
-        // Run custom analysis
-        const customAnalysisText = await aiHandler.analyzeWithCustomPrompt(text, {
-          systemPrompt: customPrompt.system,
-          userPrompt: customPrompt.user,
-          useChunking,
-          onProgress: (progress) => {
-            setAnalysisProgress(progress);
-            console.log('Custom analysis progress:', progress);
-          },
-        });
-
-        // Store custom results and create compatible structure
-        const newCustomResults = {
-          ...customResults,
-          [selectedCustomPrompt]: customAnalysisText
-        };
-        setCustomResults(newCustomResults);
-
-        // Create structure compatible with tab display
-        result = {
-          isCustomAnalysis: true,
-          customResults: newCustomResults,
-          activeCustomPrompt: selectedCustomPrompt,
-          summary: { totalScenes: 0, estimatedShootingDays: 0 },
-          scenes: [],
-          locations: [],
-          characters: [],
-          equipment: []
-        };
-
-        // Auto-switch to custom tab
-        setActiveTab('custom');
-      } else {
-        console.log('Running comprehensive enhanced screenplay analysis');
-
-        // Enhanced analysis with all 8 engines
-        result = await aiHandler.analyzeScreenplayEnhanced(text, [], [], {
-          useChunking,
-          language: t('language.code', 'en'), // Pass current language
-          onProgress: (progress) => {
-            setAnalysisProgress(progress);
-            console.log('Analysis progress:', progress);
-          },
-        });
-
-        // Ensure it's marked as default analysis
-        result.isCustomAnalysis = false;
+      // Get selected analysis types
+      const selectedTypes = Object.keys(selectedAnalysisTypes).filter(key => selectedAnalysisTypes[key]);
+      
+      if (selectedTypes.length === 0) {
+        alert(t('analysis.selectAtLeastOne', 'Lütfen en az bir analiz türü seçin'));
+        setIsAnalyzing(false);
+        return;
       }
 
+      console.log('Running multi-analysis with selected types:', selectedTypes);
+
+      // Run multiple analyses
+      const multiResults = {};
+      const totalAnalyses = selectedTypes.length;
+      let completed = 0;
+
+      for (const analysisType of selectedTypes) {
+        const prompt = getPrompt('analysis', analysisType);
+        
+        if (!prompt || !prompt.system || !prompt.user) {
+          console.warn(`Prompt for ${analysisType} not found, skipping`);
+          continue;
+        }
+
+        setAnalysisProgress({
+          message: `${prompt.name} analizi yapılıyor... (${completed + 1}/${totalAnalyses})`,
+          progress: (completed / totalAnalyses) * 100
+        });
+
+        try {
+          // Inject language variable
+          const currentLanguage = t('language.name', 'Türkçe');
+          const systemPrompt = prompt.system.replace(/{{language}}/g, currentLanguage).replace(/{{lang}}/g, currentLanguage);
+          const userPrompt = prompt.user.replace(/{{language}}/g, currentLanguage).replace(/{{lang}}/g, currentLanguage);
+
+          const analysisResult = await aiHandler.analyzeWithCustomPrompt(text, {
+            systemPrompt,
+            userPrompt,
+            useChunking: !isCloudProvider, // Enable chunking for local AI providers
+            onProgress: (progress) => {
+              const overallProgress = ((completed + (progress.progress || 0) / 100) / totalAnalyses) * 100;
+              setAnalysisProgress({
+                message: `${prompt.name} - ${progress.message || 'İşleniyor...'}`,
+                progress: overallProgress,
+                currentChunk: progress.chunkNumber,
+                totalChunks: progress.totalChunks || undefined
+              });
+            },
+          });
+
+          multiResults[analysisType] = {
+            name: prompt.name,
+            result: analysisResult
+          };
+          
+          completed++;
+        } catch (error) {
+          console.error(`Error analyzing ${analysisType}:`, error);
+          multiResults[analysisType] = {
+            name: prompt.name,
+            result: `❌ Analiz hatası: ${error.message}`
+          };
+          completed++;
+        }
+      }
+
+      // Store results
+      setCustomResults(multiResults);
+
+      // Create structure compatible with tab display
+      const result = {
+        isCustomAnalysis: true,
+        isMultiAnalysis: true,
+        customResults: multiResults,
+        selectedTypes,
+        summary: { totalScenes: 0, estimatedShootingDays: 0 },
+        scenes: [],
+        locations: [],
+        characters: [],
+        equipment: []
+      };
+
       setAnalysisData(result);
+      
+      // Auto-switch to custom tab
+      setActiveTab('custom');
       setAnalysisProgress(null);
     } catch (error) {
       console.error('Analysis failed:', error);
@@ -110,12 +148,16 @@ export default function AnalysisPanel() {
 
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef(null);
+  const analysisDropdownRef = useRef(null);
 
   // Close export menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event) {
       if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) {
         setShowExportMenu(false);
+      }
+      if (analysisDropdownRef.current && !analysisDropdownRef.current.contains(event.target)) {
+        setShowAnalysisDropdown(false);
       }
     }
 
@@ -126,212 +168,83 @@ export default function AnalysisPanel() {
   }, []);
 
   const handleExport = async (format = 'json') => {
-    if (!analysisData) return;
+    if (!analysisData) {
+      alert(t('analysis.noDataToExport', 'Henüz analiz verisi yok. Lütfen önce analiz çalıştırın.'));
+      return;
+    }
 
     try {
-      let defaultPath, filters, data;
+      setShowExportMenu(false);
 
-      switch (format) {
-        case 'pdf':
-          defaultPath = 'screenplay-analysis.pdf';
-          filters = [{ name: 'PDF Files', extensions: ['pdf'] }];
-          data = generatePDFContent(analysisData);
-          break;
-        case 'docx':
-          defaultPath = 'screenplay-analysis.docx';
-          filters = [{ name: 'Word Documents', extensions: ['docx'] }];
-          data = generateDocxContent(analysisData);
-          break;
-        case 'json':
-        default:
-          defaultPath = 'screenplay-analysis.json';
-          filters = [{ name: 'JSON Files', extensions: ['json'] }, { name: 'All Files', extensions: ['*'] }];
-          data = JSON.stringify(analysisData, null, 2);
-          break;
+      if (format === 'pdf') {
+        // PDF Export - Debug
+        console.log('PDF Export başlatılıyor:', analysisData);
+        
+        if (!analysisData || Object.keys(analysisData).length === 0) {
+          alert('Dışa aktarılacak analiz verisi yok. Lütfen önce analiz çalıştırın.');
+          return;
+        }
+        
+        const pdfService = new PDFExportService();
+        const doc = pdfService.exportAnalysis(analysisData);
+        
+        if (!doc) {
+          alert('PDF oluşturulamadı. Analiz verilerini kontrol edin.');
+          return;
+        }
+        
+        const success = await pdfService.save('senaryo-analiz-raporu.pdf');
+        if (success) {
+          alert(t('analysis.exportSuccess', 'PDF raporu başarıyla kaydedildi!'));
+        }
+        return;
       }
 
-      const filePath = await window.electronAPI.saveFile({
-        defaultPath,
-        filters,
-      });
+      if (format === 'docx') {
+        alert(`DOCX export özelliği yakında eklenecek. Şimdilik JSON veya PDF formatını kullanabilirsiniz.`);
+        return;
+      }
 
-      if (filePath) {
-        if (format === 'pdf' || format === 'docx') {
-          // For PDF/DOCX, we'll need to implement proper document generation
-          await generateStructuredDocument(analysisData, format, filePath);
-        } else {
+      // JSON Export
+      const defaultPath = 'screenplay-analysis.json';
+      const filters = [{ name: 'JSON Files', extensions: ['json'] }, { name: 'All Files', extensions: ['*'] }];
+      const data = JSON.stringify(analysisData, null, 2);
+
+      if (window.electronAPI && window.electronAPI.saveFile) {
+        const filePath = await window.electronAPI.saveFile({
+          defaultPath,
+          filters,
+        });
+
+        if (filePath) {
           await window.electronAPI.saveFileContent({
             filePath,
             data,
           });
+          alert(t('analysis.exportSuccess', 'Analiz başarıyla kaydedildi!'));
         }
-        alert(`Analysis exported successfully as ${format.toUpperCase()}!`);
-        setShowExportMenu(false);
+      } else {
+        // Fallback: Browser download
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = defaultPath;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        alert(t('analysis.exportSuccess', 'Analiz başarıyla kaydedildi!'));
       }
     } catch (error) {
-      alert(`Export failed: ${error.message}`);
+      console.error('Export error:', error);
+      alert(`Export hatası: ${error.message}`);
+      alert(`Export hatası: ${error.message}`);
     }
   };
 
-  const generateStructuredDocument = async (data, format, filePath) => {
-    // This will generate a properly formatted document with visual layout
-    const documentContent = {
-      title: 'Screenplay Analysis Report',
-      timestamp: new Date().toLocaleString(),
-      sections: [
-        {
-          title: 'Executive Summary',
-          content: generateOverviewSection(data)
-        },
-        {
-          title: 'Scene Breakdown',
-          content: generateSceneSection(data.scenes || [])
-        },
-        {
-          title: 'Cast & Characters',
-          content: generateCharacterSection(data.characters || [])
-        },
-        {
-          title: 'Location Analysis',
-          content: generateLocationSection(data.locations || [])
-        },
-        {
-          title: 'Equipment Requirements',
-          content: generateEquipmentSection(data.equipment || [])
-        },
-        {
-          title: 'VFX & SFX Requirements',
-          content: generateVFXSection(data.vfxRequirements || [], data.sfxRequirements || [])
-        },
-        {
-          title: 'Virtual Production Assessment',
-          content: generateVirtualProductionSection(data.virtualProductionSuitability || {})
-        },
-        {
-          title: 'Screenplay Evaluation',
-          content: generateEvaluationSection(data.evaluation || {})
-        },
-        {
-          title: 'Audience & Platform Analysis',
-          content: generateAudienceSection(data.audienceAnalysis || {})
-        }
-      ]
-    };
-
-    // Send to main process for document generation
-    await window.electronAPI.generateDocument({
-      content: documentContent,
-      format,
-      filePath
-    });
-  };
-
-  const generateOverviewSection = (data) => {
-    return {
-      type: 'overview',
-      metrics: {
-        scenes: data.scenes?.length || 0,
-        characters: data.characters?.length || 0,
-        locations: data.locations?.length || 0,
-        shootDays: data.summary?.estimatedShootingDays || 'TBD'
-      },
-      summary: data.summary || {}
-    };
-  };
-
-  const generateSceneSection = (scenes) => {
-    return {
-      type: 'scenes',
-      data: scenes.map(scene => ({
-        number: scene.number,
-        header: scene.header,
-        description: scene.description,
-        intExt: scene.intExt,
-        timeOfDay: scene.timeOfDay,
-        duration: scene.estimatedDuration,
-        characters: scene.characters || []
-      }))
-    };
-  };
-
-  const generateCharacterSection = (characters) => {
-    return {
-      type: 'characters',
-      data: characters.map(char => ({
-        name: char.name,
-        description: char.description,
-        importance: char.importance,
-        sceneCount: char.sceneCount
-      }))
-    };
-  };
-
-  const generateLocationSection = (locations) => {
-    return {
-      type: 'locations',
-      data: locations.map(loc => ({
-        name: loc.name,
-        type: loc.type,
-        sceneCount: loc.sceneCount,
-        shootingDays: loc.estimatedShootingDays
-      }))
-    };
-  };
-
-  const generateEquipmentSection = (equipment) => {
-    return {
-      type: 'equipment',
-      data: equipment.map(item => ({
-        item: item.item,
-        category: item.category,
-        reason: item.reason,
-        priority: item.priority,
-        scenes: item.scenes
-      }))
-    };
-  };
-
-  const generateVFXSection = (vfx, sfx) => {
-    return {
-      type: 'vfx',
-      vfx: vfx.map(item => ({
-        type: item.type,
-        description: item.description,
-        complexity: item.complexity,
-        scenes: item.scenes
-      })),
-      sfx: sfx.map(item => ({
-        type: item.type,
-        description: item.description,
-        category: item.category,
-        priority: item.priority
-      }))
-    };
-  };
-
-  const generateVirtualProductionSection = (vpData) => {
-    return {
-      type: 'virtualProduction',
-      data: vpData
-    };
-  };
-
-  const generateEvaluationSection = (evaluation) => {
-    return {
-      type: 'evaluation',
-      data: evaluation
-    };
-  };
-
-  const generateAudienceSection = (audience) => {
-    return {
-      type: 'audience',
-      data: audience
-    };
-  };
-
   return (
-    <div className="flex flex-col h-full bg-cinema-black">
+    <div className="flex flex-col h-full bg-cinema-black relative">
       {/* Toolbar */}
       <div className="bg-cinema-dark border-b border-cinema-gray p-4">
         <div className="flex items-center justify-between mb-3">
@@ -371,6 +284,7 @@ export default function AnalysisPanel() {
                 )}
               </div>
             )}
+            
             <button
               onClick={handleAnalyze}
               disabled={isAnalyzing || !isConfigured()}
@@ -394,78 +308,180 @@ export default function AnalysisPanel() {
           </div>
         </div>
 
-        {/* Analysis Configuration */}
+        {/* Multi-Analysis Selection */}
         <div className="bg-cinema-gray rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-semibold text-cinema-text">{t('analysis.config.title')}</h3>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-cinema-text-dim">{t('analysis.config.analysisMode')}</span>
+            <h3 className="text-lg font-semibold text-cinema-text">{t('analysis.selectTypes', 'Analiz Türlerini Seçin')}</h3>
+            <div className="flex gap-2">
               <button
-                onClick={() => setUseCustomAnalysis(!useCustomAnalysis)}
-                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${useCustomAnalysis
-                  ? 'bg-cinema-accent text-cinema-black'
-                  : 'bg-cinema-gray-light text-cinema-text hover:bg-cinema-accent/20'
-                  }`}
+                onClick={() => {
+                  const allTypes = {};
+                  getPromptTypes('analysis').forEach(({ key }) => {
+                    allTypes[key] = true;
+                  });
+                  setSelectedAnalysisTypes(allTypes);
+                }}
+                className="text-xs px-3 py-1.5 bg-cinema-accent/20 hover:bg-cinema-accent/30 text-cinema-accent rounded transition-colors font-medium"
               >
-                {useCustomAnalysis ? '🎯 Custom' : '📊 Standard'}
+                ✓ Tümünü Seç
+              </button>
+              <button
+                onClick={() => {
+                  const allTypes = {};
+                  getPromptTypes('analysis').forEach(({ key }) => {
+                    allTypes[key] = false;
+                  });
+                  setSelectedAnalysisTypes(allTypes);
+                }}
+                className="text-xs px-3 py-1.5 bg-cinema-gray-light hover:bg-cinema-gray text-cinema-text-dim rounded transition-colors"
+              >
+                ✗ Temizle
               </button>
             </div>
           </div>
-
-          {useCustomAnalysis ? (
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium text-cinema-text mb-2 block">
-                  {t('analysis.config.selectCustom')}
-                </label>
-                <div className="flex gap-2 flex-wrap">
-                  {getPromptTypes('analysis').filter(p => p.isCustom).map(({ key, name }) => (
-                    <button
-                      key={key}
-                      onClick={() => setSelectedCustomPrompt(key)}
-                      className={`px-3 py-2 rounded-lg text-sm transition-colors ${selectedCustomPrompt === key
-                        ? 'bg-cinema-accent text-cinema-black font-medium'
-                        : 'bg-cinema-gray-light text-cinema-text hover:bg-cinema-accent/20'
-                        }`}
-                    >
-                      {name}
-                    </button>
-                  ))}
+          
+          {/* Dropdown Analysis Selection */}
+          <div className="relative mb-4" ref={analysisDropdownRef}>
+            <button
+              onClick={() => setShowAnalysisDropdown(!showAnalysisDropdown)}
+              className="w-full bg-cinema-gray-light hover:bg-cinema-gray border-2 border-cinema-gray rounded-lg p-3 flex items-center justify-between transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-cinema-accent">📋</span>
+                <div className="text-left">
+                  <div className="text-sm text-cinema-text font-medium">
+                    {Object.keys(selectedAnalysisTypes).filter(key => selectedAnalysisTypes[key]).length} analiz seçili
+                  </div>
+                  <div className="text-xs text-cinema-text-dim">
+                    {Object.keys(selectedAnalysisTypes).filter(key => selectedAnalysisTypes[key]).length === 0 
+                      ? 'Analiz türü seçin' 
+                      : `${getPromptTypes('analysis').length} analiz mevcut`
+                    }
+                  </div>
                 </div>
               </div>
-              <div className="text-xs text-cinema-text-dim bg-cinema-black/30 p-2 rounded">
-                💡 <strong>Custom Analysis:</strong> Uses your predefined prompts for specialized analysis.
-                Results will appear in a dedicated Custom tab with formatted text output.
+              <svg 
+                className={`w-5 h-5 text-cinema-text-dim transition-transform ${showAnalysisDropdown ? 'rotate-180' : ''}`}
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {/* Dropdown Content */}
+            {showAnalysisDropdown && (
+              <div className="absolute top-full left-0 right-0 z-50 bg-cinema-dark border-2 border-cinema-gray rounded-lg shadow-2xl max-h-80 overflow-y-auto mt-1">
+                <div className="p-3">
+                  {/* Standard Analysis Types */}
+                  <div className="mb-4">
+                    <h4 className="text-xs font-semibold text-cinema-accent uppercase tracking-wide mb-2 px-2">
+                      📝 Standart Analizler
+                    </h4>
+                    <div className="space-y-1">
+                      {getPromptTypes('analysis').filter(({ key }) => !key.includes('llama')).map(({ key, name }) => (
+                        <label
+                          key={key}
+                          className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-all hover:bg-cinema-gray/50 ${
+                            selectedAnalysisTypes[key] ? 'bg-cinema-accent/10 border-l-4 border-cinema-accent' : ''
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedAnalysisTypes[key] || false}
+                            onChange={(e) => {
+                              setSelectedAnalysisTypes({
+                                ...selectedAnalysisTypes,
+                                [key]: e.target.checked
+                              });
+                            }}
+                            className="w-4 h-4 rounded border-cinema-gray text-cinema-accent focus:ring-cinema-accent focus:ring-offset-0"
+                          />
+                          <span className={`text-sm flex-1 ${selectedAnalysisTypes[key] ? 'text-cinema-accent font-medium' : 'text-cinema-text'}`}>
+                            {name}
+                          </span>
+                          {selectedAnalysisTypes[key] && (
+                            <span className="text-xs text-cinema-accent">✓</span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Llama Optimized Types */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-orange-400 uppercase tracking-wide mb-2 px-2">
+                      🦙 Llama Optimize Analizler
+                    </h4>
+                    <div className="space-y-1">
+                      {getPromptTypes('analysis').filter(({ key }) => key.includes('llama')).map(({ key, name }) => (
+                        <label
+                          key={key}
+                          className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-all hover:bg-cinema-gray/50 ${
+                            selectedAnalysisTypes[key] ? 'bg-orange-400/10 border-l-4 border-orange-400' : ''
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedAnalysisTypes[key] || false}
+                            onChange={(e) => {
+                              setSelectedAnalysisTypes({
+                                ...selectedAnalysisTypes,
+                                [key]: e.target.checked
+                              });
+                            }}
+                            className="w-4 h-4 rounded border-cinema-gray text-orange-400 focus:ring-orange-400 focus:ring-offset-0"
+                          />
+                          <span className={`text-sm flex-1 ${selectedAnalysisTypes[key] ? 'text-orange-400 font-medium' : 'text-cinema-text'}`}>
+                            {name}
+                          </span>
+                          {selectedAnalysisTypes[key] && (
+                            <span className="text-xs text-orange-400">✓</span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
+            )}
+          </div>
+          
+          <div className="flex items-center justify-between text-xs bg-cinema-black/30 p-3 rounded">
+            <div className="flex items-center gap-2 text-cinema-text-dim">
+              <span className="text-base">💡</span>
+              <span>
+                <strong>Çoklu Analiz:</strong> Seçili analizler sırayla çalıştırılacak ve sonuçlar ayrı görüntülenecek
+              </span>
             </div>
-          ) : (
-            <div className="text-sm text-cinema-text-dim">
-              📊 <strong>Standard Analysis:</strong> Comprehensive screenplay breakdown including characters, locations, scenes, and production requirements.
-            </div>
-          )}
-        </div>
-
-        {/* Progress Bar */}
-        {isAnalyzing && analysisProgress && (
-          <div className="mt-3">
-            <div className="flex items-center justify-between text-sm text-cinema-text-dim mb-1">
-              <span>{analysisProgress.message}</span>
-              {analysisProgress.currentChunk && analysisProgress.totalChunks && (
-                <span>
-                  Chunk {analysisProgress.currentChunk} of {analysisProgress.totalChunks}
-                </span>
-              )}
-              <span>{Math.round(analysisProgress.progress || 0)}%</span>
-            </div>
-            <div className="w-full bg-cinema-gray-light rounded-full h-2">
-              <div
-                className="bg-cinema-accent h-2 rounded-full transition-all duration-300"
-                style={{ width: `${analysisProgress.progress || 0}%` }}
-              />
+            <div className="text-cinema-accent font-bold">
+              ⚡ {Object.keys(selectedAnalysisTypes).filter(key => selectedAnalysisTypes[key]).length} analiz seçili
             </div>
           </div>
-        )}
+        </div>
       </div>
+
+      {/* Progress Bar - Always visible at top when analyzing */}
+      {isAnalyzing && analysisProgress && (
+        <div className="bg-cinema-dark border-b border-cinema-gray px-4 py-3">
+          <div className="flex items-center justify-between text-sm text-cinema-text-dim mb-2">
+            <span className="font-medium">🎬 {analysisProgress.message}</span>
+            {analysisProgress.currentChunk && analysisProgress.totalChunks && (
+              <span className="text-xs">
+                Chunk {analysisProgress.currentChunk} / {analysisProgress.totalChunks}
+              </span>
+            )}
+            <span className="font-bold text-cinema-accent">{Math.round(analysisProgress.progress || 0)}%</span>
+          </div>
+          <div className="w-full bg-cinema-gray-light rounded-full h-2.5">
+            <div
+              className="bg-gradient-to-r from-cinema-accent to-cinema-accent/70 h-2.5 rounded-full transition-all duration-300 shadow-lg"
+              style={{ width: `${analysisProgress.progress || 0}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
@@ -836,80 +852,209 @@ function LocationsTab({ locations }) {
 }
 
 function CharactersTab({ characters }) {
+  const { t } = useTranslation();
+  
   if (!characters || characters.length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
         <div className="text-4xl mb-4">👥</div>
-        <p>No characters detected in analysis</p>
+        <p>Henüz karakter analizi bulunmuyor</p>
+        <p className="text-sm mt-2">Analiz sonrasında karakterler burada görüntülenecektir.</p>
       </div>
     );
   }
 
+  // Character statistics
+  const getCharacterStats = () => {
+    const mainCharacters = characters.filter(char => 
+      char.importance === 'main' || char.role === 'main' || char.type === 'protagonist'
+    ).length;
+    
+    const supportingCharacters = characters.filter(char => 
+      char.importance === 'supporting' || char.role === 'supporting'
+    ).length;
+
+    const totalDialogue = characters.reduce((sum, char) => {
+      return sum + (char.dialogueLines || char.lines || 0);
+    }, 0);
+
+    const averageSceneCount = characters.reduce((sum, char) => {
+      return sum + (char.sceneCount || char.appearances || 0);
+    }, 0) / characters.length;
+
+    return {
+      total: characters.length,
+      main: mainCharacters,
+      supporting: supportingCharacters,
+      minor: characters.length - mainCharacters - supportingCharacters,
+      totalDialogue: totalDialogue,
+      averageScenes: Math.round(averageSceneCount)
+    };
+  };
+
+  const stats = getCharacterStats();
+
   return (
-    <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('characters.title')}</h3>
-        <p className="text-cinema-text-dim text-sm">
-          {t('characters.desc', { count: characters.length })}
-        </p>
+    <div className="space-y-6">
+      {/* Character Statistics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
+          <div className="text-2xl font-bold text-cinema-accent mb-1">{stats.total}</div>
+          <div className="text-sm text-cinema-text-dim">Toplam Karakter</div>
+        </div>
+        <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
+          <div className="text-2xl font-bold text-yellow-400 mb-1">{stats.main}</div>
+          <div className="text-sm text-cinema-text-dim">Ana Karakter</div>
+        </div>
+        <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
+          <div className="text-2xl font-bold text-blue-400 mb-1">{stats.supporting}</div>
+          <div className="text-sm text-cinema-text-dim">Yardımcı Karakter</div>
+        </div>
+        <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
+          <div className="text-2xl font-bold text-green-400 mb-1">{stats.averageScenes}</div>
+          <div className="text-sm text-cinema-text-dim">Ortalama Sahne</div>
+        </div>
+      </div>
+
+      {/* Character Analysis */}
+      <div className="bg-cinema-black/30 rounded-xl border border-cinema-gray p-6 mb-6">
+        <h3 className="text-lg font-semibold text-cinema-text mb-4 flex items-center gap-2">
+          📊 Karakter Dağılımı
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="text-center p-4 bg-cinema-gray/20 rounded-lg">
+            <div className="text-3xl mb-2">⭐</div>
+            <div className="text-xl font-bold text-yellow-400">{stats.main}</div>
+            <div className="text-sm text-cinema-text-dim">Ana Karakterler</div>
+            <div className="text-xs text-cinema-accent mt-1">
+              %{Math.round((stats.main / stats.total) * 100)}
+            </div>
+          </div>
+          <div className="text-center p-4 bg-cinema-gray/20 rounded-lg">
+            <div className="text-3xl mb-2">👤</div>
+            <div className="text-xl font-bold text-blue-400">{stats.supporting}</div>
+            <div className="text-sm text-cinema-text-dim">Yardımcı Karakterler</div>
+            <div className="text-xs text-cinema-accent mt-1">
+              %{Math.round((stats.supporting / stats.total) * 100)}
+            </div>
+          </div>
+          <div className="text-center p-4 bg-cinema-gray/20 rounded-lg">
+            <div className="text-3xl mb-2">🎭</div>
+            <div className="text-xl font-bold text-gray-400">{stats.minor}</div>
+            <div className="text-sm text-cinema-text-dim">Figüran/Küçük</div>
+            <div className="text-xs text-cinema-accent mt-1">
+              %{Math.round((stats.minor / stats.total) * 100)}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Characters Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {characters.map((character, index) => (
-          <div key={index} className="p-5 bg-cinema-gray rounded-lg border border-cinema-gray-light hover:border-cinema-accent/30 transition-colors">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-12 h-12 bg-cinema-accent/20 rounded-full flex items-center justify-center text-xl">
-                {character.importance === 'main' ? '⭐' : character.importance === 'supporting' ? '👤' : '🎭'}
-              </div>
-              <div className="flex-1">
-                <h4 className="text-cinema-text font-bold text-lg mb-1">{character.name || `Character ${index + 1}`}</h4>
-                <span className={`text-xs px-2 py-1 rounded ${character.importance === 'main'
-                  ? 'bg-cinema-accent text-cinema-black'
-                  : character.importance === 'supporting'
-                    ? 'bg-blue-500/20 text-blue-400'
-                    : 'bg-gray-500/20 text-gray-400'
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-cinema-text mb-4 flex items-center gap-2">
+          🎭 Karakter Listesi
+        </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {characters.map((character, index) => {
+            const isMain = character.importance === 'main' || character.role === 'main' || character.type === 'protagonist';
+            const isSupporting = character.importance === 'supporting' || character.role === 'supporting';
+            
+            return (
+              <div key={index} className="bg-cinema-black/30 rounded-xl border border-cinema-gray p-5 hover:border-cinema-accent/30 transition-colors">
+                <div className="flex items-start gap-4 mb-4">
+                  <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl ${
+                    isMain ? 'bg-yellow-500/20 text-yellow-400' :
+                    isSupporting ? 'bg-blue-500/20 text-blue-400' :
+                    'bg-gray-500/20 text-gray-400'
                   }`}>
-                  {character.importance || 'Character'}
-                </span>
-              </div>
-            </div>
-
-            {character.description && (
-              <p className="text-cinema-text-dim text-sm mb-4 leading-relaxed">{character.description}</p>
-            )}
-
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-cinema-text-dim text-sm">{t('characters.sceneAppearances')}</span>
-                <span className="text-cinema-accent font-bold text-lg">{character.sceneCount || '0'}</span>
-              </div>
-
-              {character.relationships && character.relationships.length > 0 && (
-                <div>
-                  <span className="text-cinema-text-dim text-xs uppercase tracking-wider">{t('characters.keyRelationships')}</span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {character.relationships.slice(0, 3).map((rel, i) => (
-                      <span key={i} className="text-xs px-1 py-0.5 bg-cinema-black rounded text-cinema-text">
-                        {rel}
-                      </span>
-                    ))}
-                    {character.relationships.length > 3 && (
-                      <span className="text-xs text-cinema-text-dim">+{character.relationships.length - 3} more</span>
-                    )}
+                    {isMain ? '⭐' : isSupporting ? '👤' : '🎭'}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-cinema-text font-bold text-xl mb-1">
+                      {character.name || `Karakter ${index + 1}`}
+                    </h4>
+                    <span className={`text-xs px-3 py-1 rounded-full font-medium ${
+                      isMain ? 'bg-yellow-500/20 text-yellow-400' :
+                      isSupporting ? 'bg-blue-500/20 text-blue-400' :
+                      'bg-gray-500/20 text-gray-400'
+                    }`}>
+                      {isMain ? 'Ana Karakter' : isSupporting ? 'Yardımcı Karakter' : 'Figüran'}
+                    </span>
                   </div>
                 </div>
-              )}
 
-              {character.notes && (
-                <div className="text-xs text-cinema-text-dim bg-cinema-black/30 p-2 rounded">
-                  <strong>{t('characters.notes')}</strong> {character.notes}
+                {(character.description || character.analysis) && (
+                  <div className="mb-4 p-3 bg-cinema-gray/10 rounded-lg">
+                    <p className="text-cinema-text-dim text-sm leading-relaxed">
+                      {(character.description || character.analysis || '').substring(0, 150)}
+                      {(character.description || character.analysis || '').length > 150 ? '...' : ''}
+                    </p>
+                  </div>
+                )}
+
+                {/* Character Metrics */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="text-center p-2 bg-cinema-gray/10 rounded-lg">
+                    <div className="text-lg font-bold text-cinema-accent">
+                      {character.sceneCount || character.appearances || 0}
+                    </div>
+                    <div className="text-xs text-cinema-text-dim">Sahne Sayısı</div>
+                  </div>
+                  <div className="text-center p-2 bg-cinema-gray/10 rounded-lg">
+                    <div className="text-lg font-bold text-cinema-accent">
+                      {character.dialogueLines || character.lines || 0}
+                    </div>
+                    <div className="text-xs text-cinema-text-dim">Diyalog Sayısı</div>
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
-        ))}
+
+                {/* Character Traits */}
+                {(character.traits || character.characteristics || character.personality) && (
+                  <div className="mb-4">
+                    <div className="text-sm text-cinema-accent font-medium mb-2">Özellikler:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {(character.traits || character.characteristics || character.personality || [])
+                        .slice(0, 4)
+                        .map((trait, i) => (
+                          <span key={i} className="text-xs px-2 py-1 bg-cinema-accent/20 text-cinema-accent rounded">
+                            {typeof trait === 'string' ? trait : trait.name || trait.value}
+                          </span>
+                        ))
+                      }
+                    </div>
+                  </div>
+                )}
+
+                {/* Relationships */}
+                {character.relationships && character.relationships.length > 0 && (
+                  <div>
+                    <div className="text-sm text-cinema-accent font-medium mb-2">İlişkiler:</div>
+                    <div className="flex flex-wrap gap-1">
+                      {character.relationships.slice(0, 3).map((rel, i) => (
+                        <span key={i} className="text-xs px-2 py-1 bg-cinema-gray/20 text-cinema-text rounded">
+                          {typeof rel === 'string' ? rel : rel.character || rel.name}
+                        </span>
+                      ))}
+                      {character.relationships.length > 3 && (
+                        <span className="text-xs text-cinema-text-dim">+{character.relationships.length - 3} more</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Character Arc */}
+                {character.arc && (
+                  <div className="mt-4 pt-3 border-t border-cinema-gray/30">
+                    <div className="text-sm text-cinema-accent font-medium mb-2">Karakter Gelişimi:</div>
+                    <p className="text-xs text-cinema-text-dim leading-relaxed">
+                      {character.arc.substring(0, 120)}...
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -1000,99 +1145,140 @@ function EquipmentTab({ equipment }) {
 }
 
 function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
-  // Get prompt store functions
+  const { t } = useTranslation();
   const getPromptTypes = usePromptStore(state => state.getPromptTypes);
   const getPrompt = usePromptStore(state => state.getPrompt);
+  const [expandedResults, setExpandedResults] = React.useState({});
 
   if (!customResults || Object.keys(customResults).length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
         <div className="text-4xl mb-4">🎯</div>
-        <p>{t('custom.noResults')}</p>
-        <p className="text-sm mt-2">{t('custom.runCustom')}</p>
+        <p>Henüz analiz sonucu yok</p>
+        <p className="text-sm mt-2">Çoklu analiz seçerek başlayın</p>
       </div>
     );
   }
 
-  const customPrompts = getPromptTypes('analysis').filter(p => p.isCustom);
   const availableResults = Object.keys(customResults);
 
   return (
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('custom.title')}</h3>
+        <h3 className="text-xl font-bold text-cinema-accent mb-2">
+          📊 Çoklu Analiz Sonuçları
+        </h3>
         <p className="text-cinema-text-dim text-sm">
-          {t('custom.desc')}
+          {availableResults.length} farklı analiz türü sonuçlandı
         </p>
       </div>
 
-      {/* Results Navigation */}
-      {availableResults.length > 1 && (
-        <div className="mb-6">
-          <div className="flex gap-2 flex-wrap">
-            {availableResults.map((promptKey) => {
-              const promptInfo = getPrompt('analysis', promptKey);
-              return (
-                <button
-                  key={promptKey}
-                  onClick={() => onSelectPrompt(promptKey)}
-                  className={`px-4 py-2 rounded-lg text-sm transition-colors ${activePrompt === promptKey
-                    ? 'bg-cinema-accent text-cinema-black font-medium'
-                    : 'bg-cinema-gray-light text-cinema-text hover:bg-cinema-accent/20'
-                    }`}
-                >
-                  {promptInfo?.name || promptKey}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Active Result Display */}
-      <div className="space-y-6">
+      {/* All Results Display - Grid Layout */}
+      <div className="space-y-4">
         {availableResults.map((promptKey) => {
-          if (activePrompt && activePrompt !== promptKey) return null;
-
-          const promptInfo = getPrompt('analysis', promptKey);
-          const result = customResults[promptKey];
+          const resultData = customResults[promptKey];
+          const promptName = resultData?.name || promptKey;
+          const resultText = resultData?.result || resultData;
+          const isExpanded = expandedResults[promptKey];
 
           return (
-            <div key={promptKey} className="bg-cinema-gray rounded-lg border border-cinema-gray-light p-6">
-              <div className="flex items-start gap-3 mb-4">
-                <div className="text-2xl">🎯</div>
-                <div>
-                  <h4 className="text-lg font-bold text-cinema-text mb-1">
-                    {promptInfo?.name || promptKey}
-                  </h4>
-                  <p className="text-cinema-text-dim text-sm">
-                    {promptInfo?.description || 'Custom analysis result'}
-                  </p>
+            <div key={promptKey} className="bg-cinema-gray rounded-lg border border-cinema-gray-light overflow-hidden">
+              {/* Header - Always visible */}
+              <div 
+                className="flex items-center justify-between p-4 cursor-pointer hover:bg-cinema-gray-light transition-colors"
+                onClick={() => setExpandedResults({
+                  ...expandedResults,
+                  [promptKey]: !isExpanded
+                })}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="text-2xl">
+                    {promptKey.includes('character') && '👥'}
+                    {promptKey.includes('plot') && '📖'}
+                    {promptKey.includes('theme') && '🎭'}
+                    {promptKey.includes('dialogue') && '💬'}
+                    {promptKey.includes('structure') && '🏗️'}
+                    {promptKey.includes('production') && '🎬'}
+                    {promptKey.includes('virtual') && '🖥️'}
+                    {!promptKey.includes('character') && !promptKey.includes('plot') && !promptKey.includes('theme') && 
+                     !promptKey.includes('dialogue') && !promptKey.includes('structure') && 
+                     !promptKey.includes('production') && !promptKey.includes('virtual') && '🎯'}
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-bold text-cinema-text">
+                      {promptName}
+                    </h4>
+                    <p className="text-cinema-text-dim text-xs">
+                      {typeof resultText === 'string' ? `${resultText.substring(0, 100)}...` : 'Analiz tamamlandı'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(typeof resultText === 'string' ? resultText : JSON.stringify(resultText, null, 2));
+                    }}
+                    className="px-3 py-1 bg-cinema-accent/20 hover:bg-cinema-accent/30 text-cinema-accent text-xs rounded transition-colors"
+                  >
+                    📋 Kopyala
+                  </button>
+                  <span className="text-cinema-text-dim text-sm">
+                    {isExpanded ? '▼' : '▶'}
+                  </span>
                 </div>
               </div>
 
-              <div className="bg-cinema-black rounded-lg p-4 border border-cinema-gray-light">
-                <div className="text-cinema-text whitespace-pre-wrap text-sm leading-relaxed font-mono">
-                  {result}
+              {/* Content - Expandable */}
+              {isExpanded && (
+                <div className="p-4 bg-cinema-black/50 border-t border-cinema-gray-light">
+                  <div className="bg-cinema-black rounded-lg p-4">
+                    <div className="text-cinema-text whitespace-pre-wrap text-sm leading-relaxed">
+                      {typeof resultText === 'string' ? resultText : JSON.stringify(resultText, null, 2)}
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              {/* Copy Button */}
-              <div className="mt-4 flex justify-end">
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(result);
-                    // You could add a toast notification here
-                  }}
-                  className="px-3 py-1 bg-cinema-gray-light hover:bg-cinema-accent/20 text-cinema-text text-xs rounded transition-colors flex items-center gap-1"
-                >
-                  📋 {t('custom.copyText')}
-                </button>
-              </div>
+              )}
             </div>
           );
         })}
+      </div>
+
+      {/* Bulk Actions */}
+      <div className="mt-6 flex justify-end gap-2">
+        <button
+          onClick={() => {
+            const allExpanded = {};
+            availableResults.forEach(key => {
+              allExpanded[key] = true;
+            });
+            setExpandedResults(allExpanded);
+          }}
+          className="px-3 py-2 bg-cinema-gray-light hover:bg-cinema-gray text-cinema-text text-xs rounded transition-colors"
+        >
+          ▼ Tümünü Genişlet
+        </button>
+        <button
+          onClick={() => setExpandedResults({})}
+          className="px-3 py-2 bg-cinema-gray-light hover:bg-cinema-gray text-cinema-text text-xs rounded transition-colors"
+        >
+          ▶ Tümünü Daralt
+        </button>
+        <button
+          onClick={() => {
+            const allText = availableResults.map(key => {
+              const resultData = customResults[key];
+              const promptName = resultData?.name || key;
+              const resultText = resultData?.result || resultData;
+              return `=== ${promptName} ===\n\n${typeof resultText === 'string' ? resultText : JSON.stringify(resultText, null, 2)}\n\n`;
+            }).join('\n');
+            navigator.clipboard.writeText(allText);
+          }}
+          className="px-3 py-2 bg-cinema-accent hover:bg-cinema-accent/80 text-cinema-black text-xs rounded transition-colors font-medium"
+        >
+          📋 Tüm Sonuçları Kopyala
+        </button>
       </div>
     </div>
   );
@@ -1100,111 +1286,336 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
 
 function OverviewTab({ analysisData }) {
   const { t } = useTranslation();
-  if (!analysisData) {
+  
+  if (!analysisData || Object.keys(analysisData).length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
         <div className="text-4xl mb-4">📊</div>
-        <p>No analysis data available</p>
+        <p>Henüz analiz verisi bulunmuyor</p>
+        <p className="text-sm mt-2">Analiz çalıştırdıktan sonra detaylı raporu burada görebilirsiniz.</p>
       </div>
     );
   }
 
+  // Extract key metrics from analysis data
+  const getMetrics = () => {
+    const metrics = {
+      scenes: 0,
+      characters: 0,
+      locations: 0,
+      shootingDays: 'Belirlenmedi',
+      budget: 'N/A',
+      genre: 'Belirlenmedi',
+      duration: 'Belirlenmedi',
+      complexity: 'Orta',
+      marketability: 'N/A',
+      risk: 'Orta'
+    };
+
+    // Count scenes
+    if (analysisData.scenes) metrics.scenes = analysisData.scenes.length;
+    if (analysisData.analysis?.scenes) metrics.scenes = analysisData.analysis.scenes.length;
+
+    // Count characters
+    if (analysisData.characters) metrics.characters = analysisData.characters.length;
+    if (analysisData.analysis?.characters) metrics.characters = analysisData.analysis.characters.length;
+
+    // Count locations
+    if (analysisData.locations) metrics.locations = analysisData.locations.length;
+    if (analysisData.analysis?.locations) metrics.locations = analysisData.analysis.locations.length;
+
+    // Extract other metrics from analysis
+    if (analysisData.analysis) {
+      if (analysisData.analysis.genre) metrics.genre = analysisData.analysis.genre;
+      if (analysisData.analysis.duration) metrics.duration = analysisData.analysis.duration;
+      if (analysisData.analysis.shootingDays) metrics.shootingDays = analysisData.analysis.shootingDays;
+      if (analysisData.analysis.budget) metrics.budget = analysisData.analysis.budget;
+      if (analysisData.analysis.complexity) metrics.complexity = analysisData.analysis.complexity;
+      if (analysisData.analysis.marketability) metrics.marketability = analysisData.analysis.marketability;
+      if (analysisData.analysis.risk) metrics.risk = analysisData.analysis.risk;
+    }
+
+    // Extract from production analysis
+    if (analysisData.productionAnalysis) {
+      if (analysisData.productionAnalysis.estimatedShootingDays) {
+        metrics.shootingDays = analysisData.productionAnalysis.estimatedShootingDays;
+      }
+      if (analysisData.productionAnalysis.budgetEstimate) {
+        metrics.budget = analysisData.productionAnalysis.budgetEstimate;
+      }
+    }
+
+    // Extract from evaluation
+    if (analysisData.evaluation) {
+      if (analysisData.evaluation.marketability) metrics.marketability = analysisData.evaluation.marketability;
+      if (analysisData.evaluation.complexity) metrics.complexity = analysisData.evaluation.complexity;
+      if (analysisData.evaluation.risk) metrics.risk = analysisData.evaluation.risk;
+    }
+
+    return metrics;
+  };
+
+  const metrics = getMetrics();
+
+  const getProductionCapacity = () => {
+    let equipmentCount = 0;
+    let vfxCount = 0;
+    let sfxCount = 0;
+    let virtualProductionReady = false;
+
+    if (analysisData.equipment) equipmentCount = analysisData.equipment.length;
+    if (analysisData.vfxRequirements) vfxCount = analysisData.vfxRequirements.length;
+    if (analysisData.sfxRequirements) sfxCount = analysisData.sfxRequirements.length;
+    if (analysisData.virtualProductionSuitability?.isRecommended) virtualProductionReady = true;
+
+    return { equipmentCount, vfxCount, sfxCount, virtualProductionReady };
+  };
+
+  const productionData = getProductionCapacity();
+
+  const getAnalysisScore = () => {
+    if (!analysisData.evaluation) return { score: 0, label: 'Belirlenmedi' };
+    
+    const evaluation = analysisData.evaluation;
+    let score = 0;
+    let count = 0;
+
+    if (evaluation.marketability) {
+      if (evaluation.marketability.includes('Yüksek') || evaluation.marketability.includes('High')) score += 90;
+      else if (evaluation.marketability.includes('Orta') || evaluation.marketability.includes('Medium')) score += 70;
+      else score += 50;
+      count++;
+    }
+
+    if (evaluation.feasibility) {
+      if (evaluation.feasibility.includes('Yüksek') || evaluation.feasibility.includes('High')) score += 90;
+      else if (evaluation.feasibility.includes('Orta') || evaluation.feasibility.includes('Medium')) score += 70;
+      else score += 50;
+      count++;
+    }
+
+    if (evaluation.quality) {
+      if (evaluation.quality.includes('Yüksek') || evaluation.quality.includes('High')) score += 90;
+      else if (evaluation.quality.includes('Orta') || evaluation.quality.includes('Medium')) score += 70;
+      else score += 50;
+      count++;
+    }
+
+    const avgScore = count > 0 ? score / count : 0;
+    
+    let label = 'Belirlenmedi';
+    if (avgScore >= 80) label = 'Mükemmel';
+    else if (avgScore >= 70) label = 'İyi';
+    else if (avgScore >= 60) label = 'Orta';
+    else if (avgScore >= 40) label = 'Düşük';
+    else if (avgScore > 0) label = 'Çok Düşük';
+
+    return { score: Math.round(avgScore), label };
+  };
+
+  const analysisScore = getAnalysisScore();
+
+  const formatSpecialAnalysisTitle = (key) => {
+    const titleMap = {
+      'marketAnalysis': 'Pazar Analizi',
+      'competitorAnalysis': 'Rakip Analizi', 
+      'audienceAnalysis': 'Hedef Kitle',
+      'productionAnalysis': 'Prodüksiyon',
+      'budgetAnalysis': 'Bütçe Analizi',
+      'riskAnalysis': 'Risk Değerlendirmesi',
+      'dialogueAnalysis': 'Diyalog İncelemesi',
+      'characterDevelopment': 'Karakter Gelişimi',
+      'plotStructure': 'Olay Örgüsü',
+      'themeAnalysis': 'Tema Analizi'
+    };
+    
+    return titleMap[key] || key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+  };
+
   return (
-    <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">{t('overview.title')}</h3>
-        <p className="text-cinema-text-dim text-sm">
-          {t('overview.desc')}
-        </p>
-      </div>
-
-      {/* Key Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-cinema-gray rounded-lg p-4 text-center">
-          <div className="text-2xl mb-2">🎬</div>
-          <div className="text-2xl font-bold text-cinema-accent">{analysisData.scenes?.length || 0}</div>
-          <div className="text-sm text-cinema-text-dim">{t('overview.scenes')}</div>
+    <div className="space-y-6">
+      {/* Header Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
+          <div className="text-3xl font-bold text-cinema-accent mb-2">{metrics.scenes}</div>
+          <div className="text-sm text-cinema-text-dim">Sahneler</div>
         </div>
-        <div className="bg-cinema-gray rounded-lg p-4 text-center">
-          <div className="text-2xl mb-2">📍</div>
-          <div className="text-2xl font-bold text-cinema-accent">{analysisData.locations?.length || 0}</div>
-          <div className="text-sm text-cinema-text-dim">{t('overview.locations')}</div>
+        <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
+          <div className="text-3xl font-bold text-purple-400 mb-2">{metrics.characters}</div>
+          <div className="text-sm text-cinema-text-dim">Karakterler</div>
         </div>
-        <div className="bg-cinema-gray rounded-lg p-4 text-center">
-          <div className="text-2xl mb-2">👥</div>
-          <div className="text-2xl font-bold text-cinema-accent">{analysisData.characters?.length || 0}</div>
-          <div className="text-sm text-cinema-text-dim">{t('overview.characters')}</div>
+        <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
+          <div className="text-3xl font-bold text-blue-400 mb-2">{metrics.locations}</div>
+          <div className="text-sm text-cinema-text-dim">Mekanlar</div>
         </div>
-        <div className="bg-cinema-gray rounded-lg p-4 text-center">
-          <div className="text-2xl mb-2">📅</div>
-          <div className="text-2xl font-bold text-cinema-accent">
-            {analysisData.summary?.estimatedShootingDays || t('common.tbd')}
-          </div>
-          <div className="text-sm text-cinema-text-dim">{t('overview.shootDays')}</div>
+        <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
+          <div className="text-3xl font-bold text-green-400 mb-2">{analysisScore.score || 0}</div>
+          <div className="text-sm text-cinema-text-dim">Değerlendirme Puanı</div>
+          <div className="text-xs text-cinema-accent mt-1">{analysisScore.label}</div>
         </div>
       </div>
 
-      {/* Production Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-cinema-gray rounded-lg p-5">
-          <h4 className="text-lg font-bold text-cinema-text mb-3 flex items-center gap-2">
-            <span>🎯</span> {t('overview.productionScope')}
-          </h4>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-cinema-text-dim">{t('overview.equipmentItems')}</span>
-              <span className="text-cinema-text font-medium">{analysisData.equipment?.length || 0}</span>
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Project Overview */}
+        <div className="bg-cinema-black/30 rounded-xl border border-cinema-gray p-6">
+          <h3 className="text-lg font-semibold text-cinema-text mb-4 flex items-center gap-2">
+            🎬 Proje Genel Bakış
+          </h3>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center py-2 border-b border-cinema-gray/30">
+              <span className="text-cinema-text-dim">Tür:</span>
+              <span className="text-cinema-text font-medium">{metrics.genre}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-cinema-text-dim">{t('overview.vfxSequences')}</span>
-              <span className="text-cinema-text font-medium">{analysisData.vfxRequirements?.length || 0}</span>
+            <div className="flex justify-between items-center py-2 border-b border-cinema-gray/30">
+              <span className="text-cinema-text-dim">Süre:</span>
+              <span className="text-cinema-text font-medium">{metrics.duration}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-cinema-text-dim">{t('overview.sfxRequirements')}</span>
-              <span className="text-cinema-text font-medium">{analysisData.sfxRequirements?.length || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-cinema-text-dim">{t('overview.virtualProduction')}</span>
-              <span className="text-cinema-accent font-medium">
-                {analysisData.virtualProductionSuitability?.overall || t('virtualProduction.notAssessed')}
+            <div className="flex justify-between items-center py-2 border-b border-cinema-gray/30">
+              <span className="text-cinema-text-dim">Karmaşıklık:</span>
+              <span className={`font-medium px-2 py-1 rounded text-xs ${
+                metrics.complexity === 'Yüksek' || metrics.complexity === 'High' ? 'bg-red-500/20 text-red-400' :
+                metrics.complexity === 'Orta' || metrics.complexity === 'Medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                'bg-green-500/20 text-green-400'
+              }`}>
+                {metrics.complexity}
               </span>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <span className="text-cinema-text-dim">Pazarlanabilirlik:</span>
+              <span className="text-cinema-text font-medium">{metrics.marketability}</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-cinema-gray rounded-lg p-5">
-          <h4 className="text-lg font-bold text-cinema-text mb-3 flex items-center gap-2">
-            <span>📈</span> {t('overview.analysisSummary')}
-          </h4>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-cinema-text-dim">{t('overview.genre')}</span>
-              <span className="text-cinema-text font-medium">
-                {analysisData.enhancedMetrics?.marketAnalysis?.genre || analysisData.evaluation?.genre || t('common.tbd')}
-              </span>
+        {/* Production Overview */}
+        <div className="bg-cinema-black/30 rounded-xl border border-cinema-gray p-6">
+          <h3 className="text-lg font-semibold text-cinema-text mb-4 flex items-center gap-2">
+            🎯 Prodüksiyon Kapsamı
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 bg-cinema-gray/20 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🛠️</span>
+                <span className="text-cinema-text">Ekipman Öğeleri:</span>
+              </div>
+              <span className="text-cinema-accent font-bold">{productionData.equipmentCount}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-cinema-text-dim">{t('overview.emotionScore')}</span>
-              <span className="text-cinema-accent font-medium">
-                {analysisData.evaluation?.emotionScore || t('common.notScored')}/10
-              </span>
+            <div className="flex items-center justify-between p-3 bg-cinema-gray/20 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✨</span>
+                <span className="text-cinema-text">VFX Sekansları:</span>
+              </div>
+              <span className="text-purple-400 font-bold">{productionData.vfxCount}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-cinema-text-dim">{t('analysis.tabs.competitive.score')}</span>
-              <span className="text-cinema-text font-medium">
-                {analysisData.competitiveAnalysis?.competitiveScore || 'N/A'}/100
-              </span>
+            <div className="flex items-center justify-between p-3 bg-cinema-gray/20 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🔊</span>
+                <span className="text-cinema-text">SFX İhtiyaçları:</span>
+              </div>
+              <span className="text-blue-400 font-bold">{productionData.sfxCount}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-cinema-text-dim">{t('analysis.tabs.geographic.globalPotential')}:</span>
-              <span className="text-cinema-text font-medium">
-                {analysisData.enhancedMetrics?.marketAnalysis?.marketPotential?.toUpperCase() || t('common.tbd')}
+            <div className="flex items-center justify-between p-3 bg-cinema-gray/20 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🎨</span>
+                <span className="text-cinema-text">Sanal Prodüksiyon:</span>
+              </div>
+              <span className={`font-bold ${productionData.virtualProductionReady ? 'text-green-400' : 'text-red-400'}`}>
+                {productionData.virtualProductionReady ? 'Uygun' : 'Değerlendirilmedi'}
               </span>
             </div>
           </div>
         </div>
+
+        {/* Analysis Summary */}
+        <div className="bg-cinema-black/30 rounded-xl border border-cinema-gray p-6">
+          <h3 className="text-lg font-semibold text-cinema-text mb-4 flex items-center gap-2">
+            📊 Analiz Özeti
+          </h3>
+          <div className="space-y-4">
+            {analysisData.analysis?.summary && (
+              <div className="text-cinema-text-dim leading-relaxed">
+                {typeof analysisData.analysis.summary === 'string' 
+                  ? analysisData.analysis.summary.substring(0, 200) + (analysisData.analysis.summary.length > 200 ? '...' : '')
+                  : 'Analiz özeti mevcut değil'
+                }
+              </div>
+            )}
+            {analysisData.analysis?.themes && (
+              <div>
+                <div className="text-sm text-cinema-accent font-medium mb-2">Ana Temalar:</div>
+                <div className="flex flex-wrap gap-2">
+                  {analysisData.analysis.themes.slice(0, 3).map((theme, index) => (
+                    <span key={index} className="bg-cinema-accent/20 text-cinema-accent px-2 py-1 rounded text-xs">
+                      {typeof theme === 'string' ? theme : theme.name || 'Tema'}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Budget & Timeline */}
+        <div className="bg-cinema-black/30 rounded-xl border border-cinema-gray p-6">
+          <h3 className="text-lg font-semibold text-cinema-text mb-4 flex items-center gap-2">
+            💰 Bütçe & Zaman
+          </h3>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center p-3 bg-cinema-gray/20 rounded-lg">
+              <span className="text-cinema-text">Çekim Günleri:</span>
+              <span className="text-cinema-accent font-bold text-lg">{metrics.shootingDays}</span>
+            </div>
+            <div className="flex justify-between items-center p-3 bg-cinema-gray/20 rounded-lg">
+              <span className="text-cinema-text">Bütçe Tahmini:</span>
+              <span className="text-green-400 font-bold text-lg">{metrics.budget}</span>
+            </div>
+            {analysisData.evaluation?.risk && (
+              <div className="p-3 bg-cinema-gray/20 rounded-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-cinema-text">Risk Seviyesi:</span>
+                  <span className={`font-bold px-2 py-1 rounded text-xs ${
+                    metrics.risk === 'Yüksek' || metrics.risk === 'High' ? 'bg-red-500/20 text-red-400' :
+                    metrics.risk === 'Orta' || metrics.risk === 'Medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                    'bg-green-500/20 text-green-400'
+                  }`}>
+                    {metrics.risk}
+                  </span>
+                </div>
+                <div className="text-xs text-cinema-text-dim">
+                  {analysisData.evaluation.risk.substring(0, 100)}...
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Special Analysis Results */}
+      {analysisData.specialAnalysis && Object.keys(analysisData.specialAnalysis).length > 0 && (
+        <div className="bg-cinema-black/30 rounded-xl border border-cinema-gray p-6">
+          <h3 className="text-lg font-semibold text-cinema-text mb-4 flex items-center gap-2">
+            ⚡ Özel Analizler
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Object.entries(analysisData.specialAnalysis).map(([key, value]) => (
+              <div key={key} className="bg-cinema-gray/10 rounded-lg p-4">
+                <div className="text-sm font-medium text-cinema-accent mb-2">
+                  {formatSpecialAnalysisTitle(key)}
+                </div>
+                <div className="text-xs text-cinema-text-dim">
+                  {typeof value === 'string' 
+                    ? value.substring(0, 80) + '...'
+                    : typeof value === 'object' && value !== null
+                    ? Object.keys(value).length + ' öğe'
+                    : 'Analiz tamamlandı'
+                  }
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1715,6 +2126,7 @@ function AudienceTab({ audienceAnalysis }) {
           </div>
         </div>
       </div>
+      
     </div>
   );
 }

@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { useAIStore } from '../store/aiStore';
 
 export default function PromptsTab({
-  getPromptTypes,
-  getPrompt,
-  getAllPrompts,
-  saveCustomPrompt,
-  deleteCustomPrompt,
-  setActivePrompt,
-  activePrompts,
-  defaultPrompts
+  getPromptTypes = () => [],
+  getPrompt = () => null,
+  getAllPrompts = () => ({}),
+  saveCustomPrompt = () => {},
+  deleteCustomPrompt = () => {},
+  setActivePrompt = () => {},
+  activePrompts = {},
+  defaultPrompts = {}
 }) {
   const { provider } = useAIStore(); // Provider bilgisini al
   const [selectedCategory, setSelectedCategory] = useState('analysis');
@@ -23,9 +23,8 @@ export default function PromptsTab({
   });
 
   const categories = {
-    analysis: { name: 'Senaryo Analizi', icon: '📝' },
-    grammar: { name: 'Grammar Düzeltme', icon: '✏️' },
-    speed_reading: { name: 'Hızlı Okuma', icon: '⚡' }
+    analysis: { name: 'Senaryo Analizi', icon: '🎬', desc: 'Karakter, hikaye, LED Volume analizi' },
+    speed_reading: { name: 'Hızlı Okuma', icon: '⚡', desc: 'Özet ve anahtar kelimeler' }
   };
 
   // Provider'a göre prompt'ları sırala - Llama optimize olanları önce göster
@@ -92,15 +91,18 @@ export default function PromptsTab({
     <div className="space-y-6">
       {/* Header Info */}
       <div className="bg-gradient-to-r from-cinema-accent/10 to-cinema-accent/5 p-4 rounded-lg border border-cinema-accent/20">
-        <h3 className="text-lg font-semibold text-cinema-accent mb-2">Özel AI Komutları</h3>
+        <h3 className="text-lg font-semibold text-cinema-accent mb-2">🎯 AI Analiz Ayarları</h3>
         <p className="text-sm text-cinema-text-dim">
-          AI analiz ve düzeltme işlemleri için kendi kurallarınızı ve komutlarınızı oluşturun. 
-          Varsayılan şablonları düzenleyebilir veya yeni özel komutlar ekleyebilirsiniz.
+          Yapay zeka analiz komutlarını düzenleyin, yeni analiz türleri ekleyin veya mevcut analizleri özelleştirin. 
+          Markdown formatında veya sade metinle AI'a talimatlar verebilirsiniz.
         </p>
+        <div className="mt-2 text-xs text-cinema-text-dim bg-cinema-black/30 p-2 rounded">
+          💡 <strong>İpucu:</strong> LED Virtual Production, karakter analizi, hikaye yapısı gibi tüm analiz türleri burada yönetilir.
+        </div>
       </div>
 
       {/* Categories */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         {Object.entries(categories).map(([key, cat]) => (
           <button
             key={key}
@@ -110,14 +112,15 @@ export default function PromptsTab({
               setEditingPrompt(null);
               setIsCreating(false);
             }}
-            className={`p-4 rounded-lg border-2 transition-all text-left ${
+            className={`p-5 rounded-lg border-2 transition-all text-left ${
               selectedCategory === key
                 ? 'border-cinema-accent bg-cinema-accent/10'
                 : 'border-cinema-gray hover:border-cinema-gray-light bg-cinema-gray/20'
             }`}
           >
-            <div className="text-2xl mb-2">{cat.icon}</div>
-            <div className="text-sm font-medium text-cinema-text">{cat.name}</div>
+            <div className="text-3xl mb-2">{cat.icon}</div>
+            <div className="text-base font-semibold text-cinema-text mb-1">{cat.name}</div>
+            <div className="text-xs text-cinema-text-dim">{cat.desc}</div>
           </button>
         ))}
       </div>
@@ -240,25 +243,31 @@ export default function PromptsTab({
                 <label className="text-cinema-text font-medium block mb-2">
                   System Prompt (AI'nin rolü ve kuralları)
                 </label>
+                <div className="text-xs text-cinema-text-dim mb-1">
+                  💡 Markdown formatında yazabilirsiniz: **kalın**, *italik*, • madde işaretleri
+                </div>
                 <textarea
                   value={newPromptData.system}
                   onChange={(e) => setNewPromptData({ ...newPromptData, system: e.target.value })}
-                  rows={6}
-                  placeholder="AI'nin nasıl davranacağını ve hangi kurallara uyacağını belirtin..."
-                  className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors resize-none"
+                  rows={8}
+                  placeholder="Örnek:&#10;Sen bir senaryo analiz uzmanısın.&#10;&#10;Görevin:&#10;• Karakterleri derinlemesine analiz et&#10;• Motivasyonları belirle&#10;• Gelişim eğrilerini çıkar"
+                  className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors resize-none font-mono text-sm"
                 />
               </div>
 
               <div>
                 <label className="text-cinema-text font-medium block mb-2">
-                  User Prompt (Kullanıcı talimatı)
+                  User Prompt (Analiz talimatı)
                 </label>
+                <div className="text-xs text-cinema-text-dim mb-1">
+                  💡 Madde işaretleri ve numaralandırma kullanarak net talimatlar verin
+                </div>
                 <textarea
                   value={newPromptData.user}
                   onChange={(e) => setNewPromptData({ ...newPromptData, user: e.target.value })}
-                  rows={6}
-                  placeholder="AI'nin kullanıcı metnini nasıl işleyeceğini belirtin..."
-                  className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors resize-none"
+                  rows={8}
+                  placeholder="Örnek:&#10;Bu senaryoyu LED Volume çekimi için analiz et:&#10;&#10;1. Hangi sahneler LED duvar ile çekilebilir?&#10;2. Dış mekan sahneleri uygun mu?&#10;3. Gerekli 3D ortamlar neler?"
+                  className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors resize-none font-mono text-sm"
                 />
               </div>
 
@@ -304,25 +313,31 @@ export default function PromptsTab({
 
               <div>
                 <label className="text-cinema-text font-medium block mb-2">
-                  System Prompt
+                  System Prompt (AI Rolü)
                 </label>
+                <div className="text-xs text-cinema-text-dim mb-1">
+                  📝 Markdown formatında düzenlenebilir: **kalın**, *italik*, • liste
+                </div>
                 <textarea
                   value={editingPrompt.system}
                   onChange={(e) => setEditingPrompt({ ...editingPrompt, system: e.target.value })}
-                  rows={6}
-                  className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors resize-none"
+                  rows={8}
+                  className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors resize-none font-mono text-sm"
                 />
               </div>
 
               <div>
                 <label className="text-cinema-text font-medium block mb-2">
-                  User Prompt
+                  User Prompt (Analiz Talimatı)
                 </label>
+                <div className="text-xs text-cinema-text-dim mb-1">
+                  📝 Net ve yapılandırılmış talimatlar verin
+                </div>
                 <textarea
                   value={editingPrompt.user}
                   onChange={(e) => setEditingPrompt({ ...editingPrompt, user: e.target.value })}
-                  rows={6}
-                  className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors resize-none"
+                  rows={8}
+                  className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors resize-none font-mono text-sm"
                 />
               </div>
 
@@ -343,22 +358,29 @@ export default function PromptsTab({
             </div>
           ) : selectedPrompt ? (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-lg font-semibold text-cinema-text">{selectedPrompt.name}</h4>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h4 className="text-lg font-semibold text-cinema-text">{selectedPrompt.name}</h4>
+                  {isDefault && (
+                    <p className="text-xs text-cinema-text-dim mt-1">
+                      📦 Varsayılan şablon - Düzenlemek için klonlanır
+                    </p>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   {activePrompts[selectedCategory] !== selectedType && (
                     <button
                       onClick={() => handleSetActive(selectedCategory, selectedType)}
                       className="px-3 py-1 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
                     >
-                      Aktif Yap
+                      ⭐ Aktif Yap
                     </button>
                   )}
                   <button
                     onClick={() => handleEditPrompt(selectedCategory, selectedType)}
                     className="px-3 py-1 bg-cinema-accent text-black rounded-lg text-sm hover:bg-cinema-accent-light transition-colors"
                   >
-                    Düzenle
+                    ✏️ Düzenle
                   </button>
                 </div>
               </div>
@@ -367,16 +389,16 @@ export default function PromptsTab({
                 <label className="text-cinema-text font-medium block mb-2">
                   System Prompt (AI Rolü)
                 </label>
-                <div className="p-3 bg-cinema-gray/20 border border-cinema-gray-light rounded-lg text-sm text-cinema-text-dim">
+                <div className="p-3 bg-cinema-gray/20 border border-cinema-gray-light rounded-lg text-sm text-cinema-text-dim whitespace-pre-wrap font-mono">
                   {selectedPrompt.system}
                 </div>
               </div>
 
               <div>
                 <label className="text-cinema-text font-medium block mb-2">
-                  User Prompt (Talimat)
+                  User Prompt (Analiz Talimatı)
                 </label>
-                <div className="p-3 bg-cinema-gray/20 border border-cinema-gray-light rounded-lg text-sm text-cinema-text-dim">
+                <div className="p-3 bg-cinema-gray/20 border border-cinema-gray-light rounded-lg text-sm text-cinema-text-dim whitespace-pre-wrap font-mono">
                   {selectedPrompt.user}
                 </div>
               </div>

@@ -63,6 +63,42 @@ export const useAIStore = create(
       
       setMaxTokens: (maxTokens) => set({ maxTokens }),
       
+      // Individual setters for ease of use
+      setOpenAIKey: (apiKey) => set({ openaiApiKey: apiKey }),
+      setOpenAIModel: (model) => set({ openaiModel: model }),
+      setGeminiKey: (apiKey) => set({ geminiApiKey: apiKey }),
+      setGeminiModel: (model) => set({ geminiModel: model }),
+      setCustomEndpoint: (endpoint) => set({ localEndpoint: endpoint }),
+      setCustomModel: (model) => set({ localModel: model }),
+      setCustomTemperature: (temperature) => set({ localTemperature: temperature }),
+      
+      // Get config object for ProvidersTab
+      getConfig: () => {
+        const state = get();
+        return {
+          openai: {
+            apiKey: state.openaiApiKey,
+            model: state.openaiModel,
+          },
+          gemini: {
+            apiKey: state.geminiApiKey,
+            model: state.geminiModel,
+          },
+          local: {
+            endpoint: state.localEndpoint,
+            model: state.localModel,
+            temperature: state.localTemperature,
+          },
+          mlx: {
+            endpoint: state.mlxEndpoint,
+            model: state.mlxModel,
+            temperature: state.mlxTemperature,
+          },
+          temperature: state.temperature,
+          maxTokens: state.maxTokens,
+        };
+      },
+      
       setConnectionStatus: (isConnected, provider) => set({
         isConnected,
         lastTestedProvider: provider,

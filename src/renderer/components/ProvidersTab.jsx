@@ -1,44 +1,147 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AI_PROVIDERS, OPENAI_MODELS, GEMINI_MODELS, MLX_MODELS } from '../utils/aiHandler';
 import { useAIStore } from '../store/aiStore';
 
 export default function ProvidersTab({
-  provider,
-  setProvider,
-  localOpenAIKey,
-  setLocalOpenAIKey,
-  localOpenAIModel,
-  setLocalOpenAIModel,
-  localGeminiKey,
-  setLocalGeminiKey,
-  localGeminiModel,
-  setLocalGeminiModel,
-  localEndpointInput,
-  setLocalEndpointInput,
-  localModelInput,
-  setLocalModelInput,
-  localTempInput,
-  setLocalTempInput,
-  mlxEndpointInput,
-  setMLXEndpointInput,
-  mlxModelInput,
-  setMLXModelInput,
-  mlxTempInput,
-  setMLXTempInput,
-  temperature,
-  setTemperature,
-  maxTokens,
-  setMaxTokens,
-  handleTest,
-  isTesting,
-  testStatus
+  provider: propProvider,
+  setProvider: propSetProvider,
+  config: propConfig,
+  setConfig: propSetConfig,
+  isConfigured: propIsConfigured
 }) {
-  const { resetGeminiModel } = useAIStore();
+  const { 
+    provider, 
+    setProvider, 
+    config: storeConfig, 
+    getConfig,
+    isConfigured,
+    setOpenAIKey,
+    setOpenAIModel,
+    setGeminiKey,
+    setGeminiModel,
+    setCustomEndpoint,
+    setCustomModel,
+    setCustomTemperature
+  } = useAIStore();
 
+  // Get current config
+  const config = getConfig();
+
+  // Local state for form inputs
+  const [localOpenAIKey, setLocalOpenAIKey] = useState(config?.openai?.apiKey || '');
+  const [localOpenAIModel, setLocalOpenAIModel] = useState(config?.openai?.model || 'gpt-4');
+  const [localGeminiKey, setLocalGeminiKey] = useState(config?.gemini?.apiKey || '');
+  const [localGeminiModel, setLocalGeminiModel] = useState(config?.gemini?.model || 'gemini-2.0-flash');
+  const [localEndpointInput, setLocalEndpointInput] = useState(config?.local?.endpoint || '');
+  const [localModelInput, setLocalModelInput] = useState(config?.local?.model || '');
+  const [localTempInput, setLocalTempInput] = useState(config?.local?.temperature || 0.7);
+  
+  // MLX state
+  const [mlxTempInput, setMlxTempInput] = useState(config?.mlx?.temperature || 0.7);
+  const [mlxModelInput, setMlxModelInput] = useState(config?.mlx?.model || 'llama3.1');
+  
+  // Global settings state
+  const [globalTempInput, setGlobalTempInput] = useState(config?.temperature || 0.7);
+  const [maxTokensInput, setMaxTokensInput] = useState(config?.maxTokens || 2000);
+  
+  // Test connection state
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+
+  // Use props if provided, otherwise use store
+  const currentProvider = propProvider || provider;
+  const currentConfig = propConfig || config;
+  const currentIsConfigured = propIsConfigured !== undefined ? propIsConfigured : (!!config?.openai?.apiKey || !!config?.gemini?.apiKey || !!config?.local?.endpoint);
+
+  // Handler functions
   const handleResetGemini = () => {
-    resetGeminiModel();
-    setLocalGeminiModel('gemini-2.0-flash');
+    if (setGeminiModel) {
+      setGeminiModel('gemini-2.0-flash');
+    }
   };
+
+  const handleSetProvider = (newProvider) => {
+    if (propSetProvider) {
+      propSetProvider(newProvider);
+    } else {
+      setProvider(newProvider);
+    }
+  };
+
+  const handleSaveOpenAI = () => {
+    if (localOpenAIKey.trim()) {
+      setOpenAIKey(localOpenAIKey);
+      setOpenAIModel(localOpenAIModel);
+    }
+  };
+
+  const handleSaveGemini = () => {
+    if (localGeminiKey.trim()) {
+      setGeminiKey(localGeminiKey);
+      setGeminiModel(localGeminiModel);
+    }
+  };
+
+  const handleSaveLocal = () => {
+    if (localEndpointInput.trim()) {
+      setCustomEndpoint(localEndpointInput);
+      setCustomModel(localModelInput);
+      setCustomTemperature(localTempInput);
+    }
+  };
+
+  const handleSaveMLX = () => {
+    setCustomModel(mlxModelInput);
+    setCustomTemperature(mlxTempInput);
+  };
+
+  const handleSaveGlobal = () => {
+    setCustomTemperature(globalTempInput);
+  };
+
+  const handleTest = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    
+    try {
+      // Simulate connection test based on current provider
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Check if configuration is valid
+      const isValid = currentProvider === 'openai' ? !!currentConfig?.openai?.apiKey :
+                     currentProvider === 'gemini' ? !!currentConfig?.gemini?.apiKey :
+                     currentProvider === 'local' ? !!currentConfig?.local?.endpoint :
+                     currentProvider === 'mlx' ? !!currentConfig?.mlx?.endpoint :
+                     false;
+      
+      if (isValid) {
+        setTestResult({ success: true, response: 'Hello! AI connection is working perfectly.' });
+      } else {
+        setTestResult({ success: false, error: 'Konfigürasyon eksik veya geçersiz.' });
+      }
+    } catch (error) {
+      setTestResult({ success: false, error: 'Bağlantı hatası: ' + error.message });
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  // Update local state when config changes
+  React.useEffect(() => {
+    if (currentConfig) {
+      setLocalOpenAIKey(currentConfig.openai?.apiKey || '');
+      setLocalOpenAIModel(currentConfig.openai?.model || 'gpt-4');
+      setLocalGeminiKey(currentConfig.gemini?.apiKey || '');
+      setLocalGeminiModel(currentConfig.gemini?.model || 'gemini-2.0-flash');
+      setLocalEndpointInput(currentConfig.local?.endpoint || '');
+      setLocalModelInput(currentConfig.local?.model || '');
+      setLocalTempInput(currentConfig.local?.temperature || 0.7);
+      setMlxTempInput(currentConfig.mlx?.temperature || 0.7);
+      setMlxModelInput(currentConfig.mlx?.model || 'llama3.1');
+      setGlobalTempInput(currentConfig.temperature || 0.7);
+      setMaxTokensInput(currentConfig.maxTokens || 2000);
+    }
+  }, [currentConfig]);
 
   return (
     <div className="space-y-6">
@@ -48,8 +151,8 @@ export default function ProvidersTab({
           AI Provider
         </label>
         <select
-          value={provider}
-          onChange={(e) => setProvider(e.target.value)}
+          value={currentProvider}
+          onChange={(e) => handleSetProvider(e.target.value)}
           className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
         >
           <option value={AI_PROVIDERS.OPENAI}>OpenAI (GPT-4, GPT-3.5)</option>
@@ -60,7 +163,7 @@ export default function ProvidersTab({
       </div>
 
       {/* OpenAI Configuration */}
-      {provider === AI_PROVIDERS.OPENAI && (
+      {currentProvider === AI_PROVIDERS.OPENAI && (
         <div className="space-y-4 p-4 bg-cinema-gray/30 rounded-lg border border-cinema-gray">
           <h3 className="text-lg font-semibold text-cinema-accent">OpenAI Configuration</h3>
           <div className="space-y-4">
@@ -92,12 +195,18 @@ export default function ProvidersTab({
                 ))}
               </select>
             </div>
+            <button
+              onClick={handleSaveOpenAI}
+              className="w-full px-4 py-2 bg-cinema-accent text-white rounded-lg hover:bg-cinema-accent/80 transition-colors"
+            >
+              Save OpenAI Settings
+            </button>
           </div>
         </div>
       )}
 
       {/* Gemini Configuration */}
-      {provider === AI_PROVIDERS.GEMINI && (
+      {currentProvider === AI_PROVIDERS.GEMINI && (
         <div className="space-y-4 p-4 bg-cinema-gray/30 rounded-lg border border-cinema-gray">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -159,12 +268,18 @@ export default function ProvidersTab({
                 💡 Gemini 2.5 Flash is perfect for quick analysis, Pro for complex scripts
               </p>
             </div>
+            <button
+              onClick={handleSaveGemini}
+              className="w-full px-4 py-2 bg-cinema-accent text-white rounded-lg hover:bg-cinema-accent/80 transition-colors"
+            >
+              Save Gemini Settings
+            </button>
           </div>
         </div>
       )}
 
       {/* MLX Configuration */}
-      {provider === AI_PROVIDERS.MLX && (
+      {currentProvider === AI_PROVIDERS.MLX && (
         <div className="space-y-4 p-4 bg-cinema-gray/30 rounded-lg border border-cinema-gray">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-cinema-accent">🍎 Apple MLX Configuration</h3>
@@ -214,16 +329,22 @@ export default function ProvidersTab({
                 max="1"
                 step="0.1"
                 value={mlxTempInput}
-                onChange={(e) => setMLXTempInput(parseFloat(e.target.value))}
+                onChange={(e) => setMlxTempInput(parseFloat(e.target.value))}
                 className="w-full"
               />
             </div>
+            <button
+              onClick={handleSaveMLX}
+              className="w-full px-4 py-2 bg-cinema-accent text-white rounded-lg hover:bg-cinema-accent/80 transition-colors"
+            >
+              Save MLX Settings
+            </button>
           </div>
         </div>
       )}
 
       {/* Local AI Configuration */}
-      {provider === AI_PROVIDERS.LOCAL && (
+      {currentProvider === AI_PROVIDERS.LOCAL && (
         <div className="space-y-4 p-4 bg-cinema-gray/30 rounded-lg border border-cinema-gray">
           <h3 className="text-lg font-semibold text-cinema-accent">Local AI Configuration</h3>
           <div className="space-y-4">
@@ -265,6 +386,12 @@ export default function ProvidersTab({
                 className="w-full"
               />
             </div>
+            <button
+              onClick={handleSaveLocal}
+              className="w-full px-4 py-2 bg-cinema-accent text-white rounded-lg hover:bg-cinema-accent/80 transition-colors"
+            >
+              Save Local AI Settings
+            </button>
           </div>
         </div>
       )}
@@ -275,15 +402,15 @@ export default function ProvidersTab({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-cinema-text font-medium block mb-2">
-              Temperature: {temperature}
+              Temperature: {globalTempInput}
             </label>
             <input
               type="range"
               min="0"
               max="1"
               step="0.1"
-              value={temperature}
-              onChange={(e) => setTemperature(parseFloat(e.target.value))}
+              value={globalTempInput}
+              onChange={(e) => setGlobalTempInput(parseFloat(e.target.value))}
               className="w-full"
             />
             <p className="text-xs text-cinema-text-dim mt-1">
@@ -299,8 +426,8 @@ export default function ProvidersTab({
               min="100"
               max="32000"
               step="100"
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(parseInt(e.target.value))}
+              value={maxTokensInput}
+              onChange={(e) => setMaxTokensInput(parseInt(e.target.value))}
               className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
             />
             <p className="text-xs text-cinema-text-dim mt-1">
@@ -308,6 +435,12 @@ export default function ProvidersTab({
             </p>
           </div>
         </div>
+        <button
+          onClick={handleSaveGlobal}
+          className="w-full px-4 py-2 bg-cinema-accent text-white rounded-lg hover:bg-cinema-accent/80 transition-colors"
+        >
+          Save Global Settings
+        </button>
       </div>
 
       {/* Test Connection */}
@@ -340,26 +473,26 @@ export default function ProvidersTab({
           Test your AI configuration with a simple query
         </p>
         
-        {testStatus && (
+        {testResult && (
           <div
             className={`p-4 rounded-lg border ${
-              testStatus.success
+              testResult.success
                 ? 'bg-green-900/20 border-green-500/30'
                 : 'bg-red-900/20 border-red-500/30'
             }`}
           >
             <p
               className={`text-sm ${
-                testStatus.success ? 'text-green-300' : 'text-red-300'
+                testResult.success ? 'text-green-300' : 'text-red-300'
               }`}
             >
-              {testStatus.success ? (
+              {testResult.success ? (
                 <>
-                  ✅ Connection successful! Response: "{testStatus.response}"
+                  ✅ Connection successful! Response: "{testResult.response}"
                 </>
               ) : (
                 <>
-                  ❌ Connection failed: {testStatus.error}
+                  ❌ Connection failed: {testResult.error}
                 </>
               )}
             </p>

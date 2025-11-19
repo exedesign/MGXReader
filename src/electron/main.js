@@ -187,16 +187,53 @@ ipcMain.handle('dialog:openFile', async () => {
   return result.filePaths[0];
 });
 
-// Parse PDF file
-ipcMain.handle('pdf:parse', async (event, filePath) => {
+// Get PDF info (page count, etc.)
+ipcMain.handle('pdf:getInfo', async (event, filePath) => {
   try {
     const dataBuffer = await fs.readFile(filePath);
     const data = await pdfParse(dataBuffer);
 
     return {
       success: true,
-      text: data.text,
-      pages: data.numpages,
+      pageCount: data.numpages,
+      info: data.info,
+      metadata: data.metadata,
+    };
+  } catch (error) {
+    console.error('PDF info error:', error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
+// Parse PDF file (with optional page selection)
+ipcMain.handle('pdf:parse', async (event, filePath, selectedPages = null) => {
+  try {
+    const dataBuffer = await fs.readFile(filePath);
+    const data = await pdfParse(dataBuffer);
+
+    let text = data.text;
+    let pages = data.numpages;
+
+    // If specific pages are selected, filter the text
+    if (selectedPages && Array.isArray(selectedPages) && selectedPages.length > 0) {
+      // PDF-parse doesn't support per-page extraction directly
+      // We need to use a different approach for page filtering
+      // For now, we'll process all pages and filter by page numbers in the text
+      // This is a limitation - ideally we'd use pdf-lib or similar for better page control
+      
+      console.log(`PDF: Selected pages ${selectedPages.join(', ')} out of ${pages} total pages`);
+      // Note: Actual page filtering would require additional library like pdf-lib
+      // For now, we return all text but log the selection
+    }
+
+    return {
+      success: true,
+      text: text,
+      pages: pages,
+      selectedPages: selectedPages,
       info: data.info,
       metadata: data.metadata,
     };
@@ -209,8 +246,8 @@ ipcMain.handle('pdf:parse', async (event, filePath) => {
   }
 });
 
-// Convert PDF pages to images for OCR
-ipcMain.handle('pdf:toImages', async (event, filePath) => {
+// Convert PDF pages to images for OCR (with optional page selection)
+ipcMain.handle('pdf:toImages', async (event, filePath, selectedPages = null) => {
   let tempPdfPath = null;
   
   try {
@@ -230,8 +267,17 @@ ipcMain.handle('pdf:toImages', async (event, filePath) => {
       format: 'png',
       out_dir: tmpDir,
       out_prefix: 'page',
-      page: null // All pages
+      page: null // All pages (will filter after conversion)
     };
+
+    // If specific pages are selected, convert only those pages
+    // Note: poppler page numbering is 1-based
+    if (selectedPages && Array.isArray(selectedPages) && selectedPages.length > 0) {
+      console.log(`PDF to images: Converting selected pages ${selectedPages.join(', ')}`);
+      // Unfortunately, pdf-poppler doesn't support multiple page ranges easily
+      // We'll convert all pages and filter afterwards
+      // For better performance, consider using pdf-lib or similar in future
+    }
 
     await poppler.convert(tempPdfPath, options);
 
@@ -240,14 +286,27 @@ ipcMain.handle('pdf:toImages', async (event, filePath) => {
     const imageFiles = files.filter(f => f.endsWith('.png')).sort();
 
     const images = [];
-    for (const file of imageFiles) {
+    for (let i = 0; i < imageFiles.length; i++) {
+      const file = imageFiles[i];
+      const pageNumber = i + 1; // 1-based page numbering
+      
+      // Filter by selected pages if specified
+      if (selectedPages && Array.isArray(selectedPages) && selectedPages.length > 0) {
+        if (!selectedPages.includes(pageNumber)) {
+          continue; // Skip this page
+        }
+      }
+      
       const imagePath = path.join(tmpDir, file);
       const imageBuffer = await fs.readFile(imagePath);
       images.push({
         data: imageBuffer.toString('base64'),
-        path: imagePath
+        path: imagePath,
+        pageNumber: pageNumber // Include page number in result
       });
     }
+
+    console.log(`PDF to images: Returning ${images.length} page(s) for OCR`);
 
     return {
       success: true,
@@ -389,9 +448,16 @@ ipcMain.handle('app:quit', async () => {
 });
 
 // Save file content
-ipcMain.handle('file:saveContent', async (event, { filePath, data }) => {
+ipcMain.handle('file:saveContent', async (event, { filePath, data, encoding = 'utf-8' }) => {
   try {
-    await fs.writeFile(filePath, data, 'utf-8');
+    if (encoding === 'base64') {
+      // For base64 encoded files (like PDFs)
+      const buffer = Buffer.from(data, 'base64');
+      await fs.writeFile(filePath, buffer);
+    } else {
+      // For text files
+      await fs.writeFile(filePath, data, encoding);
+    }
     return { success: true };
   } catch (error) {
     console.error('File save content error:', error);
