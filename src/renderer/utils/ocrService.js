@@ -36,11 +36,11 @@ export async function performPDFOCR(filePath, language = 'tur+eng', onProgress =
       totalPages 
     });
 
-    // Create worker with CDN paths (simplest approach for Electron)
+    // Create worker with all local paths for full offline support
     worker = await Tesseract.createWorker(language, 1, {
       workerPath: '/tesseract/worker.min.js',
       langPath: 'https://tessdata.projectnaptha.com/4.0.0',
-      corePath: 'https://unpkg.com/tesseract.js-core@v5.0.0',
+      corePath: '/tesseract',
       logger: (m) => {
         console.log('OCR Worker:', m);
         if (m.status === 'loading tesseract core') {
