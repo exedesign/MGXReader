@@ -211,11 +211,21 @@ ipcMain.handle('pdf:parse', async (event, filePath) => {
 
 // Convert PDF pages to images for OCR
 ipcMain.handle('pdf:toImages', async (event, filePath) => {
+  let tempPdfPath = null;
+  
   try {
     const tmpDir = path.join(app.getPath('temp'), 'mgx-ocr-' + Date.now());
     await fs.mkdir(tmpDir, { recursive: true });
 
-    // Convert PDF to PNG images
+    // Copy PDF to temp directory with ASCII-safe name to avoid Unicode issues
+    const originalFileName = path.basename(filePath);
+    const safePdfName = 'temp_pdf_' + Date.now() + '.pdf';
+    tempPdfPath = path.join(tmpDir, safePdfName);
+    
+    await fs.copyFile(filePath, tempPdfPath);
+    console.log('PDF copied to temp location for OCR:', tempPdfPath);
+
+    // Convert PDF to PNG images using the safe temp path
     const options = {
       format: 'png',
       out_dir: tmpDir,
@@ -223,7 +233,7 @@ ipcMain.handle('pdf:toImages', async (event, filePath) => {
       page: null // All pages
     };
 
-    await poppler.convert(filePath, options);
+    await poppler.convert(tempPdfPath, options);
 
     // Read all generated images
     const files = await fs.readdir(tmpDir);
@@ -250,6 +260,15 @@ ipcMain.handle('pdf:toImages', async (event, filePath) => {
       success: false,
       error: error.message
     };
+  } finally {
+    // Clean up temporary PDF copy
+    if (tempPdfPath) {
+      try {
+        await fs.unlink(tempPdfPath);
+      } catch (e) {
+        console.error('Failed to delete temp PDF:', e);
+      }
+    }
   }
 });
 

@@ -26,12 +26,9 @@ export default function PDFUploader() {
       let result;
 
       if (extension === 'pdf') {
-        // Handle PDF files with existing logic
-        result = await window.electronAPI.parsePDF(filePath);
-        
-        // If PDF parsing failed or returned no text, try OCR if enabled
-        if ((!result.success || !result.text || result.text.trim().length < 50) && useOCR) {
-          console.log('PDF text extraction failed or insufficient, attempting OCR...');
+        // If OCR is enabled, use OCR directly without trying standard PDF extraction
+        if (useOCR) {
+          console.log('OCR enabled, processing PDF with OCR...');
           
           try {
             setOcrProgress({ status: 'starting', progress: 0, message: 'Starting OCR...' });
@@ -51,20 +48,23 @@ export default function PDFUploader() {
                 pages: ocrResult.pages,
                 textLength: ocrResult.text.length
               });
+            } else {
+              throw new Error('OCR processing failed to extract text');
             }
             
             setOcrProgress(null);
           } catch (ocrError) {
             console.error('OCR failed:', ocrError);
             setOcrProgress(null);
-            if (!result.success || !result.text) {
-              throw new Error(`PDF extraction and OCR both failed: ${ocrError.message}`);
-            }
+            throw new Error(`OCR processing failed: ${ocrError.message}`);
           }
-        }
-        
-        if (!result.success) {
-          throw new Error(result.error || 'Failed to parse PDF');
+        } else {
+          // Standard PDF text extraction when OCR is disabled
+          result = await window.electronAPI.parsePDF(filePath);
+          
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to parse PDF');
+          }
         }
 
         setOriginalFileName(fileName);
@@ -198,47 +198,6 @@ export default function PDFUploader() {
   return (
     <div className="flex items-center justify-center h-full bg-cinema-black p-8">
       <div className="max-w-2xl w-full">
-        {/* OCR Settings */}
-        <div className="mb-6 p-4 bg-cinema-dark rounded-lg border border-cinema-gray">
-          <div className="flex items-start gap-4">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="enableOCR"
-                checked={useOCR}
-                onChange={(e) => setUseOCR(e.target.checked)}
-                className="w-5 h-5 rounded border-cinema-gray bg-cinema-gray-light text-cinema-accent focus:ring-2 focus:ring-cinema-accent cursor-pointer"
-              />
-            </div>
-            <div className="flex-1">
-              <label htmlFor="enableOCR" className="text-sm font-medium text-cinema-text cursor-pointer block mb-1">
-                {t('uploader.enableOCR', 'Enable OCR (Optical Character Recognition)')}
-              </label>
-              <p className="text-xs text-cinema-text-dim mb-3">
-                {t('uploader.ocrHint', 'Use OCR for scanned PDFs or images without extractable text. Processing may take longer.')}
-              </p>
-              
-              {useOCR && (
-                <div className="flex items-center gap-3">
-                  <label htmlFor="ocrLanguage" className="text-xs text-cinema-text-dim">
-                    {t('uploader.ocrLanguage', 'OCR Language')}:
-                  </label>
-                  <select
-                    id="ocrLanguage"
-                    value={ocrLanguage}
-                    onChange={(e) => setOcrLanguage(e.target.value)}
-                    className="px-3 py-1 bg-cinema-gray border border-cinema-gray-light rounded text-sm text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:outline-none"
-                  >
-                    <option value="tur+eng">{t('uploader.turkishEnglish', 'Turkish + English')}</option>
-                    <option value="tur">{t('uploader.turkish', 'Turkish')}</option>
-                    <option value="eng">{t('uploader.english', 'English')}</option>
-                  </select>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* OCR Progress Indicator */}
         {ocrProgress && (
           <div className="mb-6 p-4 bg-cinema-dark rounded-lg border border-cinema-accent">
@@ -319,7 +278,7 @@ export default function PDFUploader() {
           {!isProcessing && (
             <button
               onClick={handleFileSelect}
-              className="btn-primary inline-flex items-center gap-2"
+              className="btn-primary inline-flex items-center gap-2 mb-6"
             >
               <svg
                 className="w-5 h-5"
@@ -336,6 +295,56 @@ export default function PDFUploader() {
               </svg>
               {t('uploader.selectFile', 'Select Screenplay File')}
             </button>
+          )}
+
+          {/* OCR Settings - Compact version inside drop zone */}
+          {!isProcessing && (
+            <div className="max-w-lg mx-auto">
+              <div className="flex items-center justify-center gap-4 p-3 bg-cinema-gray/30 rounded-lg border border-cinema-gray/50 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <label htmlFor="enableOCR" className="text-xs text-cinema-text whitespace-nowrap">
+                    {t('uploader.enableOCR', 'Enable OCR (Optical Character Recognition)')}
+                  </label>
+                  
+                  {/* Toggle Switch */}
+                  <button
+                    id="enableOCR"
+                    role="switch"
+                    aria-checked={useOCR}
+                    onClick={() => setUseOCR(!useOCR)}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cinema-accent focus:ring-offset-2 focus:ring-offset-cinema-dark ${
+                      useOCR ? 'bg-cinema-accent' : 'bg-cinema-gray'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        useOCR ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+                
+                {useOCR && (
+                  <div className="flex items-center gap-2">
+                    <select
+                      id="ocrLanguage"
+                      value={ocrLanguage}
+                      onChange={(e) => setOcrLanguage(e.target.value)}
+                      className="px-3 py-1.5 bg-cinema-gray border border-cinema-gray-light rounded text-xs text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:outline-none"
+                    >
+                      <option value="tur+eng">{t('uploader.turkishEnglish', 'Türkçe + İngilizce')}</option>
+                      <option value="tur">{t('uploader.turkish', 'Türkçe')}</option>
+                      <option value="eng">{t('uploader.english', 'English')}</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+              {useOCR && (
+                <p className="text-xs text-cinema-text-dim mt-2 text-center px-4">
+                  {t('uploader.ocrHint', 'Taranmış PDF\'ler veya metin çıkarılamayan görüntüler için OCR kullanın. İşlem daha uzun sürebilir.')}
+                </p>
+              )}
+            </div>
           )}
 
           {/* Loading indicator */}
