@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useScriptStore } from '../store/scriptStore';
 import { useAIStore } from '../store/aiStore';
-import { usePromptStore } from '../store/promptStore';
 import { cleanScreenplayText } from '../utils/textProcessing';
+import { GRAMMAR_LEVELS } from '../utils/aiHandler';
 
 export default function TextEditor() {
   const { scriptText, cleanedText, setCleanedText } = useScriptStore();
   const { isConfigured, provider, getAIHandler } = useAIStore();
-  const { getActivePrompt, getPromptTypes, setActivePrompt, activePrompts } = usePromptStore();
   const [isEditing, setIsEditing] = useState(false);
   const [viewMode, setViewMode] = useState('cleaned'); // 'raw' or 'cleaned'
   const [isCorrectingGrammar, setIsCorrectingGrammar] = useState(false);
+  const [grammarLevel, setGrammarLevel] = useState(GRAMMAR_LEVELS.STANDARD);
   const [grammarProgress, setGrammarProgress] = useState(null);
   const [showGrammarSettings, setShowGrammarSettings] = useState(false);
   const grammarSettingsRef = useRef(null);
@@ -61,30 +61,13 @@ export default function TextEditor() {
       const aiHandler = getAIHandler();
       const textToCorrect = cleanedText || scriptText;
       
-      // Get active custom prompt for grammar correction
-      const customPrompt = getActivePrompt('grammar');
-      
-      let correctedText;
-      if (customPrompt && customPrompt.system && customPrompt.user) {
-        // Use custom prompt
-        correctedText = await aiHandler.analyzeWithCustomPrompt(textToCorrect, {
-          systemPrompt: customPrompt.system,
-          userPrompt: customPrompt.user,
-          useChunking: textToCorrect.length > 3000,
-          onProgress: (progress) => {
-            setGrammarProgress(progress);
-          },
-        });
-      } else {
-        // Fallback to standard grammar correction
-        correctedText = await aiHandler.correctGrammar(textToCorrect, {
-          level: grammarLevel,
-          useChunking: textToCorrect.length > 3000,
-          onProgress: (progress) => {
-            setGrammarProgress(progress);
-          },
-        });
-      }
+      const correctedText = await aiHandler.correctGrammar(textToCorrect, {
+        level: grammarLevel,
+        useChunking: textToCorrect.length > 3000,
+        onProgress: (progress) => {
+          setGrammarProgress(progress);
+        },
+      });
       
       setCleanedText(correctedText);
       setViewMode('cleaned');
@@ -184,33 +167,78 @@ export default function TextEditor() {
                 className="btn-secondary text-sm flex items-center gap-2"
                 disabled={isCorrectingGrammar}
               >
-                ⚙️ Grammar Settings
+                ⚙️ Grammar Level
               </button>
 
               {showGrammarSettings && (
-                <div className="absolute right-0 top-full mt-2 w-72 bg-cinema-dark border border-cinema-gray rounded-lg shadow-lg z-10">
+                <div className="absolute right-0 top-full mt-2 w-64 bg-cinema-dark border border-cinema-gray rounded-lg shadow-lg z-10">
                   <div className="p-4">
-                    <h4 className="text-sm font-medium text-cinema-text mb-3">Grammar Correction</h4>
+                    <h4 className="text-sm font-medium text-cinema-text mb-3">Grammar Correction Level</h4>
                     
-                    {/* Custom Prompt Selector */}
-                    <div className="mb-4">
-                      <label className="block text-xs text-cinema-text-dim mb-2">
-                        Correction Style
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value={GRAMMAR_LEVELS.BASIC}
+                          checked={grammarLevel === GRAMMAR_LEVELS.BASIC}
+                          onChange={(e) => setGrammarLevel(e.target.value)}
+                          className="text-cinema-accent"
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-cinema-text">Basic</div>
+                          <div className="text-xs text-cinema-text-dim">
+                            Only fix obvious spelling and grammar mistakes. Best for local LLMs.
+                          </div>
+                        </div>
                       </label>
-                      <select
-                        value={activePrompts.grammar}
-                        onChange={(e) => setActivePrompt('grammar', e.target.value)}
-                        className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded text-sm text-cinema-text focus:outline-none focus:border-cinema-accent"
-                      >
-                        {getPromptTypes('grammar').map(({ key, name, isCustom }) => (
-                          <option key={key} value={key}>
-                            {name} {isCustom ? '(Custom)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="text-xs text-cinema-text-dim mt-1">
-                        Using: {getActivePrompt('grammar')?.name}
-                      </div>
+
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value={GRAMMAR_LEVELS.STANDARD}
+                          checked={grammarLevel === GRAMMAR_LEVELS.STANDARD}
+                          onChange={(e) => setGrammarLevel(e.target.value)}
+                          className="text-cinema-accent"
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-cinema-text">Standard</div>
+                          <div className="text-xs text-cinema-text-dim">
+                            Fix grammar and improve clarity while preserving style.
+                          </div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value={GRAMMAR_LEVELS.ADVANCED}
+                          checked={grammarLevel === GRAMMAR_LEVELS.ADVANCED}
+                          onChange={(e) => setGrammarLevel(e.target.value)}
+                          className="text-cinema-accent"
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-cinema-text">Advanced</div>
+                          <div className="text-xs text-cinema-text-dim">
+                            Comprehensive grammar and style improvements.
+                          </div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value={GRAMMAR_LEVELS.PRESERVE_STYLE}
+                          checked={grammarLevel === GRAMMAR_LEVELS.PRESERVE_STYLE}
+                          onChange={(e) => setGrammarLevel(e.target.value)}
+                          className="text-cinema-accent"
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-cinema-text">Preserve Style</div>
+                          <div className="text-xs text-cinema-text-dim">
+                            Fix only errors while maintaining the original voice and style.
+                          </div>
+                        </div>
+                      </label>
                     </div>
                   </div>
                 </div>

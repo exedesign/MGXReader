@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useScriptStore } from '../store/scriptStore';
 import { useReaderStore } from '../store/readerStore';
-import { parseWordsWithMetadata } from '../utils/textProcessing';
+import { useAIStore } from '../store/aiStore';
+import { usePromptStore } from '../store/promptStore';
+import { parseWordsWithMetadata, calculatePagePosition } from '../utils/textProcessing';
 import ReaderSettings from './ReaderSettings';
 import ReadingTimeline from './ReadingTimeline';
 
@@ -16,7 +18,9 @@ import ReadingTimeline from './ReadingTimeline';
  * - Word blacklist filtering
  */
 export default function SpeedReader() {
-  const { cleanedText, scriptText } = useScriptStore();
+  const { cleanedText, scriptText, setCleanedText, pageCount, originalPageRatio, pageBreaks, wordsPerPage } = useScriptStore();
+  const { isConfigured, getAIHandler } = useAIStore();
+  const { getActivePrompt } = usePromptStore();
   const {
     words,
     currentWordIndex,
@@ -24,7 +28,6 @@ export default function SpeedReader() {
     wpm,
     fontSize,
     focusMode,
-    showProgress,
     isFullscreen,
     orpOffset,
     showSettings,
@@ -43,7 +46,6 @@ export default function SpeedReader() {
     reset,
     setFontSize,
     toggleFocusMode,
-    toggleShowProgress,
     setFullscreen,
     adjustORPLeft,
     adjustORPRight,
@@ -57,15 +59,27 @@ export default function SpeedReader() {
   // Mouse idle detection for Zen Mode
   const [mouseIdle, setMouseIdle] = useState(false);
   const mouseIdleTimerRef = useRef(null);
+  
+  // AI Summary states
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [aiSummary, setAiSummary] = useState('');
 
   // Initialize words when component mounts
   useEffect(() => {
     const text = cleanedText || scriptText;
     if (text && words.length === 0) {
-      const wordsWithMetadata = parseWordsWithMetadata(text);
+      // Prepare page information for accurate tracking
+      const pageInfo = originalPageRatio ? {
+        pageCount: pageCount,
+        totalWords: originalPageRatio.totalWords,
+        pageBreaks: pageBreaks
+      } : null;
+      
+      const wordsWithMetadata = parseWordsWithMetadata(text, pageInfo);
       setWords(wordsWithMetadata);
     }
-  }, [cleanedText, scriptText]);
+  }, [cleanedText, scriptText, pageCount, originalPageRatio, pageBreaks]);
 
   // Get filtered words (excluding blacklist)
   const filteredWords = getFilteredWords();
@@ -128,6 +142,72 @@ export default function SpeedReader() {
     if (window.electronAPI && window.electronAPI.toggleFullscreen) {
       const newFullscreenState = await window.electronAPI.toggleFullscreen();
       setFullscreen(newFullscreenState);
+    }
+  };
+
+  // Generate AI Summary for Speed Reading
+  const handleGenerateSummary = async () => {
+    if (!isConfigured()) {
+      alert('Please configure AI provider first');
+      return;
+    }
+
+    const text = cleanedText || scriptText;
+    if (!text) {
+      alert('No text available for summary');
+      return;
+    }
+
+    setIsGeneratingSummary(true);
+
+    try {
+      const aiHandler = getAIHandler();
+      const speedReadingPrompt = getActivePrompt('speed_reading');
+      
+      let prompt;
+      if (speedReadingPrompt && speedReadingPrompt.system && speedReadingPrompt.user) {
+        prompt = {
+          system: speedReadingPrompt.system,
+          user: speedReadingPrompt.user
+        };
+      } else {
+        // Default speed reading summary prompt
+        prompt = {
+          system: "You are a professional text summarizer specialized in creating optimized summaries for speed reading. Create concise, scannable summaries that highlight key points and main ideas.",
+          user: `Create a speed-reading optimized summary of this text. Focus on:\n\n1. Main plot points or key arguments\n2. Important character names or concepts\n3. Critical facts or conclusions\n4. Essential details for understanding\n\nFormat as bullet points for easy scanning:`
+        };
+      }
+
+      const summary = await aiHandler.analyzeWithCustomPrompt(text, {
+        systemPrompt: prompt.system,
+        userPrompt: prompt.user
+      });
+      setAiSummary(summary);
+      setShowSummaryModal(true);
+    } catch (error) {
+      console.error('Summary generation error:', error);
+      alert('Failed to generate summary: ' + error.message);
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
+  // Apply summary as speed reading text
+  const applySummaryAsText = () => {
+    if (aiSummary) {
+      setCleanedText(aiSummary);
+      
+      // Prepare page information for summary text
+      const pageInfo = originalPageRatio ? {
+        pageCount: pageCount,
+        totalWords: originalPageRatio.totalWords,
+        pageBreaks: pageBreaks
+      } : null;
+      
+      const summaryWords = parseWordsWithMetadata(aiSummary, pageInfo);
+      setWords(summaryWords);
+      setCurrentWordIndex(0);
+      setShowSummaryModal(false);
     }
   };
 
@@ -196,7 +276,9 @@ export default function SpeedReader() {
   const currentWordObj = activeWords[currentWordIndex];
   const currentWord = currentWordObj?.word || currentWordObj || '';
   
+  // Calculate progress and page information
   const progress = activeWords.length > 0 ? (currentWordIndex / activeWords.length) * 100 : 0;
+  const pagePosition = calculatePagePosition(currentWordIndex, activeWords);
   const timeElapsed = Math.floor((currentWordIndex / wpm) * 60);
   const timeRemaining = Math.floor(((activeWords.length - currentWordIndex) / wpm) * 60);
 
@@ -273,8 +355,65 @@ export default function SpeedReader() {
       {/* Settings Modal */}
       {showSettings && <ReaderSettings />}
 
-      {/* Controls - Hidden in Zen Mode when mouse is idle */}
-      {!focusMode && (
+      {/* AI Summary Modal */}
+      {showSummaryModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-cinema-dark border border-cinema-gray rounded-2xl w-full max-w-4xl max-h-[80vh] overflow-y-auto shadow-2xl">
+            <div className="p-6 border-b border-cinema-gray">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-cinema-accent flex items-center gap-2">
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                  AI Summary for Speed Reading
+                </h3>
+                <button
+                  onClick={() => setShowSummaryModal(false)}
+                  className="text-cinema-text-dim hover:text-white transition-colors p-2"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-sm text-cinema-text-dim mt-2">
+                This AI-generated summary is optimized for speed reading with key points and main ideas.
+              </p>
+            </div>
+            
+            <div className="p-6">
+              <div className="bg-cinema-bg border border-cinema-gray-light rounded-lg p-4 mb-4 max-h-96 overflow-y-auto">
+                <pre className="text-cinema-text whitespace-pre-wrap font-mono text-sm leading-relaxed">
+                  {aiSummary}
+                </pre>
+              </div>
+              
+              <div className="flex justify-between items-center">
+                <div className="text-sm text-cinema-text-dim">
+                  Summary ready for speed reading • {aiSummary.split(/\s+/).length} words
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowSummaryModal(false)}
+                    className="px-4 py-2 bg-cinema-gray hover:bg-cinema-gray-light text-cinema-text rounded-lg transition-colors"
+                  >
+                    Keep Original
+                  </button>
+                  <button
+                    onClick={applySummaryAsText}
+                    className="px-4 py-2 bg-cinema-accent hover:bg-cinema-accent-dark text-cinema-black rounded-lg transition-colors"
+                  >
+                    Use Summary for Speed Reading
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Controls - Hidden in Zen Mode when mouse is idle AND in fullscreen */}
+      {!focusMode && !isFullscreen && (
         <div className="bg-cinema-dark border-b border-cinema-gray p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -336,6 +475,18 @@ export default function SpeedReader() {
                 <span className="text-cinema-accent font-bold w-12">{fontSize}</span>
               </div>
 
+              {/* Page Information */}
+              <div className="flex items-center gap-2 bg-cinema-gray px-3 py-2 rounded-lg">
+                <span className="text-sm text-cinema-text-dim">Page:</span>
+                <span className="text-cinema-accent font-bold text-sm">
+                  {pagePosition.page} / {pagePosition.totalPages}
+                </span>
+                <div className="w-px h-4 bg-cinema-gray-light mx-1"></div>
+                <span className="text-xs text-cinema-text-dim">
+                  {pagePosition.pageProgress}%
+                </span>
+              </div>
+
               {/* ORP Adjustment */}
               <div className="flex items-center gap-2 bg-cinema-gray px-3 py-2 rounded-lg">
                 <span className="text-sm text-cinema-text-dim">Focus:</span>
@@ -365,6 +516,34 @@ export default function SpeedReader() {
 
             {/* Right side controls */}
             <div className="flex items-center gap-3">
+              {/* AI Summary Button */}
+              <button
+                onClick={handleGenerateSummary}
+                disabled={isGeneratingSummary || !isConfigured()}
+                className={`px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
+                  isConfigured() 
+                    ? 'bg-cinema-accent text-cinema-black hover:bg-cinema-accent-dark disabled:opacity-50' 
+                    : 'bg-cinema-gray text-cinema-text-dim cursor-not-allowed'
+                }`}
+                title="Generate AI summary for speed reading"
+              >
+                {isGeneratingSummary ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                    AI Summary
+                  </>
+                )}
+              </button>
               <button
                 onClick={handleToggleFullscreen}
                 className="p-3 bg-cinema-gray hover:bg-cinema-gray-light rounded-lg transition-colors"
@@ -377,16 +556,6 @@ export default function SpeedReader() {
                     <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
                   )}
                 </svg>
-              </button>
-              <button
-                onClick={toggleShowProgress}
-                className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-                  showProgress
-                    ? 'bg-cinema-accent text-cinema-black'
-                    : 'bg-cinema-gray text-cinema-text hover:bg-cinema-gray-light'
-                }`}
-              >
-                Progress
               </button>
               <button
                 onClick={toggleFocusMode}
@@ -444,18 +613,7 @@ export default function SpeedReader() {
             </div>
           )}
 
-          {/* Word Counter - Hidden in fullscreen */}
-          {showProgress && !isFullscreen && (
-            <div
-              className="mt-6 text-sm transition-opacity duration-500"
-              style={{ color: 'var(--reader-text-dim)' }}
-            >
-              Word {currentWordIndex + 1} of {activeWords.length}
-              {currentWordObj?.page && (
-                <span className="ml-4">Page {currentWordObj.page}</span>
-              )}
-            </div>
-          )}
+
         </div>
 
         {/* Zen Mode Floating Controls - HIDDEN in fullscreen */}
@@ -540,34 +698,13 @@ export default function SpeedReader() {
         )}
       </div>
 
-      {/* Timeline - Page-based Scrubber - Hidden in fullscreen */}
-      {!focusMode && !isFullscreen && activeWords.length > 0 && (
+      {/* Timeline - Page-based Scrubber - Hidden only in fullscreen */}
+      {!isFullscreen && activeWords.length > 0 && (
         <ReadingTimeline
           words={activeWords}
           currentWordIndex={currentWordIndex}
           onSeek={setCurrentWordIndex}
         />
-      )}
-
-      {/* Progress Bar (legacy - kept for compatibility) - Hidden in fullscreen */}
-      {showProgress && !focusMode && !isFullscreen && (
-        <div className="bg-cinema-dark border-t border-cinema-gray">
-          <div className="relative h-2 bg-cinema-gray">
-            <div
-              className="absolute top-0 left-0 h-full bg-cinema-accent transition-all duration-100"
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-          <div className="flex items-center justify-between px-6 py-2 text-xs text-cinema-text-dim">
-            <div>
-              Elapsed: {Math.floor(timeElapsed / 60)}m {timeElapsed % 60}s
-            </div>
-            <div>{progress.toFixed(1)}%</div>
-            <div>
-              Remaining: {Math.floor(timeRemaining / 60)}m {timeRemaining % 60}s
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

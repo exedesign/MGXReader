@@ -4,6 +4,10 @@
  */
 
 import axios from 'axios';
+import { splitTextForAnalysis, getOptimalChunkSize } from './textProcessing.js';
+import { createDramaturgyAnalyzer } from './dramaturgyAnalyzer.js';
+import { createCharacterDialogueAnalyzer } from './characterDialogueAnalyzer.js';
+import { createEnhancedAnalysisEngine } from './enhancedAnalysisEngine.js';
 
 export const AI_PROVIDERS = {
   OPENAI: 'openai',
@@ -19,11 +23,14 @@ export const OPENAI_MODELS = [
 ];
 
 export const GEMINI_MODELS = [
-  { id: 'gemini-1.5-pro-latest', name: 'Gemini 1.5 Pro (Latest)', contextWindow: 2000000, recommended: true },
-  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', contextWindow: 2000000 },
-  { id: 'gemini-1.5-flash-latest', name: 'Gemini 1.5 Flash (Latest)', contextWindow: 1000000 },
-  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', contextWindow: 1000000 },
-  { id: 'gemini-pro', name: 'Gemini Pro (Legacy)', contextWindow: 32000 },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash - Recommended 🚀', contextWindow: 1000000, recommended: true, fast: true },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro - Advanced Reasoning 🧠', contextWindow: 2000000 },
+  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite - Ultra Fast ⚡', contextWindow: 1000000, fast: true },
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash - Workhorse Model', contextWindow: 1000000 },
+  { id: 'gemini-flash-latest', name: 'Gemini Flash (Latest) - Auto-Updated', contextWindow: 1000000, fast: true },
+  { id: 'gemini-pro-latest', name: 'Gemini Pro (Latest) - Auto-Updated', contextWindow: 2000000 },
+  { id: 'gemini-1.5-flash-latest', name: 'Gemini 1.5 Flash (Legacy)', contextWindow: 1000000, deprecated: true },
+  { id: 'gemini-1.5-pro-latest', name: 'Gemini 1.5 Pro (Legacy)', contextWindow: 2000000, deprecated: true },
 ];
 
 export const MLX_MODELS = [
@@ -45,6 +52,15 @@ export class AIHandler {
     this.mlxEndpoint = config.mlxEndpoint || 'http://localhost:8080';
     this.mlxModel = config.mlxModel || 'mlx-community/Llama-3.2-3B-Instruct-4bit';
     this.temperature = config.temperature || 0.3;
+    
+    // Initialize advanced analysis engines
+    this.dramaturgyAnalyzer = createDramaturgyAnalyzer();
+    this.characterDialogueAnalyzer = createCharacterDialogueAnalyzer();
+    this.enhancedAnalysisEngine = createEnhancedAnalysisEngine(
+      this,
+      this.dramaturgyAnalyzer,
+      this.characterDialogueAnalyzer
+    );
   }
 
   /**
@@ -108,56 +124,79 @@ export class AIHandler {
   }
 
   /**
-   * Google Gemini API Call (Updated to v1 API - November 2025)
+   * Google Gemini API Call (Updated to v1beta API - November 2025)
+   * Using latest Gemini 2.5 models with proper system instruction support
    */
   async callGemini(systemPrompt, userPrompt, temperature, maxTokens) {
     if (!this.apiKey) {
       throw new Error('Google API key is required');
     }
 
-    // Use the latest v1 API endpoint
-    const model = this.model || 'gemini-1.5-pro-latest';
-    const apiUrl = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent`;
+    // Use the latest v1beta API endpoint
+    let model = this.model || 'gemini-2.5-flash';
+    
+    // Model names are correct for v1beta API
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-    // Gemini v1 API format with system instruction support
+    // Debug logging
+    console.log('Gemini API Debug:', {
+      model,
+      apiUrl,
+      apiKeyLength: this.apiKey ? this.apiKey.length : 0,
+      apiKeyPrefix: this.apiKey ? this.apiKey.substring(0, 8) + '...' : 'none'
+    });
+
+    // Gemini v1beta API format with proper system instruction support
     const requestBody = {
+      systemInstruction: {
+        parts: [{
+          text: systemPrompt
+        }]
+      },
       contents: [
         {
           role: 'user',
           parts: [
             {
-              text: `${systemPrompt}\n\n${userPrompt}`,
+              text: userPrompt,
             },
           ],
         },
       ],
       generationConfig: {
-        temperature: temperature,
-        maxOutputTokens: maxTokens,
+        temperature: temperature || 0.7,
+        maxOutputTokens: maxTokens || 8192,
         topP: 0.95,
         topK: 40,
+        responseMimeType: 'text/plain',
+        candidateCount: 1,
       },
       safetySettings: [
         {
           category: 'HARM_CATEGORY_HARASSMENT',
-          threshold: 'BLOCK_NONE',
+          threshold: 'BLOCK_ONLY_HIGH',
         },
         {
           category: 'HARM_CATEGORY_HATE_SPEECH',
-          threshold: 'BLOCK_NONE',
+          threshold: 'BLOCK_ONLY_HIGH',
         },
         {
           category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-          threshold: 'BLOCK_NONE',
+          threshold: 'BLOCK_ONLY_HIGH',
         },
         {
           category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-          threshold: 'BLOCK_NONE',
+          threshold: 'BLOCK_ONLY_HIGH',
+        },
+        {
+          category: 'HARM_CATEGORY_CIVIC_INTEGRITY',
+          threshold: 'BLOCK_ONLY_HIGH',
         },
       ],
     };
 
     try {
+      console.log('Making Gemini API request...');
       const response = await axios.post(
         apiUrl,
         requestBody,
@@ -169,6 +208,9 @@ export class AIHandler {
           timeout: 60000, // 60 seconds timeout
         }
       );
+
+      console.log('Gemini API Response Status:', response.status);
+      console.log('Gemini API Response Data:', response.data);
 
       // Handle response
       if (response.data.candidates && response.data.candidates.length > 0) {
@@ -191,11 +233,50 @@ export class AIHandler {
 
       throw new Error('No valid response from Gemini API');
     } catch (error) {
+      console.error('Gemini API Error Details:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        model: model,
+        apiUrl: apiUrl,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers
+        }
+      });
+      
       if (error.response) {
         // API returned an error response
-        const errorMessage = error.response.data?.error?.message || error.response.statusText;
-        throw new Error(`Gemini API Error (${error.response.status}): ${errorMessage}`);
+        const status = error.response.status;
+        const errorData = error.response.data;
+        
+        if (status === 400) {
+          if (errorData?.error?.message?.includes('model not found')) {
+            throw new Error(`Gemini Model '${model}' not found. Please check if the model exists in your region.`);
+          }
+          if (errorData?.error?.message?.includes('API key')) {
+            throw new Error('Invalid Gemini API key. Please check your API key.');
+          }
+        }
+        
+        if (status === 403) {
+          throw new Error('Gemini API access denied. Please check your API key permissions.');
+        }
+        
+        if (status === 429) {
+          throw new Error('Gemini API rate limit exceeded. Please try again later.');
+        }
+        
+        const errorMessage = errorData?.error?.message || error.response.statusText;
+        throw new Error(`Gemini API Error (${status}): ${errorMessage}`);
       }
+      
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        throw new Error('Network error: Cannot connect to Gemini API. Please check your internet connection.');
+      }
+      
       throw error;
     }
   }
@@ -271,12 +352,26 @@ export class AIHandler {
    */
   async testConnection() {
     try {
-      const testPrompt = 'Reply with only the word "OK" if you can read this.';
+      console.log(`Testing ${this.provider} connection...`);
+      
+      // Simple test for different providers
+      let testPrompt, systemPrompt;
+      
+      if (this.provider === AI_PROVIDERS.GEMINI) {
+        systemPrompt = 'You are a helpful assistant. Respond concisely.';
+        testPrompt = 'Say "OK" if you can read this message.';
+      } else {
+        systemPrompt = 'You are a helpful assistant.';
+        testPrompt = 'Reply with only the word "OK" if you can read this.';
+      }
+      
       const response = await this.generateText(
-        'You are a helpful assistant.',
+        systemPrompt,
         testPrompt,
-        { maxTokens: 10 }
+        { maxTokens: 20, temperature: 0 }
       );
+      
+      console.log(`${this.provider} test successful:`, response);
       
       return {
         success: true,
@@ -284,6 +379,8 @@ export class AIHandler {
         provider: this.provider,
       };
     } catch (error) {
+      console.error(`${this.provider} test failed:`, error);
+      
       return {
         success: false,
         error: error.message,
@@ -322,14 +419,861 @@ export class AIHandler {
   updateConfig(newConfig) {
     Object.assign(this, newConfig);
   }
+
+  /**
+   * Correct grammar in text with configurable levels
+   * @param {string} text - Text to correct
+   * @param {object} options - Correction options
+   * @returns {Promise<string>} - Corrected text
+   */
+  async correctGrammar(text, options = {}) {
+    const {
+      level = GRAMMAR_LEVELS.STANDARD,
+      useChunking = true,
+      maxChunkSize = 3000, // Smaller chunks for grammar correction
+      onProgress = () => {},
+    } = options;
+
+    try {
+      // For small texts or when chunking is disabled, process directly
+      if (!useChunking || text.length <= maxChunkSize) {
+        onProgress({ step: 'correcting', progress: 0, message: 'Correcting grammar...' });
+        
+        const systemPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.system[level];
+        const userPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.buildUserPrompt(text, level);
+        
+        const correctedText = await this.generateText(systemPrompt, userPrompt, {
+          maxTokens: Math.min(4000, Math.ceil(text.length * 1.2)), // Allow some expansion
+          temperature: 0.1, // Low temperature for consistent corrections
+        });
+        
+        // Cloud LLM'lerin yorum cevaplarını temizle
+        const cleanedResult = this.cleanCloudLLMComments(correctedText.trim());
+        
+        onProgress({ step: 'complete', progress: 100, message: 'Grammar correction complete' });
+        return cleanedResult;
+      }
+
+      // Split large text into chunks
+      onProgress({ 
+        step: 'chunking', 
+        progress: 5, 
+        message: 'Splitting text into chunks...' 
+      });
+
+      const chunks = this.splitTextForGrammarCorrection(text, maxChunkSize);
+      
+      onProgress({ 
+        step: 'correcting_chunks', 
+        progress: 10, 
+        message: `Correcting ${chunks.length} chunks...` 
+      });
+
+      const correctedChunks = [];
+      const totalChunks = chunks.length;
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        
+        onProgress({
+          step: 'correcting_chunk',
+          progress: 10 + (i / totalChunks) * 80,
+          message: `Correcting chunk ${i + 1} of ${totalChunks}...`,
+          currentChunk: i + 1,
+          totalChunks: totalChunks,
+        });
+
+        try {
+          const systemPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.system[level];
+          const userPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.buildUserPrompt(chunk.text, level);
+          
+          const correctedChunk = await this.generateText(systemPrompt, userPrompt, {
+            maxTokens: Math.min(4000, Math.ceil(chunk.text.length * 1.2)),
+            temperature: 0.1,
+          });
+
+          // Cloud LLM yorumlarını temizle
+          const cleanedChunk = this.cleanCloudLLMComments(correctedChunk.trim());
+
+          correctedChunks.push({
+            ...chunk,
+            correctedText: cleanedChunk,
+          });
+
+          // Rate limiting delay for API providers
+          if (i < chunks.length - 1 && this.provider !== AI_PROVIDERS.LOCAL && this.provider !== AI_PROVIDERS.MLX) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+
+        } catch (chunkError) {
+          console.warn(`Chunk ${i + 1} correction failed:`, chunkError);
+          // Keep original text if correction fails
+          correctedChunks.push({
+            ...chunk,
+            correctedText: chunk.text,
+            error: chunkError.message,
+          });
+        }
+      }
+
+      onProgress({ 
+        step: 'combining', 
+        progress: 95, 
+        message: 'Combining corrected chunks...' 
+      });
+
+      // Combine corrected chunks back into full text
+      const finalText = correctedChunks
+        .map(chunk => chunk.correctedText)
+        .join(chunk => chunk.preserveSpacing ? '\n\n' : ' '); // Maintain original spacing
+
+      onProgress({ 
+        step: 'complete', 
+        progress: 100, 
+        message: 'Grammar correction complete' 
+      });
+
+      return finalText;
+
+    } catch (error) {
+      console.error('Grammar correction failed:', error);
+      onProgress({ 
+        step: 'error', 
+        progress: 0, 
+        message: `Correction failed: ${error.message}` 
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Cloud LLM'lerin yorum cevaplarını temizle (sadece düzeltme sonucunu al)
+   * @param {string} text - LLM'den gelen cevap
+   * @returns {string} - Temizlenmiş metin
+   */
+  cleanCloudLLMComments(text) {
+    // Cloud provider kontrolü
+    if (this.provider !== AI_PROVIDERS.OPENAI && this.provider !== AI_PROVIDERS.GEMINI) {
+      return text; // Local provider'lar için temizleme yapma
+    }
+
+    // Yaygın LLM yorum kalıplarını temizle
+    let cleaned = text;
+    
+    // "Harika bir metin! Bu metni..." tarzı başlangıçları kaldır
+    cleaned = cleaned.replace(/^.*?(düzeltme|düzenleme|analiz|geliştirme).*?(yaptım|yapıyorum|sunuyorum).*?[:.!]\s*/i, '');
+    
+    // "İşte geliştirilmiş versiyon:" tarzı ifadeleri kaldır
+    cleaned = cleaned.replace(/^.*?(işte|burada|aşağıda).*?(geliştirilmiş|düzeltilmiş|düzenlenmiş).*?(versiyon|metin|sonuç).*?[:.!]\s*/im, '');
+    
+    // "Sizin için düzeltmeyi yaptım" tarzı ifadeleri kaldır
+    cleaned = cleaned.replace(/^.*?(sizin için|size).*?(düzeltme|düzenleme).*?(yaptım|hazırladım).*?[:.!]\s*/im, '');
+    
+    // "Bu metni daha etkileyici..." tarzı açıklamaları kaldır
+    cleaned = cleaned.replace(/^.*?(bu metni|metni).*?(daha|daha etkileyici|akıcı|edebi).*?[:.!]\s*/im, '');
+    
+    // Başlangıçtaki genel açıklamaları temizle
+    cleaned = cleaned.replace(/^[^.!?]*?(düzeltme|analiz|geliştirme|iyileştirme)[^.!?]*?[.!?]\s*/i, '');
+    
+    return cleaned.trim();
+  }
+
+  /**
+   * Split text for grammar correction (preserves paragraph structure)
+   * @param {string} text - Text to split
+   * @param {number} maxChunkSize - Maximum chunk size in characters
+   * @returns {Array} - Array of text chunks
+   */
+  splitTextForGrammarCorrection(text, maxChunkSize) {
+    const chunks = [];
+    
+    // Split by paragraphs first to preserve structure
+    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+    
+    let currentChunk = '';
+    let chunkIndex = 0;
+
+    for (let i = 0; i < paragraphs.length; i++) {
+      const paragraph = paragraphs[i];
+      const combinedLength = currentChunk.length + paragraph.length + 2; // +2 for line breaks
+
+      if (combinedLength <= maxChunkSize || currentChunk.length === 0) {
+        // Add paragraph to current chunk
+        currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
+      } else {
+        // Save current chunk and start new one
+        if (currentChunk.length > 0) {
+          chunks.push({
+            index: chunkIndex++,
+            text: currentChunk.trim(),
+            preserveSpacing: true,
+          });
+        }
+
+        // Check if single paragraph is too large
+        if (paragraph.length > maxChunkSize) {
+          // Split large paragraph by sentences
+          const sentences = this.splitParagraphBySentences(paragraph, maxChunkSize);
+          for (const sentence of sentences) {
+            chunks.push({
+              index: chunkIndex++,
+              text: sentence.trim(),
+              preserveSpacing: false,
+            });
+          }
+          currentChunk = '';
+        } else {
+          currentChunk = paragraph;
+        }
+      }
+    }
+
+    // Add remaining chunk
+    if (currentChunk.length > 0) {
+      chunks.push({
+        index: chunkIndex,
+        text: currentChunk.trim(),
+        preserveSpacing: true,
+      });
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Split a large paragraph by sentences
+   * @param {string} paragraph - Paragraph to split
+   * @param {number} maxSize - Maximum size per chunk
+   * @returns {Array} - Array of sentence chunks
+   */
+  splitParagraphBySentences(paragraph, maxSize) {
+    const sentences = paragraph.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    const chunks = [];
+    let currentChunk = '';
+
+    for (const sentence of sentences) {
+      const trimmedSentence = sentence.trim();
+      const combinedLength = currentChunk.length + trimmedSentence.length + 2;
+
+      if (combinedLength <= maxSize || currentChunk.length === 0) {
+        currentChunk += (currentChunk ? '. ' : '') + trimmedSentence;
+      } else {
+        if (currentChunk.length > 0) {
+          chunks.push(currentChunk.trim() + '.');
+        }
+        currentChunk = trimmedSentence;
+      }
+    }
+
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk.trim() + '.');
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Analyze screenplay with intelligent chunking for token management
+   * @param {string} text - Full screenplay text
+   * @param {object} options - Analysis options
+   * @returns {Promise<object>} - Analysis result
+   */
+  async analyzeScreenplayWithChunking(text, options = {}) {
+    const {
+      useChunking = true,
+      onProgress = () => {},
+      forceChunking = false,
+    } = options;
+
+    try {
+      // Determine if chunking is needed
+      const shouldChunk = this.shouldUseChunking(text, forceChunking);
+      
+      if (!useChunking || !shouldChunk) {
+        onProgress({ step: 'analyzing', progress: 0, message: 'Analyzing screenplay...' });
+        const result = await this.analyzeScreenplay(text);
+        onProgress({ step: 'complete', progress: 100, message: 'Analysis complete' });
+        return result;
+      }
+
+      // Get optimal chunk configuration for current provider
+      const chunkConfig = getOptimalChunkSize(this.provider, this.model);
+      
+      onProgress({ 
+        step: 'chunking', 
+        progress: 5, 
+        message: 'Splitting screenplay into manageable chunks...' 
+      });
+
+      // Split text into chunks
+      const chunks = splitTextForAnalysis(text, chunkConfig);
+      
+      if (chunks.length === 0) {
+        throw new Error('Failed to create text chunks');
+      }
+
+      if (chunks.length === 1) {
+        // Single chunk, use regular analysis
+        onProgress({ step: 'analyzing', progress: 10, message: 'Analyzing screenplay...' });
+        const result = await this.analyzeScreenplay(chunks[0].text);
+        onProgress({ step: 'complete', progress: 100, message: 'Analysis complete' });
+        return result;
+      }
+
+      onProgress({ 
+        step: 'analyzing_chunks', 
+        progress: 10, 
+        message: `Analyzing ${chunks.length} chunks...` 
+      });
+
+      // Analyze each chunk
+      const chunkResults = [];
+      const totalChunks = chunks.length;
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        
+        onProgress({
+          step: 'analyzing_chunk',
+          progress: 10 + (i / totalChunks) * 70,
+          message: `Analyzing chunk ${i + 1} of ${totalChunks}...`,
+          currentChunk: i + 1,
+          totalChunks: totalChunks,
+        });
+
+        try {
+          const chunkResult = await this.analyzeChunk(chunk, i + 1, totalChunks);
+          chunkResults.push({
+            ...chunkResult,
+            chunkIndex: i,
+            chunkInfo: {
+              type: chunk.type,
+              scenes: chunk.scenes || [],
+              wordCount: chunk.wordCount,
+              tokenEstimate: chunk.tokenEstimate,
+            },
+          });
+
+          // Rate limiting delay
+          if (i < chunks.length - 1 && this.provider !== AI_PROVIDERS.LOCAL && this.provider !== AI_PROVIDERS.MLX) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+        } catch (chunkError) {
+          console.warn(`Chunk ${i + 1} analysis failed:`, chunkError);
+          chunkResults.push({
+            error: chunkError.message,
+            chunkIndex: i,
+            chunkInfo: {
+              type: chunk.type,
+              scenes: chunk.scenes || [],
+              wordCount: chunk.wordCount,
+              tokenEstimate: chunk.tokenEstimate,
+            },
+          });
+        }
+      }
+
+      onProgress({ 
+        step: 'combining', 
+        progress: 85, 
+        message: 'Combining analysis results...' 
+      });
+
+      // Combine results
+      const combinedResult = this.combineChunkAnalyses(chunkResults, text);
+
+      onProgress({ 
+        step: 'complete', 
+        progress: 100, 
+        message: 'Analysis complete' 
+      });
+
+      return combinedResult;
+
+    } catch (error) {
+      console.error('Chunked analysis failed:', error);
+      onProgress({ 
+        step: 'error', 
+        progress: 0, 
+        message: `Analysis failed: ${error.message}` 
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Analyze a single screenplay (without chunking)
+   * @param {string} text - Screenplay text
+   * @returns {Promise<object>} - Analysis result
+   */
+  async analyzeScreenplay(text) {
+    const systemPrompt = SCREENPLAY_PROMPTS.SCENE_ANALYSIS.system;
+    const userPrompt = SCREENPLAY_PROMPTS.SCENE_ANALYSIS.buildUserPrompt(text);
+
+    // Cloud providers can handle larger responses
+    const isCloudProvider = this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI;
+    const maxTokens = isCloudProvider ? 8000 : 4000;
+
+    console.log(`Analyzing screenplay with ${this.provider}, maxTokens: ${maxTokens}`);
+
+    const response = await this.generateText(systemPrompt, userPrompt, {
+      maxTokens,
+      temperature: 0.1,
+    });
+
+    try {
+      const cleanedResponse = response.replace(/```json\s*|\s*```/g, '').trim();
+      return JSON.parse(cleanedResponse);
+    } catch (error) {
+      console.error('Failed to parse analysis response:', error);
+      throw new Error('Failed to parse analysis data');
+    }
+  }
+
+  /**
+   * Analyze with custom prompt and chunking support
+   * @param {string} text - Text to analyze
+   * @param {object} options - Analysis options
+   * @returns {Promise<string>} - Analysis result
+   */
+  async analyzeWithCustomPrompt(text, options = {}) {
+    const { 
+      systemPrompt, 
+      userPrompt, 
+      useChunking = false, 
+      onProgress = () => {} 
+    } = options;
+
+    if (!systemPrompt || !userPrompt) {
+      throw new Error('Both systemPrompt and userPrompt are required for custom analysis');
+    }
+
+    onProgress({ 
+      step: 'start', 
+      progress: 0, 
+      message: 'Starting custom analysis...' 
+    });
+
+    try {
+      // Cloud APIs (OpenAI, Gemini) have large context windows - no chunking needed
+      const isCloudProvider = this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI;
+      const shouldUseChunking = useChunking && !isCloudProvider && text.length > 15000;
+      
+      if (!shouldUseChunking) {
+        // Single prompt analysis - recommended for cloud providers
+        onProgress({ 
+          step: 'analyzing', 
+          progress: 50, 
+          message: 'Analyzing with custom prompt...' 
+        });
+
+        const combinedUserPrompt = `${userPrompt}\n\nText to analyze:\n${text}`;
+        const maxTokens = isCloudProvider ? 8000 : 4000; // Cloud providers can handle larger responses
+        
+        const result = await this.generateText(systemPrompt, combinedUserPrompt, {
+          maxTokens,
+          temperature: 0.1,
+        });
+
+        // Cloud provider'lar için yorum cevaplarını temizle
+        const cleanedResult = this.cleanCloudLLMComments(result);
+
+        onProgress({ 
+          step: 'complete', 
+          progress: 100, 
+          message: 'Custom analysis complete!' 
+        });
+
+        return cleanedResult;
+      } else {
+        // Chunked analysis - only for local providers with long text
+        onProgress({ 
+          step: 'info', 
+          progress: 5, 
+          message: 'Using chunked analysis for local provider...' 
+        });
+        return await this.analyzeWithCustomPromptChunked(text, systemPrompt, userPrompt, onProgress);
+      }
+    } catch (error) {
+      onProgress({ 
+        step: 'error', 
+        progress: 0, 
+        message: `Custom analysis failed: ${error.message}` 
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Analyze with custom prompt using chunking
+   * @param {string} text - Text to analyze
+   * @param {string} systemPrompt - System prompt
+   * @param {string} userPrompt - User prompt template
+   * @param {Function} onProgress - Progress callback
+   * @returns {Promise<string>} - Combined analysis result
+   */
+  async analyzeWithCustomPromptChunked(text, systemPrompt, userPrompt, onProgress) {
+    const chunks = this.chunkText(text, { 
+      preserveScenes: false, // For custom analysis, simple chunking is usually better
+      maxTokens: 3000 
+    });
+
+    const chunkResults = [];
+    const totalChunks = chunks.length;
+
+    onProgress({ 
+      step: 'chunking', 
+      progress: 10, 
+      message: `Split into ${totalChunks} chunks. Analyzing...` 
+    });
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const chunkNumber = i + 1;
+      
+      onProgress({ 
+        step: 'chunk', 
+        progress: 10 + (60 * i / totalChunks), 
+        message: `Analyzing chunk ${chunkNumber}/${totalChunks}...`,
+        chunkNumber,
+        totalChunks 
+      });
+
+      const combinedUserPrompt = `${userPrompt}
+
+This is chunk ${chunkNumber} of ${totalChunks} from a larger text. Please analyze this section:
+
+${chunk.text}`;
+
+      const chunkResult = await this.generateText(systemPrompt, combinedUserPrompt, {
+        maxTokens: 2000,
+        temperature: 0.1,
+      });
+
+      chunkResults.push({
+        chunkNumber,
+        content: chunkResult,
+        metadata: chunk.metadata
+      });
+
+      // Add small delay to prevent rate limiting
+      if (i < chunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    onProgress({ 
+      step: 'combining', 
+      progress: 80, 
+      message: 'Combining chunk results...' 
+    });
+
+    // Combine all chunk results
+    const combinedResult = await this.combineCustomPromptResults(chunkResults, systemPrompt);
+
+    onProgress({ 
+      step: 'complete', 
+      progress: 100, 
+      message: 'Custom analysis complete!' 
+    });
+
+    return combinedResult;
+  }
+
+  /**
+   * Combine results from custom prompt chunks
+   * @param {Array} chunkResults - Results from each chunk
+   * @param {string} systemPrompt - Original system prompt for context
+   * @returns {Promise<string>} - Combined result
+   */
+  async combineCustomPromptResults(chunkResults, systemPrompt) {
+    const combinerSystemPrompt = `You are an expert text analyst. Your task is to combine and synthesize analysis results from multiple chunks of text into a comprehensive final analysis.
+
+Original analysis instructions: ${systemPrompt}
+
+Please create a cohesive, comprehensive analysis by:
+1. Identifying common themes and patterns across chunks
+2. Removing redundancy while preserving important details
+3. Creating a logical flow and structure
+4. Maintaining the analytical depth and quality
+
+Return a well-structured, comprehensive analysis.`;
+
+    const chunkSummaries = chunkResults.map(result => 
+      `Chunk ${result.chunkNumber}:\n${result.content}\n`
+    ).join('\n---\n\n');
+
+    const combinerUserPrompt = `Please combine and synthesize these analysis results into a comprehensive final analysis:
+
+${chunkSummaries}`;
+
+    return await this.generateText(combinerSystemPrompt, combinerUserPrompt, {
+      maxTokens: 4000,
+      temperature: 0.1,
+    });
+  }
+
+  /**
+   * Analyze a single chunk
+   * @param {object} chunk - Text chunk with metadata
+   * @param {number} chunkNumber - Current chunk number
+   * @param {number} totalChunks - Total number of chunks
+   * @returns {Promise<object>} - Chunk analysis result
+   */
+  async analyzeChunk(chunk, chunkNumber, totalChunks) {
+    const systemPrompt = `You are a professional screenplay analyst. You are analyzing chunk ${chunkNumber} of ${totalChunks} from a larger screenplay. Focus on this specific section but be aware it's part of a larger work.
+
+Return a valid JSON object with the following structure:
+{
+  "scenes": [
+    {
+      "number": 1,
+      "header": "INT. BEDROOM - NIGHT",
+      "intExt": "INT",
+      "location": "BEDROOM", 
+      "timeOfDay": "NIGHT",
+      "characters": ["CHARACTER1", "CHARACTER2"],
+      "estimatedDuration": 2,
+      "description": "Brief scene description",
+      "chunkRelative": true
+    }
+  ],
+  "locations": [
+    {
+      "name": "BEDROOM",
+      "type": "INT", 
+      "sceneCount": 1,
+      "estimatedShootingDays": 0.5
+    }
+  ],
+  "characters": [
+    {
+      "name": "CHARACTER NAME",
+      "sceneCount": 5,
+      "description": "Brief character description"
+    }
+  ],
+  "equipment": [
+    {
+      "item": "Camera crane",
+      "scenes": [1, 5],
+      "reason": "High angle shot mentioned" 
+    }
+  ],
+  "partialSummary": {
+    "scenesInChunk": 3,
+    "estimatedChunkRuntime": 15,
+    "newCharactersIntroduced": ["CHARACTER1"],
+    "keyEvents": ["Brief description of important events in this chunk"]
+  }
 }
+
+Return ONLY valid JSON, no additional text.`;
+
+    const userPrompt = `Analyze this screenplay chunk and provide a detailed breakdown. This is chunk ${chunkNumber} of ${totalChunks}:
+
+${chunk.text}`;
+
+    const response = await this.generateText(systemPrompt, userPrompt, {
+      maxTokens: 3000,
+      temperature: 0.1,
+    });
+
+    try {
+      const cleanedResponse = response.replace(/```json\s*|\s*```/g, '').trim();
+      return JSON.parse(cleanedResponse);
+    } catch (error) {
+      console.error('Failed to parse chunk analysis response:', error);
+      throw new Error(`Failed to parse chunk ${chunkNumber} analysis data`);
+    }
+  }
+
+  /**
+   * Determine if chunking should be used based on text size and provider capabilities
+   * @param {string} text - Text to analyze
+   * @param {boolean} forceChunking - Force chunking regardless of size
+   * @returns {boolean} - Whether to use chunking
+   */
+  shouldUseChunking(text, forceChunking = false) {
+    if (forceChunking) return true;
+    
+    // Cloud providers (OpenAI, Gemini) have very large context windows
+    // No need for chunking - they handle long texts efficiently
+    if (this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI) {
+      console.log(`Skipping chunking for cloud provider: ${this.provider} (large context window)`);
+      return false;
+    }
+    
+    // Only chunk for local providers with very long texts
+    const thresholds = {
+      [AI_PROVIDERS.LOCAL]: 20000,   // ~5000 tokens (local models need smaller chunks)
+      [AI_PROVIDERS.MLX]: 20000,     // ~5000 tokens (local models need smaller chunks)
+    };
+
+    const threshold = thresholds[this.provider] || 20000;
+    const shouldChunk = text.length > threshold;
+    
+    if (shouldChunk) {
+      console.log(`Text length ${text.length} > threshold ${threshold}, using chunking for local provider`);
+    }
+    
+    return shouldChunk;
+  }
+
+  /**
+   * Combine multiple chunk analyses into a single comprehensive result
+   * @param {Array} chunkResults - Array of chunk analysis results
+   * @param {string} originalText - Original full text for reference
+   * @returns {object} - Combined analysis result
+   */
+  combineChunkAnalyses(chunkResults, originalText) {
+    const validResults = chunkResults.filter(result => !result.error);
+    
+    if (validResults.length === 0) {
+      throw new Error('No valid chunk analyses to combine');
+    }
+
+    // Combine scenes
+    const allScenes = [];
+    let sceneNumberOffset = 0;
+
+    for (const result of validResults) {
+      if (result.scenes) {
+        const adjustedScenes = result.scenes.map(scene => ({
+          ...scene,
+          number: scene.number + sceneNumberOffset,
+          chunkIndex: result.chunkIndex,
+        }));
+        allScenes.push(...adjustedScenes);
+        sceneNumberOffset = Math.max(sceneNumberOffset, ...result.scenes.map(s => s.number));
+      }
+    }
+
+    // Combine and deduplicate locations
+    const locationMap = new Map();
+    for (const result of validResults) {
+      if (result.locations) {
+        for (const location of result.locations) {
+          const key = `${location.type}-${location.name}`;
+          if (locationMap.has(key)) {
+            const existing = locationMap.get(key);
+            existing.sceneCount += location.sceneCount;
+            existing.estimatedShootingDays += location.estimatedShootingDays;
+          } else {
+            locationMap.set(key, { ...location });
+          }
+        }
+      }
+    }
+
+    // Combine and deduplicate characters
+    const characterMap = new Map();
+    for (const result of validResults) {
+      if (result.characters) {
+        for (const character of result.characters) {
+          if (characterMap.has(character.name)) {
+            const existing = characterMap.get(character.name);
+            existing.sceneCount += character.sceneCount;
+            // Keep the most detailed description
+            if (character.description && character.description.length > existing.description.length) {
+              existing.description = character.description;
+            }
+          } else {
+            characterMap.set(character.name, { ...character });
+          }
+        }
+      }
+    }
+
+    // Combine equipment
+    const allEquipment = [];
+    for (const result of validResults) {
+      if (result.equipment) {
+        allEquipment.push(...result.equipment.map(eq => ({
+          ...eq,
+          chunkIndex: result.chunkIndex,
+        })));
+      }
+    }
+
+    // Create combined summary
+    const totalScenes = allScenes.length;
+    const estimatedRuntime = validResults.reduce((sum, result) => {
+      return sum + (result.partialSummary?.estimatedChunkRuntime || 0);
+    }, 0);
+
+    // Estimate shooting days based on locations and scenes
+    const estimatedShootingDays = Array.from(locationMap.values()).reduce((sum, loc) => {
+      return sum + (loc.estimatedShootingDays || 0);
+    }, 0);
+
+    return {
+      scenes: allScenes,
+      locations: Array.from(locationMap.values()),
+      characters: Array.from(characterMap.values()),
+      equipment: allEquipment,
+      summary: {
+        totalScenes,
+        estimatedRuntime: Math.round(estimatedRuntime),
+        estimatedShootingDays: Math.round(estimatedShootingDays * 10) / 10,
+        chunksAnalyzed: validResults.length,
+        chunksWithErrors: chunkResults.length - validResults.length,
+      },
+      chunkingInfo: {
+        totalChunks: chunkResults.length,
+        successfulChunks: validResults.length,
+        failedChunks: chunkResults.length - validResults.length,
+        chunkDetails: chunkResults.map(result => ({
+          chunkIndex: result.chunkIndex,
+          success: !result.error,
+          error: result.error,
+          chunkInfo: result.chunkInfo,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Enhanced Screenplay Analysis
+   * Combines AI analysis with advanced NLP processing
+   */
+  async analyzeScreenplayEnhanced(text, scenes = [], characters = [], options = {}) {
+    return await this.enhancedAnalysisEngine.analyzeScreenplayEnhanced(
+      text,
+      scenes,
+      characters,
+      options
+    );
+  }
+}
+
+/**
+ * Grammar correction levels for different use cases
+ */
+export const GRAMMAR_LEVELS = {
+  BASIC: 'basic',
+  STANDARD: 'standard', 
+  ADVANCED: 'advanced',
+  PRESERVE_STYLE: 'preserve_style',
+};
 
 /**
  * Specialized prompts for screenplay tasks
  */
 export const SCREENPLAY_PROMPTS = {
   GRAMMAR_CORRECTION: {
-    system: `You are an expert screenplay editor. Your task is to correct grammar and spelling errors in screenplay text while maintaining the original formatting, structure, and style. 
+    system: {
+      [GRAMMAR_LEVELS.BASIC]: `You are a helpful assistant. Fix only the most obvious spelling and grammar mistakes in the text. Do NOT change the writing style, format, or structure. Keep everything exactly the same except fix clear errors.
+
+SIMPLE RULES:
+- Fix spelling mistakes
+- Fix basic grammar errors (like wrong verb forms)
+- Keep all formatting exactly the same
+- Do not rewrite sentences
+- Return only the corrected text, nothing else`,
+
+      [GRAMMAR_LEVELS.STANDARD]: `You are an expert screenplay editor. Your task is to correct grammar and spelling errors in screenplay text while maintaining the original formatting, structure, and style. 
 
 IMPORTANT RULES:
 - Keep ALL formatting intact (scene headings, character names, parentheticals, etc.)
@@ -338,9 +1282,47 @@ IMPORTANT RULES:
 - Do NOT add or remove scenes
 - Preserve the screenplay format (INT/EXT, character names in CAPS, etc.)
 - Return ONLY the corrected text, no explanations`,
+
+      [GRAMMAR_LEVELS.ADVANCED]: `You are a professional screenplay editor with expertise in both grammar and screenplay formatting. Your task is to:
+
+1. GRAMMAR & SPELLING: Correct all grammar, spelling, and punctuation errors
+2. SCREENPLAY FORMAT: Ensure proper screenplay formatting standards
+3. STYLE CONSISTENCY: Maintain consistent writing style throughout
+
+STRICT RULES:
+- Keep ALL original formatting structure intact
+- Fix grammar, spelling, punctuation, and formatting inconsistencies
+- Maintain the author's voice and creative choices
+- Preserve all scene headers, character names (CAPS), and parentheticals
+- Return ONLY the corrected text, no explanations or comments`,
+
+      [GRAMMAR_LEVELS.PRESERVE_STYLE]: `You are a gentle text editor. Your only job is to fix clear mistakes while keeping everything else exactly the same.
+
+WHAT TO FIX:
+- Wrong spelled words (like "teh" → "the")  
+- Basic grammar mistakes (like "they was" → "they were")
+- Missing punctuation at end of sentences
+
+WHAT NOT TO CHANGE:
+- Writing style or tone
+- Sentence structure
+- Word choices
+- Any formatting
+- Creative language choices
+
+Keep it simple and only fix obvious errors. Return only the corrected text.`,
+    },
     
-    buildUserPrompt: (text) => 
-      `Please correct any grammar and spelling errors in the following screenplay text:\n\n${text}`,
+    buildUserPrompt: (text, level = GRAMMAR_LEVELS.STANDARD) => {
+      const prompts = {
+        [GRAMMAR_LEVELS.BASIC]: `Fix only obvious spelling and grammar mistakes in this text:\n\n${text}`,
+        [GRAMMAR_LEVELS.STANDARD]: `Please correct any grammar and spelling errors in the following screenplay text:\n\n${text}`,
+        [GRAMMAR_LEVELS.ADVANCED]: `Please correct grammar, spelling, and ensure proper screenplay formatting in the following text:\n\n${text}`,
+        [GRAMMAR_LEVELS.PRESERVE_STYLE]: `Fix only clear mistakes in this text, keep everything else the same:\n\n${text}`,
+      };
+      
+      return prompts[level] || prompts[GRAMMAR_LEVELS.STANDARD];
+    },
   },
 
   SCENE_ANALYSIS: {

@@ -154,19 +154,55 @@ export function formatForSpeedReading(text) {
  * Parse words with rich metadata for advanced RSVP reading
  * Converts text into structured word objects with page tracking and unique IDs
  * @param {string} text - Full screenplay text
- * @param {number} estimatedPageBreak - Approximate words per page (default: 250)
+ * @param {object} pageInfo - Page information from PDF and original ratio
+ * @param {number} pageInfo.pageCount - Total pages in original PDF
+ * @param {number} pageInfo.totalWords - Total words in original text
+ * @param {Array} pageInfo.pageBreaks - Custom page break positions
  * @returns {Array} - Array of word objects: {id: "uuid", word: "string", page: number, originalIndex: number}
  */
-export function parseWordsWithMetadata(text, estimatedPageBreak = 250) {
+export function parseWordsWithMetadata(text, pageInfo = null) {
   if (!text) return [];
 
   // Split text into words
   const words = text.split(/\s+/).filter(word => word.length > 0);
+  const totalWords = words.length;
 
-  // Generate unique IDs and calculate page numbers
+  let pageBreaks = [];
+  let wordsPerPage = 250; // Default fallback
+
+  if (pageInfo && pageInfo.pageCount > 0) {
+    // Use original page information to maintain accurate page tracking
+    wordsPerPage = Math.round(pageInfo.totalWords / pageInfo.pageCount);
+    
+    // Use custom page breaks if provided
+    if (pageInfo.pageBreaks && pageInfo.pageBreaks.length > 0) {
+      pageBreaks = pageInfo.pageBreaks;
+    } else {
+      // Calculate even distribution based on original ratio
+      for (let page = 1; page < pageInfo.pageCount; page++) {
+        const breakPoint = Math.round((page * totalWords) / pageInfo.pageCount);
+        pageBreaks.push(breakPoint);
+      }
+    }
+  } else {
+    // Fallback to estimated page breaks (250 words per page)
+    const estimatedPages = Math.ceil(totalWords / wordsPerPage);
+    for (let page = 1; page < estimatedPages; page++) {
+      pageBreaks.push(page * wordsPerPage);
+    }
+  }
+
+  // Generate word objects with page information
   return words.map((word, index) => {
-    // Calculate page based on word count (screenplay standard: ~1 page = 1 minute = ~250 words)
-    const page = Math.floor(index / estimatedPageBreak) + 1;
+    // Determine which page this word belongs to
+    let page = 1;
+    for (let i = 0; i < pageBreaks.length; i++) {
+      if (index >= pageBreaks[i]) {
+        page = i + 2;
+      } else {
+        break;
+      }
+    }
 
     return {
       id: `word-${index}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -175,6 +211,92 @@ export function parseWordsWithMetadata(text, estimatedPageBreak = 250) {
       originalIndex: index,
     };
   });
+}
+
+/**
+ * Calculate page position for current word index
+ * @param {number} currentWordIndex - Current word position
+ * @param {Array} words - Array of word objects with page info
+ * @returns {object} - Page position information
+ */
+export function calculatePagePosition(currentWordIndex, words) {
+  if (!words || words.length === 0 || currentWordIndex < 0) {
+    return { page: 1, progress: 0, totalPages: 1 };
+  }
+
+  const currentWord = words[currentWordIndex];
+  if (!currentWord) {
+    return { page: 1, progress: 0, totalPages: 1 };
+  }
+
+  const currentPage = currentWord.page;
+  const totalPages = Math.max(...words.map(w => w.page));
+  
+  // Calculate progress within current page
+  const wordsOnCurrentPage = words.filter(w => w.page === currentPage);
+  const currentWordOnPage = words.slice(0, currentWordIndex + 1).filter(w => w.page === currentPage).length;
+  const pageProgress = wordsOnCurrentPage.length > 0 ? (currentWordOnPage / wordsOnCurrentPage.length) * 100 : 0;
+
+  // Calculate overall progress
+  const overallProgress = words.length > 0 ? (currentWordIndex / words.length) * 100 : 0;
+
+  return {
+    page: currentPage,
+    totalPages: totalPages,
+    pageProgress: Math.round(pageProgress),
+    overallProgress: Math.round(overallProgress),
+    wordsOnPage: wordsOnCurrentPage.length,
+    wordPositionOnPage: currentWordOnPage
+  };
+}
+
+/**
+ * Preserve page ratios when text is edited (grammar corrections, etc.)
+ * @param {string} originalText - Original text
+ * @param {string} editedText - Edited text
+ * @param {object} originalPageInfo - Original page information
+ * @returns {object} - Updated page information for edited text
+ */
+export function preservePageRatios(originalText, editedText, originalPageInfo) {
+  if (!originalPageInfo || !originalText || !editedText) {
+    return null;
+  }
+
+  const originalWords = originalText.split(/\s+/).filter(w => w.length > 0);
+  const editedWords = editedText.split(/\s+/).filter(w => w.length > 0);
+  
+  const originalTotalWords = originalWords.length;
+  const editedTotalWords = editedWords.length;
+  const scaleFactor = editedTotalWords / originalTotalWords;
+
+  // Calculate new page breaks maintaining proportional distribution
+  const newPageBreaks = [];
+  const newWordsPerPage = [];
+  
+  let currentWordIndex = 0;
+  
+  for (let page = 1; page <= originalPageInfo.pageCount; page++) {
+    const originalWordsOnPage = originalPageInfo.wordsPerPage ? originalPageInfo.wordsPerPage[page - 1] : 
+                                Math.round(originalTotalWords / originalPageInfo.pageCount);
+    
+    const newWordsOnPage = Math.round(originalWordsOnPage * scaleFactor);
+    
+    currentWordIndex += newWordsOnPage;
+    
+    if (page < originalPageInfo.pageCount) {
+      newPageBreaks.push(Math.min(currentWordIndex, editedTotalWords));
+    }
+    
+    newWordsPerPage.push(newWordsOnPage);
+  }
+
+  return {
+    pageCount: originalPageInfo.pageCount,
+    totalWords: editedTotalWords,
+    pageBreaks: newPageBreaks,
+    wordsPerPage: newWordsPerPage,
+    scaleFactor: scaleFactor
+  };
 }
 
 /**
@@ -215,5 +337,266 @@ export function calculateReadingTime(wordCount, wpm = 250) {
     hours,
     minutes,
     formatted: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
+  };
+}
+
+/**
+ * Split text into chunks suitable for AI analysis
+ * Preserves scene boundaries and maintains context
+ * @param {string} text - Full screenplay text
+ * @param {object} options - Chunking options
+ * @param {number} options.maxTokens - Maximum tokens per chunk (default: 2000)
+ * @param {number} options.overlapTokens - Overlap between chunks (default: 200)
+ * @param {boolean} options.preserveScenes - Whether to preserve scene boundaries (default: true)
+ * @returns {Array} - Array of text chunks with metadata
+ */
+export function splitTextForAnalysis(text, options = {}) {
+  const {
+    maxTokens = 2000,
+    overlapTokens = 200,
+    preserveScenes = true,
+  } = options;
+
+  if (!text || text.trim().length === 0) {
+    return [];
+  }
+
+  // Rough token estimation: 1 token ≈ 4 characters
+  const maxChars = maxTokens * 4;
+  const overlapChars = overlapTokens * 4;
+
+  const chunks = [];
+  
+  if (preserveScenes) {
+    // Split by scenes first
+    const scenes = parseScenes(text);
+    
+    if (scenes.length === 0) {
+      // No scenes found, fall back to paragraph-based chunking
+      return splitByParagraphs(text, maxChars, overlapChars);
+    }
+
+    let currentChunk = '';
+    let currentScenes = [];
+    let chunkIndex = 0;
+
+    for (const scene of scenes) {
+      const sceneText = scene.text;
+      const combinedLength = currentChunk.length + sceneText.length;
+
+      if (combinedLength <= maxChars || currentChunk.length === 0) {
+        // Add scene to current chunk
+        currentChunk += (currentChunk ? '\n\n' : '') + sceneText;
+        currentScenes.push(scene);
+      } else {
+        // Current chunk is full, save it and start new one
+        if (currentChunk.length > 0) {
+          chunks.push({
+            index: chunkIndex++,
+            text: currentChunk.trim(),
+            scenes: [...currentScenes],
+            wordCount: currentChunk.split(/\s+/).length,
+            tokenEstimate: Math.ceil(currentChunk.length / 4),
+            type: 'scene-based',
+          });
+        }
+
+        // Start new chunk with current scene
+        currentChunk = sceneText;
+        currentScenes = [scene];
+
+        // If single scene is too large, split it further
+        if (sceneText.length > maxChars) {
+          const sceneParts = splitLargeScene(sceneText, maxChars, overlapChars);
+          
+          // Add scene parts as separate chunks
+          for (let i = 0; i < sceneParts.length; i++) {
+            chunks.push({
+              index: chunkIndex++,
+              text: sceneParts[i].text,
+              scenes: [{
+                ...scene,
+                partIndex: i,
+                totalParts: sceneParts.length,
+                isPartial: true,
+              }],
+              wordCount: sceneParts[i].text.split(/\s+/).length,
+              tokenEstimate: Math.ceil(sceneParts[i].text.length / 4),
+              type: 'scene-part',
+            });
+          }
+
+          // Reset current chunk
+          currentChunk = '';
+          currentScenes = [];
+        }
+      }
+    }
+
+    // Add remaining chunk
+    if (currentChunk.length > 0) {
+      chunks.push({
+        index: chunkIndex,
+        text: currentChunk.trim(),
+        scenes: currentScenes,
+        wordCount: currentChunk.split(/\s+/).length,
+        tokenEstimate: Math.ceil(currentChunk.length / 4),
+        type: 'scene-based',
+      });
+    }
+
+  } else {
+    // Simple paragraph-based chunking
+    return splitByParagraphs(text, maxChars, overlapChars);
+  }
+
+  return chunks;
+}
+
+/**
+ * Split text by paragraphs when scene parsing fails
+ * @param {string} text - Text to split
+ * @param {number} maxChars - Maximum characters per chunk
+ * @param {number} overlapChars - Overlap between chunks
+ * @returns {Array} - Array of text chunks
+ */
+function splitByParagraphs(text, maxChars, overlapChars) {
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+  const chunks = [];
+  let currentChunk = '';
+  let chunkIndex = 0;
+
+  for (const paragraph of paragraphs) {
+    const combinedLength = currentChunk.length + paragraph.length + 2; // +2 for line breaks
+
+    if (combinedLength <= maxChars || currentChunk.length === 0) {
+      currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
+    } else {
+      // Save current chunk
+      if (currentChunk.length > 0) {
+        chunks.push({
+          index: chunkIndex++,
+          text: currentChunk.trim(),
+          wordCount: currentChunk.split(/\s+/).length,
+          tokenEstimate: Math.ceil(currentChunk.length / 4),
+          type: 'paragraph-based',
+        });
+      }
+
+      // Start new chunk with overlap
+      const overlapText = getTextOverlap(currentChunk, overlapChars);
+      currentChunk = overlapText + (overlapText ? '\n\n' : '') + paragraph;
+    }
+  }
+
+  // Add remaining chunk
+  if (currentChunk.length > 0) {
+    chunks.push({
+      index: chunkIndex,
+      text: currentChunk.trim(),
+      wordCount: currentChunk.split(/\s+/).length,
+      tokenEstimate: Math.ceil(currentChunk.length / 4),
+      type: 'paragraph-based',
+    });
+  }
+
+  return chunks;
+}
+
+/**
+ * Split a large scene into smaller parts
+ * @param {string} sceneText - Scene text to split
+ * @param {number} maxChars - Maximum characters per part
+ * @param {number} overlapChars - Overlap between parts
+ * @returns {Array} - Array of scene parts
+ */
+function splitLargeScene(sceneText, maxChars, overlapChars) {
+  const parts = [];
+  const sentences = sceneText.split(/[.!?]+\s+/).filter(s => s.trim().length > 0);
+  
+  let currentPart = '';
+  
+  for (const sentence of sentences) {
+    const combinedLength = currentPart.length + sentence.length + 2;
+
+    if (combinedLength <= maxChars || currentPart.length === 0) {
+      currentPart += (currentPart ? '. ' : '') + sentence;
+    } else {
+      // Save current part
+      if (currentPart.length > 0) {
+        parts.push({
+          text: currentPart.trim() + '.',
+        });
+      }
+
+      // Start new part with overlap
+      const overlapText = getTextOverlap(currentPart, overlapChars);
+      currentPart = overlapText + (overlapText ? '. ' : '') + sentence;
+    }
+  }
+
+  // Add remaining part
+  if (currentPart.length > 0) {
+    parts.push({
+      text: currentPart.trim() + (currentPart.endsWith('.') ? '' : '.'),
+    });
+  }
+
+  return parts;
+}
+
+/**
+ * Get overlap text from the end of current chunk
+ * @param {string} text - Text to extract overlap from
+ * @param {number} overlapChars - Number of characters for overlap
+ * @returns {string} - Overlap text
+ */
+function getTextOverlap(text, overlapChars) {
+  if (!text || overlapChars <= 0) return '';
+  
+  if (text.length <= overlapChars) return text;
+  
+  // Try to break at word boundary
+  const overlapText = text.slice(-overlapChars);
+  const spaceIndex = overlapText.indexOf(' ');
+  
+  if (spaceIndex !== -1) {
+    return overlapText.slice(spaceIndex + 1);
+  }
+  
+  return overlapText;
+}
+
+/**
+ * Estimate optimal chunk size based on AI provider and model
+ * @param {string} provider - AI provider ('openai', 'gemini', 'local')
+ * @param {string} model - Model name
+ * @returns {object} - Recommended chunking options
+ */
+export function getOptimalChunkSize(provider, model = '') {
+  const configs = {
+    openai: {
+      'gpt-4': { maxTokens: 6000, overlapTokens: 500 },
+      'gpt-3.5-turbo': { maxTokens: 3000, overlapTokens: 300 },
+      default: { maxTokens: 3000, overlapTokens: 300 },
+    },
+    gemini: {
+      'gemini-pro': { maxTokens: 8000, overlapTokens: 600 },
+      default: { maxTokens: 4000, overlapTokens: 400 },
+    },
+    local: {
+      // Conservative for local models
+      default: { maxTokens: 1500, overlapTokens: 150 },
+      'llama': { maxTokens: 2000, overlapTokens: 200 },
+      'mistral': { maxTokens: 4000, overlapTokens: 400 },
+    },
+  };
+
+  const providerConfig = configs[provider] || configs.local;
+  const modelConfig = providerConfig[model.toLowerCase()] || providerConfig.default;
+
+  return {
+    ...modelConfig,
+    preserveScenes: true,
   };
 }

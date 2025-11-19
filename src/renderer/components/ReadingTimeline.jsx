@@ -47,68 +47,72 @@ export default function ReadingTimeline({ words, currentWordIndex, onSeek }) {
 
   return (
     <div className="bg-cinema-dark border-t border-cinema-gray px-6 py-4">
-      {/* Page and Progress Info */}
-      <div className="flex items-center justify-between mb-2 text-xs text-cinema-text-dim">
-        <div>
-          Page <span className="text-cinema-accent font-bold">{currentPage}</span> of {totalPages}
-        </div>
-        <div>
-          Word <span className="text-cinema-accent font-bold">{currentWordIndex + 1}</span> of {words.length}
-        </div>
-        <div>{currentPosition.toFixed(1)}% Complete</div>
-      </div>
-
-      {/* Timeline Container */}
-      <div
-        className="relative h-10 bg-cinema-gray rounded-lg cursor-pointer hover:bg-cinema-gray-light transition-colors group"
-        onClick={handleTimelineClick}
-      >
-        {/* Progress Fill */}
+      {/* Video Player Style Timeline */}
+      <div className="space-y-3">
+        {/* Main Timeline Container - More prominent like video player */}
         <div
-          className="absolute top-0 left-0 h-full bg-cinema-accent/30 rounded-lg transition-all duration-100"
-          style={{ width: `${currentPosition}%` }}
-        />
-
-        {/* Current Position Indicator */}
-        <div
-          className="absolute top-0 h-full w-1 bg-cinema-accent shadow-lg transition-all duration-100"
-          style={{ left: `${currentPosition}%` }}
+          className="relative h-6 bg-cinema-gray rounded-full cursor-pointer hover:bg-cinema-gray-light transition-all duration-200 group shadow-inner"
+          onClick={handleTimelineClick}
         >
-          {/* Playhead Handle */}
-          <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-8 bg-cinema-accent rounded-full shadow-xl" />
-        </div>
-
-        {/* Page Markers (Vertical Ticks) */}
-        {pageMarkers.map((marker) => (
+          {/* Background track */}
+          <div className="absolute inset-1 bg-black/20 rounded-full" />
+          
+          {/* Progress Fill - Like YouTube red progress */}
           <div
-            key={marker.page}
-            className="absolute top-0 h-full w-px bg-cinema-text-dim/30 hover:bg-cinema-accent hover:w-0.5 transition-all cursor-pointer group/marker"
-            style={{ left: `${marker.position}%` }}
-            onClick={(e) => handlePageMarkerClick(e, marker.index)}
-            title={`Page ${marker.page}`}
+            className="absolute top-1 left-1 bottom-1 bg-cinema-accent rounded-full transition-all duration-100 shadow-sm"
+            style={{ width: `calc(${currentPosition}% - 4px)` }}
+          />
+
+          {/* Page Markers (Vertical Ticks) - More visible */}
+          {pageMarkers.map((marker) => (
+            <div
+              key={marker.page}
+              className="absolute top-0 bottom-0 w-0.5 bg-white/40 hover:bg-cinema-accent hover:w-1 transition-all cursor-pointer group/marker z-10"
+              style={{ left: `${marker.position}%` }}
+              onClick={(e) => handlePageMarkerClick(e, marker.index)}
+              title={`Page ${marker.page}`}
+            >
+              {/* Page Number Tooltip */}
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-cinema-dark/95 px-3 py-1.5 rounded-md text-xs text-cinema-text whitespace-nowrap opacity-0 group-hover/marker:opacity-100 transition-opacity pointer-events-none border border-cinema-gray shadow-xl">
+                <div className="font-bold text-cinema-accent">Page {marker.page}</div>
+                <div className="text-cinema-text-dim">Click to jump</div>
+              </div>
+            </div>
+          ))}
+
+          {/* Current Position Indicator - More prominent playhead */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-cinema-accent border-2 border-white rounded-full shadow-lg transition-all duration-100 z-20 hover:scale-110"
+            style={{ left: `${currentPosition}%`, transform: `translateX(-50%) translateY(-50%)` }}
           >
-            {/* Page Number Tooltip (shown on hover) */}
-            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-cinema-dark px-2 py-1 rounded text-xs text-cinema-text whitespace-nowrap opacity-0 group-hover/marker:opacity-100 transition-opacity pointer-events-none">
-              Page {marker.page}
+            {/* Inner dot for better visibility */}
+            <div className="absolute inset-1 bg-white rounded-full" />
+          </div>
+
+          {/* Hover Preview with more detail */}
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-8 bg-cinema-dark/95 px-4 py-2 rounded-lg text-xs text-cinema-text whitespace-nowrap border border-cinema-gray shadow-xl">
+              <div className="font-bold">Click to navigate</div>
+              <div className="text-cinema-text-dim">Drag the timeline to scrub</div>
             </div>
           </div>
-        ))}
+        </div>
 
-        {/* Hover Preview (show word count on hover) */}
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-cinema-dark/90 px-3 py-1 rounded text-xs text-cinema-text whitespace-nowrap">
-            Click to seek
+        {/* Page Segments Display - Like YouTube chapters */}
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-4 text-cinema-text-dim">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-cinema-accent/30 rounded-sm" />
+              <span>Read ({Math.floor(currentPosition)}%)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-cinema-gray rounded-sm" />
+              <span>Remaining ({100 - Math.floor(currentPosition)}%)</span>
+            </div>
           </div>
-        </div>
-      </div>
-
-      {/* Timeline Stats */}
-      <div className="mt-2 flex items-center justify-between text-xs text-cinema-text-dim">
-        <div>
-          {Math.floor((currentWordIndex / words.length) * 100)}% read
-        </div>
-        <div>
-          {words.length - currentWordIndex} words remaining
+          <div className="text-cinema-accent font-bold">
+            {totalPages} Pages • {words.length.toLocaleString()} Words
+          </div>
         </div>
       </div>
     </div>

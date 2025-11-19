@@ -11,7 +11,7 @@ import Header from './components/Header';
 function App() {
   const { scriptText, currentView } = useScriptStore();
   const { isFullscreen } = useReaderStore();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
 
   // In fullscreen mode, hide everything except the reader
   if (isFullscreen && currentView === 'reader') {
@@ -29,15 +29,15 @@ function App() {
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
+        {/* Sidebar - Responsive */}
         {sidebarOpen && (
-          <div className="w-80 bg-cinema-dark border-r border-cinema-gray overflow-y-auto">
+          <div className="w-64 md:w-72 lg:w-80 bg-cinema-dark border-r border-cinema-gray overflow-y-auto flex-shrink-0">
             <Sidebar />
           </div>
         )}
 
-        {/* Main Panel */}
-        <div className="flex-1 overflow-hidden">
+        {/* Main Panel - Responsive */}
+        <div className="flex-1 overflow-hidden min-w-0">
           {!scriptText ? (
             <PDFUploader />
           ) : (

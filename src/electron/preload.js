@@ -12,15 +12,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // File APIs
   readFile: (filePath) => ipcRenderer.invoke('file:read', filePath),
-  saveFileContent: (options) => ipcRenderer.invoke('file:save', options),
+  saveFileContent: (options) => ipcRenderer.invoke('file:saveContent', options),
+  generateDocument: (options) => ipcRenderer.invoke('document:generate', options),
 
   // App APIs
   getAppPath: (name) => ipcRenderer.invoke('app:getPath', name),
+  closeApp: () => ipcRenderer.invoke('app:quit'),
 
   // Window APIs
   toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
   isFullscreen: () => ipcRenderer.invoke('window:isFullscreen'),
   exitFullscreen: () => ipcRenderer.invoke('window:exitFullscreen'),
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
+  closeWindow: () => ipcRenderer.invoke('window:close'),
 
   // Platform info
   platform: process.platform,

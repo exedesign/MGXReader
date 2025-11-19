@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AI_PROVIDERS } from '../utils/aiHandler';
+import AIHandler, { AI_PROVIDERS } from '../utils/aiHandler';
 
 export const useAIStore = create(
   persist(
@@ -14,7 +14,7 @@ export const useAIStore = create(
       
       // Gemini Configuration
       geminiApiKey: '',
-      geminiModel: 'gemini-1.5-pro-latest',
+      geminiModel: 'gemini-2.0-flash',
       
       // Local AI Configuration
       localEndpoint: 'http://localhost:11434',
@@ -138,7 +138,7 @@ export const useAIStore = create(
         openaiApiKey: '',
         openaiModel: 'gpt-4-turbo-preview',
         geminiApiKey: '',
-        geminiModel: 'gemini-1.5-pro-latest',
+        geminiModel: 'gemini-2.0-flash',
         localEndpoint: 'http://localhost:11434',
         localModel: 'llama3',
         localTemperature: 0.3,
@@ -150,13 +150,39 @@ export const useAIStore = create(
         isConnected: false,
         lastTestedProvider: null,
       }),
+
+      // Reset Gemini model to current working model  
+      resetGeminiModel: () => set({
+        geminiModel: 'gemini-2.0-flash'
+      }),
+
+      // Get configured AI handler instance
+      getAIHandler: () => {
+        const state = get();
+        return new AIHandler({
+          provider: state.provider,
+          apiKey: state.provider === AI_PROVIDERS.OPENAI ? state.openaiApiKey :
+                  state.provider === AI_PROVIDERS.GEMINI ? state.geminiApiKey : '',
+          model: state.provider === AI_PROVIDERS.OPENAI ? state.openaiModel :
+                 state.provider === AI_PROVIDERS.GEMINI ? state.geminiModel :
+                 state.provider === AI_PROVIDERS.LOCAL ? state.localModel :
+                 state.provider === AI_PROVIDERS.MLX ? state.mlxModel : '',
+          localEndpoint: state.localEndpoint,
+          localModel: state.localModel,
+          mlxEndpoint: state.mlxEndpoint,
+          mlxModel: state.mlxModel,
+          temperature: state.temperature,
+        });
+      },
     }),
     {
       name: 'scriptmaster-ai-settings',
       // Only persist sensitive data in electron-store, not in localStorage
       partialize: (state) => ({
         provider: state.provider,
+        openaiApiKey: state.openaiApiKey,
         openaiModel: state.openaiModel,
+        geminiApiKey: state.geminiApiKey,
         geminiModel: state.geminiModel,
         localEndpoint: state.localEndpoint,
         localModel: state.localModel,
@@ -166,7 +192,6 @@ export const useAIStore = create(
         mlxTemperature: state.mlxTemperature,
         temperature: state.temperature,
         maxTokens: state.maxTokens,
-        // API keys should be stored securely via electron-store
       }),
     }
   )

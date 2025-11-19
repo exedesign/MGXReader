@@ -4,11 +4,14 @@
   "description": "AI-Powered Screenplay Analysis and Speed Reading Tool",
   "main": "src/electron/main.js",
   "scripts": {
-    "start": "concurrently \"npm run start:react\" \"wait-on http://localhost:3000 && electron .\"",
+    "start": "concurrently \"npm run start:react\" \"npm run start:electron:delay\"",
     "start:react": "vite",
     "start:electron": "electron .",
+    "start:electron:delay": "powershell -c \"Start-Sleep 5; electron .\"",
     "build": "vite build",
     "build:electron": "electron-builder",
+    "build:portable": "npm run build && electron-builder --win portable",
+    "build:all": "npm run build && electron-builder --mac --win --linux",
     "postinstall": "electron-builder install-app-deps"
   },
   "keywords": [
@@ -37,31 +40,80 @@
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
-        "dmg",
-        "zip"
-      ]
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.icns"
     },
     "win": {
       "target": [
-        "nsis",
-        "portable"
-      ]
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "forceCodeSigning": false,
+      "verifyUpdateCodeSignature": false
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
-      ]
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
     }
   },
   "dependencies": {
     "@google/generative-ai": "^0.2.1",
     "axios": "^1.6.2",
+    "cheerio": "^1.1.2",
+    "compromise": "^14.14.4",
     "electron-store": "^8.1.0",
+    "i18next": "^25.6.2",
+    "i18next-browser-languagedetector": "^8.2.0",
+    "i18next-http-backend": "^3.0.2",
+    "jszip": "^3.10.1",
+    "natural": "^8.1.0",
     "openai": "^4.104.0",
     "pdf-parse": "^1.1.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-i18next": "^16.3.3",
+    "sentiment": "^5.0.2",
+    "xml2js": "^0.6.2",
     "zustand": "^4.4.7"
   },
   "devDependencies": {
@@ -73,6 +125,7 @@
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",
     "vite": "^5.0.10",
+    "vite-plugin-node-polyfills": "^0.24.0",
     "wait-on": "^7.2.0"
   }
 }
