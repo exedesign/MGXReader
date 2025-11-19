@@ -259,7 +259,7 @@ export class AIHandler {
         headers: {
           'Content-Type': 'application/json',
         },
-        timeout: 120000, // 2 minutes timeout for local inference
+        timeout: 180000, // 3 minutes timeout for local inference (increased from 2 min)
       }
     );
 
@@ -314,11 +314,14 @@ ${chunks[i]}`;
         );
         chunkResults.push(result);
         
-        // Small delay to prevent overwhelming the local model
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Delay between chunks - longer for local models
+        const delay = (this.provider === AI_PROVIDERS.MLX || this.provider === AI_PROVIDERS.LOCAL) ? 1000 : 300;
+        console.log(`⏳ Waiting ${delay}ms before next chunk...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       } catch (error) {
-        console.error(`Error analyzing chunk ${i + 1}:`, error);
-        chunkResults.push(`Error in chunk ${i + 1}: ${error.message}`);
+        console.error(`❌ Error analyzing chunk ${i + 1}:`, error.message);
+        // Don't add error chunks to results - just skip them
+        console.warn(`⚠️ Skipping chunk ${i + 1} due to error`);
       }
     }
 
@@ -365,31 +368,117 @@ ${chunks[i]}`;
 
   /**
    * Merge chunk analysis results into a coherent final analysis
+   * Simplified merge strategy for better reliability
    */
   async _mergeChunkResults(systemPrompt, chunkResults, temperature) {
-    const mergePrompt = `You have analyzed a screenplay in ${chunkResults.length} parts. 
-Now merge these partial analyses into ONE complete, coherent JSON response.
+    console.log(`📦 Starting merge of ${chunkResults.length} chunks...`);
+    
+    // For MLX and local models, use simple concatenation strategy
+    // instead of AI merge to avoid timeout and complexity
+    if (this.provider === AI_PROVIDERS.MLX || this.provider === AI_PROVIDERS.LOCAL) {
+      console.log('📦 Using simple merge strategy for local model...');
+      return this._simpleChunkMerge(chunkResults);
+    }
 
-Combine all scenes, characters, locations, and equipment from all parts.
-Remove duplicates and create a unified analysis.
-
-Partial analyses:
-${chunkResults.map((result, i) => `\n--- Part ${i + 1} ---\n${result}`).join('\n')}
-
-Provide the final merged analysis as a single valid JSON object following the original format.`;
-
+    // For cloud providers, try AI-based merge with shorter timeout
     try {
+      const mergePrompt = `Merge these screenplay analysis parts into ONE JSON.
+Parts: ${chunkResults.length}
+
+${chunkResults.slice(0, 5).map((r, i) => `Part ${i + 1}:\n${r.substring(0, 500)}`).join('\n\n')}
+
+Return only valid JSON.`;
+
       const merged = await this.generateText(
-        'You are merging screenplay analysis data.',
+        'You are merging screenplay data.',
         mergePrompt,
-        { temperature: 0.1, maxTokens: 3000 } // Low temperature for consistent merging
+        { temperature: 0.1, maxTokens: 2000 }
       );
       return merged;
     } catch (error) {
-      console.error('Error merging chunks:', error);
-      // Fallback: return concatenated results
-      return chunkResults.join('\n\n---\n\n');
+      console.error('AI merge failed, using simple merge:', error);
+      return this._simpleChunkMerge(chunkResults);
     }
+  }
+
+  /**
+   * Simple merge strategy: combine all chunk results manually
+   */
+  _simpleChunkMerge(chunkResults) {
+    console.log('📦 Performing simple manual merge...');
+    
+    const merged = {
+      scenes: [],
+      locations: [],
+      characters: [],
+      equipment: [],
+      summary: {
+        totalScenes: 0,
+        estimatedRuntime: 0,
+        estimatedShootingDays: 0
+      }
+    };
+
+    // Extract data from each chunk result
+    for (let i = 0; i < chunkResults.length; i++) {
+      try {
+        const cleaned = chunkResults[i]
+          .replace(/```json\n?/g, '')
+          .replace(/```\n?/g, '')
+          .trim();
+        
+        const data = JSON.parse(cleaned);
+        
+        // Merge scenes
+        if (data.scenes && Array.isArray(data.scenes)) {
+          merged.scenes.push(...data.scenes);
+        }
+        
+        // Merge locations (with deduplication)
+        if (data.locations && Array.isArray(data.locations)) {
+          data.locations.forEach(loc => {
+            if (!merged.locations.find(l => l.name === loc.name)) {
+              merged.locations.push(loc);
+            }
+          });
+        }
+        
+        // Merge characters (with deduplication)
+        if (data.characters && Array.isArray(data.characters)) {
+          data.characters.forEach(char => {
+            const existing = merged.characters.find(c => c.name === char.name);
+            if (existing) {
+              existing.sceneCount += (char.sceneCount || 0);
+            } else {
+              merged.characters.push(char);
+            }
+          });
+        }
+        
+        // Merge equipment
+        if (data.equipment && Array.isArray(data.equipment)) {
+          merged.equipment.push(...data.equipment);
+        }
+        
+        console.log(`📦 Merged chunk ${i + 1}/${chunkResults.length}`);
+      } catch (err) {
+        console.warn(`⚠️ Could not parse chunk ${i + 1}, skipping:`, err.message);
+      }
+    }
+
+    // Update summary
+    merged.summary.totalScenes = merged.scenes.length;
+    merged.summary.estimatedRuntime = merged.scenes.length * 2; // 2 min per scene
+    merged.summary.estimatedShootingDays = Math.ceil(merged.scenes.length / 5); // 5 scenes per day
+
+    console.log('✅ Merge complete:', {
+      scenes: merged.scenes.length,
+      characters: merged.characters.length,
+      locations: merged.locations.length,
+      equipment: merged.equipment.length
+    });
+
+    return JSON.stringify(merged, null, 2);
   }
 
   /**
