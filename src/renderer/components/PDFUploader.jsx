@@ -199,47 +199,45 @@ export default function PDFUploader() {
     <div className="flex items-center justify-center h-full bg-cinema-black p-8">
       <div className="max-w-2xl w-full">
         {/* OCR Settings */}
-        {isOCRAvailable() && (
-          <div className="mb-6 p-4 bg-cinema-dark rounded-lg border border-cinema-gray">
-            <div className="flex items-start gap-4">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="enableOCR"
-                  checked={useOCR}
-                  onChange={(e) => setUseOCR(e.target.checked)}
-                  className="w-5 h-5 rounded border-cinema-gray bg-cinema-gray-light text-cinema-accent focus:ring-2 focus:ring-cinema-accent cursor-pointer"
-                />
-              </div>
-              <div className="flex-1">
-                <label htmlFor="enableOCR" className="text-sm font-medium text-cinema-text cursor-pointer block mb-1">
-                  {t('uploader.enableOCR', 'Enable OCR (Optical Character Recognition)')}
-                </label>
-                <p className="text-xs text-cinema-text-dim mb-3">
-                  {t('uploader.ocrHint', 'Use OCR for scanned PDFs or images without extractable text. Processing may take longer.')}
-                </p>
-                
-                {useOCR && (
-                  <div className="flex items-center gap-3">
-                    <label htmlFor="ocrLanguage" className="text-xs text-cinema-text-dim">
-                      {t('uploader.ocrLanguage', 'OCR Language')}:
-                    </label>
-                    <select
-                      id="ocrLanguage"
-                      value={ocrLanguage}
-                      onChange={(e) => setOcrLanguage(e.target.value)}
-                      className="px-3 py-1 bg-cinema-gray border border-cinema-gray-light rounded text-sm text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:outline-none"
-                    >
-                      <option value="tur+eng">{t('uploader.turkishEnglish', 'Turkish + English')}</option>
-                      <option value="tur">{t('uploader.turkish', 'Turkish')}</option>
-                      <option value="eng">{t('uploader.english', 'English')}</option>
-                    </select>
-                  </div>
-                )}
-              </div>
+        <div className="mb-6 p-4 bg-cinema-dark rounded-lg border border-cinema-gray">
+          <div className="flex items-start gap-4">
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="enableOCR"
+                checked={useOCR}
+                onChange={(e) => setUseOCR(e.target.checked)}
+                className="w-5 h-5 rounded border-cinema-gray bg-cinema-gray-light text-cinema-accent focus:ring-2 focus:ring-cinema-accent cursor-pointer"
+              />
+            </div>
+            <div className="flex-1">
+              <label htmlFor="enableOCR" className="text-sm font-medium text-cinema-text cursor-pointer block mb-1">
+                {t('uploader.enableOCR', 'Enable OCR (Optical Character Recognition)')}
+              </label>
+              <p className="text-xs text-cinema-text-dim mb-3">
+                {t('uploader.ocrHint', 'Use OCR for scanned PDFs or images without extractable text. Processing may take longer.')}
+              </p>
+              
+              {useOCR && (
+                <div className="flex items-center gap-3">
+                  <label htmlFor="ocrLanguage" className="text-xs text-cinema-text-dim">
+                    {t('uploader.ocrLanguage', 'OCR Language')}:
+                  </label>
+                  <select
+                    id="ocrLanguage"
+                    value={ocrLanguage}
+                    onChange={(e) => setOcrLanguage(e.target.value)}
+                    className="px-3 py-1 bg-cinema-gray border border-cinema-gray-light rounded text-sm text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:outline-none"
+                  >
+                    <option value="tur+eng">{t('uploader.turkishEnglish', 'Turkish + English')}</option>
+                    <option value="tur">{t('uploader.turkish', 'Turkish')}</option>
+                    <option value="eng">{t('uploader.english', 'English')}</option>
+                  </select>
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
 
         {/* OCR Progress Indicator */}
         {ocrProgress && (
