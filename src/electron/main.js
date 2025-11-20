@@ -187,6 +187,27 @@ ipcMain.handle('dialog:openFile', async () => {
   return result.filePaths[0];
 });
 
+// Open multiple files dialog and return file paths
+ipcMain.handle('dialog:openFiles', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Screenplay Files', extensions: ['pdf', 'fdx', 'celtx', 'txt', 'docx'] },
+      { name: 'PDF Files', extensions: ['pdf'] },
+      { name: 'Final Draft Files', extensions: ['fdx'] },
+      { name: 'Celtx Files', extensions: ['celtx'] },
+      { name: 'Text Files', extensions: ['txt', 'docx'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (result.canceled) {
+    return null;
+  }
+
+  return result.filePaths;
+});
+
 // Get PDF info (page count, etc.)
 ipcMain.handle('pdf:getInfo', async (event, filePath) => {
   try {

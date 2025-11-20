@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useScriptStore } from './store/scriptStore';
 import { useReaderStore } from './store/readerStore';
-import Sidebar from './components/Sidebar';
-import PDFUploader from './components/PDFUploader';
+import TabbedSidebar from './components/TabbedSidebar';
+import MultiScriptImporter from './components/MultiScriptImporter';
 import TextEditor from './components/TextEditor';
 import AnalysisPanel from './components/AnalysisPanel';
 import SpeedReader from './components/SpeedReader';
+import SceneManagement from './components/SceneManagement';
 import Header from './components/Header';
 
 function App() {
-  const { scriptText, currentView } = useScriptStore();
+  const { scriptText, currentView, scripts, currentScriptId, isAnalyzing, analysisProgress } = useScriptStore();
   const { isFullscreen } = useReaderStore();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
 
@@ -27,24 +28,50 @@ function App() {
       {/* Header */}
       <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
+      {/* Global Analysis Progress Bar */}
+      {isAnalyzing && analysisProgress && (
+        <div className="bg-cinema-dark border-b border-cinema-gray px-4 py-3 z-50">
+          <div className="flex items-center justify-between text-sm text-cinema-text-dim mb-2">
+            <span className="font-medium">🎬 {analysisProgress.message}</span>
+            {analysisProgress.currentChunk && analysisProgress.totalChunks && (
+              <span className="text-xs">
+                Chunk {analysisProgress.currentChunk} / {analysisProgress.totalChunks}
+              </span>
+            )}
+            <span className="font-bold text-cinema-accent">{Math.round(analysisProgress.progress || 0)}%</span>
+          </div>
+          <div className="w-full bg-cinema-gray-light rounded-full h-2.5">
+            <div
+              className="bg-gradient-to-r from-cinema-accent to-cinema-accent/70 h-2.5 rounded-full transition-all duration-300 shadow-lg"
+              style={{ width: `${analysisProgress.progress || 0}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - Responsive */}
+        {/* Sidebar - Tabbed Navigation */}
         {sidebarOpen && (
-          <div className="w-64 md:w-72 lg:w-80 bg-cinema-dark border-r border-cinema-gray overflow-y-auto flex-shrink-0">
-            <Sidebar />
-          </div>
+          <TabbedSidebar />
         )}
 
-        {/* Main Panel - Responsive */}
+        {/* Main Panel */}
         <div className="flex-1 overflow-hidden min-w-0">
-          {!scriptText ? (
-            <PDFUploader />
+          {/* Main Content */}
+          {currentView === 'uploader' || (!scriptText && scripts.length === 0) ? (
+            // No scripts yet or uploader view - show universal importer
+            <MultiScriptImporter />
+          ) : !scriptText && scripts.length > 0 ? (
+            // Scripts exist but none selected - show universal importer
+            <MultiScriptImporter />
           ) : (
+            // Script is selected - show content
             <>
               {currentView === 'editor' && <TextEditor />}
               {currentView === 'analysis' && <AnalysisPanel />}
               {currentView === 'reader' && <SpeedReader />}
+              {currentView === 'scenes' && <SceneManagement />}
             </>
           )}
         </div>

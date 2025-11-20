@@ -7,30 +7,33 @@ import { cleanScreenplayText } from '../utils/textProcessing';
 export default function TextEditor() {
   const { t } = useTranslation();
   const { scriptText, cleanedText, setCleanedText } = useScriptStore();
-  const { wordFilter, wordFilterEnabled, setWordFilterEnabled, setWordFilter } = useReaderStore();
+  const { wordFilter, wordFilterEnabled, setWordFilterEnabled, setWordFilter, blacklist, addToBlacklist } = useReaderStore();
   const [isEditing, setIsEditing] = useState(false);
   const [viewMode, setViewMode] = useState('cleaned'); // 'raw' or 'cleaned'
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, selectedText: '' });
 
   const baseDisplayText = viewMode === 'raw' ? scriptText : cleanedText;
 
-  // Apply word filter automatically if words exist
+  // Apply blacklist filter automatically if blacklist exists
   const finalDisplayText = useMemo(() => {
-    if (!wordFilter?.length || !baseDisplayText) {
+    if (!blacklist?.length || !baseDisplayText) {
       return baseDisplayText;
     }
 
     let filteredText = baseDisplayText;
-    wordFilter.forEach(word => {
-      if (word?.trim()) {
-        const regex = new RegExp(`\\b${word.trim()}\\b`, 'gi');
+    blacklist.forEach(word => {
+      const trimmedWord = word?.trim();
+      if (trimmedWord && trimmedWord.length > 0) {
+        // Escape special regex characters and create regex for word boundaries
+        const escapedWord = trimmedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`\\b${escapedWord}\\b`, 'gi');
         filteredText = filteredText.replace(regex, '');
       }
     });
 
-    // Clean up extra whitespace
-    return filteredText.replace(/\s+/g, ' ').trim();
-  }, [baseDisplayText, wordFilter]);
+    // Clean up extra whitespace and multiple spaces
+    return filteredText.replace(/\s+/g, ' ').replace(/\n\s*\n/g, '\n').trim();
+  }, [baseDisplayText, blacklist]);
 
   // Context menu handlers
   const handleContextMenu = (e) => {
@@ -50,9 +53,10 @@ export default function TextEditor() {
   };
 
   const handleAddToFilter = () => {
-    if (contextMenu.selectedText && !wordFilter.includes(contextMenu.selectedText)) {
-      const newFilter = [...(wordFilter || []), contextMenu.selectedText];
-      setWordFilter(newFilter);
+    if (contextMenu.selectedText && !blacklist.includes(contextMenu.selectedText.toUpperCase())) {
+      addToBlacklist(contextMenu.selectedText);
+      // Visual feedback
+      console.log(`"${contextMenu.selectedText}" kelimesi blacklist'e eklendi`);
     }
     setContextMenu({ visible: false, x: 0, y: 0, selectedText: '' });
   };
@@ -130,6 +134,16 @@ export default function TextEditor() {
               </button>
             </div>
 
+            {/* Filter Status Indicator */}
+            {blacklist?.length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 text-blue-400 rounded-lg text-sm">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+                {blacklist.length} kelime filtrelendi
+              </div>
+            )}
+
             <button
               onClick={() => setIsEditing(!isEditing)}
               className={`px-4 py-2 rounded-lg text-sm transition-colors ${isEditing
@@ -143,9 +157,9 @@ export default function TextEditor() {
             {/* Kelime Filtreleme Ayarları */}
             <button
               onClick={() => {
-                // UnifiedSettings modal'ını aç ve Reader tabına git
+                // UnifiedSettings modal'ını aç ve Filter tabına git
                 const settingsEvent = new CustomEvent('openUnifiedSettings', {
-                  detail: { activeTab: 'reader' }
+                  detail: { activeTab: 'filter' }
                 });
                 window.dispatchEvent(settingsEvent);
               }}

@@ -107,6 +107,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
   const views = [
     { id: 'editor', label: t('nav.editor', 'Editor'), icon: '📝' },
     { id: 'analysis', label: t('nav.analysis', 'Analysis'), icon: '🎬' },
+    { id: 'scenes', label: t('nav.scenes', 'Scenes'), icon: '🎭' },
     { id: 'reader', label: t('nav.speedReader', 'Speed Reader'), icon: '⚡' },
   ];
 

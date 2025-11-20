@@ -148,7 +148,7 @@ export class PDFExportService {
   }
 
   exportAnalysis(analysisData) {
-    console.log('PDFExportService - analysisData:', analysisData);
+    console.log('PDFExportService - analysisData:', JSON.stringify(analysisData, null, 2));
     
     if (!analysisData) {
       console.error('analysisData boş!');
@@ -158,87 +158,364 @@ export class PDFExportService {
     this.createDocument();
     
     // Header
-    this.addHeader('Senaryo Analiz Raporu');
+    this.addHeader('MGX Reader - Senaryo Analiz Raporu');
     
-    // Test content to ensure PDF is not empty
-    this.addSection('Test Bölümü', 'Bu bir test bölümüdür. Analiz verileri işlenecek...');
+    // Date info
+    this.addSection('📅 Rapor Bilgileri', `Oluşturulma Tarihi: ${new Date().toLocaleString('tr-TR')}`);
     
-    // General Info
-    if (analysisData.metadata) {
-      const generalInfo = {
-        'Analiz Türü': analysisData.metadata.analysisType || 'Standart Analiz',
-        'AI Provider': analysisData.metadata.provider || 'Bilinmiyor',
-        'Model': analysisData.metadata.model || 'Bilinmiyor',
-        'Tarih': new Date(analysisData.metadata.timestamp || Date.now()).toLocaleString('tr-TR')
-      };
-      
-      this.addSection('Genel Bilgiler', generalInfo);
-    }
+    // Analysis summary - always add this section first
+    this.addAnalysisSummary(analysisData);
     
-    // Main Analysis
-    if (analysisData.analysis) {
-      if (analysisData.analysis.summary) {
-        this.addSection('Özet', analysisData.analysis.summary);
-      }
-      
-      if (analysisData.analysis.characters && analysisData.analysis.characters.length > 0) {
-        this.addSection('Karakterler', analysisData.analysis.characters.map(char => ({
-          title: char.name || 'İsimsiz Karakter',
-          description: char.description || char.analysis || 'Açıklama yok'
-        })));
-      }
-      
-      if (analysisData.analysis.scenes && analysisData.analysis.scenes.length > 0) {
-        this.addSection('Sahneler', analysisData.analysis.scenes.map(scene => ({
-          title: scene.title || `Sahne ${scene.id || ''}`,
-          description: scene.description || scene.summary || 'Açıklama yok'
-        })));
-      }
-      
-      if (analysisData.analysis.themes && analysisData.analysis.themes.length > 0) {
-        this.addSection('Temalar', analysisData.analysis.themes.map(theme => 
-          typeof theme === 'string' ? theme : theme.name || theme.description || 'Tema'
-        ));
-      }
-      
-      if (analysisData.analysis.structure) {
-        this.addSection('Yapı Analizi', analysisData.analysis.structure);
-      }
-      
-      if (analysisData.analysis.recommendations) {
-        this.addSection('Öneriler', analysisData.analysis.recommendations);
-      }
-      
-      // Additional sections for specific analysis types
-      if (analysisData.analysis.dialogue) {
-        this.addSection('Diyalog Analizi', analysisData.analysis.dialogue);
-      }
-      
-      if (analysisData.analysis.marketability) {
-        this.addSection('Pazarlanabilirlik', analysisData.analysis.marketability);
-      }
-      
-      if (analysisData.analysis.production) {
-        this.addSection('Prodüksiyon Notları', analysisData.analysis.production);
-      }
-    }
-    
-    // Special Analysis sections
-    if (analysisData.specialAnalysis) {
-      Object.entries(analysisData.specialAnalysis).forEach(([key, value]) => {
-        if (value && typeof value === 'object' && Object.keys(value).length > 0) {
-          const sectionTitle = this.formatSectionTitle(key);
-          this.addSection(sectionTitle, value);
-        } else if (value && typeof value === 'string') {
-          const sectionTitle = this.formatSectionTitle(key);
-          this.addSection(sectionTitle, value);
-        }
-      });
-    }
+    // Process main analysis data with organized structure
+    this.processOrganizedAnalysisData(analysisData);
     
     this.addFooter();
     
     return this.doc;
+  }
+
+  processOrganizedAnalysisData(analysisData) {
+    // Priority sections for organized reporting
+    const prioritySections = [
+      { key: 'summary', title: '📋 Genel Özet' },
+      { key: 'customResults', title: '🎯 Özelleştirilmiş Analiz Sonuçları' },
+      { key: 'scenes', title: '🎬 Sahne Detayları' },
+      { key: 'characters', title: '👥 Karakter Analizi' },
+      { key: 'locations', title: '📍 Mekan Analizi' },
+      { key: 'equipment', title: '🛠️ Ekipman Gereksinimleri' },
+      { key: 'evaluation', title: '📊 Performans Değerlendirmesi' },
+      { key: 'competitiveAnalysis', title: '🏆 Rekabet Analizi' },
+      { key: 'audienceAnalysis', title: '🎯 Hedef Kitle Analizi' },
+      { key: 'vfxRequirements', title: '✨ VFX Gereksinimleri' },
+      { key: 'sfxRequirements', title: '🔊 SFX Gereksinimleri' },
+      { key: 'virtualProductionSuitability', title: '🎮 Sanal Prodüksiyon Uygunluğu' }
+    ];
+    
+    const processedKeys = new Set();
+    
+    // Process priority sections first
+    prioritySections.forEach(({ key, title }) => {
+      if (analysisData[key] !== undefined && analysisData[key] !== null) {
+        this.processPrioritySection(key, analysisData[key], title);
+        processedKeys.add(key);
+      }
+    });
+    
+    // Process remaining sections
+    Object.entries(analysisData).forEach(([key, value]) => {
+      if (!processedKeys.has(key) && value !== null && value !== undefined) {
+        this.processAnalysisSection(key, value);
+      }
+    });
+  }
+
+  processPrioritySection(key, value, customTitle) {
+    if (key === 'customResults' && typeof value === 'object') {
+      this.addSection(customTitle, '');
+      Object.entries(value).forEach(([resultKey, resultData]) => {
+        const name = resultData?.name || resultKey;
+        const processedResult = this.processJSONContent(resultData);
+        this.addSubSection(`${name}`, processedResult);
+      });
+    } else {
+      const formattedContent = this.formatSectionContent(value);
+      this.addSection(customTitle, formattedContent);
+    }
+  }
+
+  processAnalysisSection(key, value) {
+    const sectionTitle = this.formatSectionTitle(key);
+    const formattedContent = this.formatSectionContent(value);
+    this.addSection(sectionTitle, formattedContent);
+  }
+
+  formatSectionContent(value) {
+    if (Array.isArray(value) && value.length > 0) {
+      return value.map((item, index) => {
+        if (typeof item === 'string') {
+          return `${index + 1}. ${item}`;
+        } else if (typeof item === 'object' && item !== null) {
+          return `${index + 1}. ${this.formatJSONObject(item)}`;
+        }
+        return `${index + 1}. ${String(item)}`;
+      });
+    } else if (typeof value === 'object' && value !== null) {
+      return this.formatJSONObject(value);
+    } else if (typeof value === 'string' && value.trim()) {
+      return this.cleanJSONString(value);
+    } else if (typeof value === 'number') {
+      return String(value);
+    } else {
+      return 'Veri mevcut değil';
+    }
+  }
+
+  formatJSONObject(obj) {
+    try {
+      // Eğer bu bir analiz sonucu ise özel formatlama uygula
+      if (this.isAnalysisResult(obj)) {
+        return this.formatAnalysisResult(obj);
+      }
+      
+      // Eğer nested JSON string ise parse et
+      if (typeof obj === 'string') {
+        try {
+          const parsed = JSON.parse(obj);
+          return this.formatJSONObject(parsed);
+        } catch {
+          return this.cleanJSONString(obj);
+        }
+      }
+      
+      const entries = Object.entries(obj);
+      if (entries.length === 0) return 'Boş veri';
+      
+      return entries.map(([key, value]) => {
+        const formattedKey = this.formatJSONKey(key);
+        const formattedValue = this.formatJSONValue(value);
+        return `${formattedKey}: ${formattedValue}`;
+      }).join('\n');
+    } catch (error) {
+      console.warn('JSON object formatting hatası:', error);
+      return String(obj);
+    }
+  }
+
+  isAnalysisResult(obj) {
+    // Analiz sonucu karakteristik alanları kontrol et
+    const analysisFields = ['name', 'result', 'status', 'timestamp', 'type', 'wordCount'];
+    const objectKeys = Object.keys(obj || {});
+    return analysisFields.some(field => objectKeys.includes(field));
+  }
+
+  formatAnalysisResult(result) {
+    const parts = [];
+    
+    if (result.name) {
+      parts.push(`Analiz Adı: ${result.name}`);
+    }
+    
+    if (result.type) {
+      parts.push(`Tür: ${this.formatSectionTitle(result.type)}`);
+    }
+    
+    if (result.status) {
+      const statusText = result.status === 'completed' ? 'Tamamlandı' : 
+                        result.status === 'failed' ? 'Başarısız' : result.status;
+      parts.push(`Durum: ${statusText}`);
+    }
+    
+    if (result.wordCount) {
+      parts.push(`Kelime Sayısı: ${result.wordCount}`);
+    }
+    
+    if (result.timestamp) {
+      try {
+        const date = new Date(result.timestamp);
+        parts.push(`Tarih: ${date.toLocaleString('tr-TR')}`);
+      } catch {
+        parts.push(`Tarih: ${result.timestamp}`);
+      }
+    }
+    
+    if (result.result) {
+      parts.push('\nSonuç:');
+      const resultText = this.cleanJSONString(result.result);
+      parts.push(resultText);
+    }
+    
+    return parts.join('\n');
+  }
+
+  formatJSONKey(key) {
+    // JSON key'lerini Türkçe'ye çevir
+    const keyMap = {
+      'name': 'Ad',
+      'result': 'Sonuç',
+      'status': 'Durum',
+      'timestamp': 'Zaman',
+      'type': 'Tür',
+      'wordCount': 'Kelime Sayısı',
+      'description': 'Açıklama',
+      'analysis': 'Analiz',
+      'summary': 'Özet',
+      'scenes': 'Sahneler',
+      'characters': 'Karakterler',
+      'locations': 'Mekanlar',
+      'equipment': 'Ekipmanlar',
+      'themes': 'Temalar',
+      'genre': 'Tür',
+      'duration': 'Süre',
+      'complexity': 'Karmaşıklık',
+      'marketability': 'Pazarlanabilirlik',
+      'budget': 'Bütçe',
+      'risk': 'Risk',
+      'provider': 'Sağlayıcı',
+      'language': 'Dil',
+      'selectedTypes': 'Seçili Tür',
+      'totalAnalysisCount': 'Toplam Analiz',
+      'completedAnalysisCount': 'Tamamlanan Analiz',
+      'failedAnalysisCount': 'Başarısız Analiz',
+      'totalWordCount': 'Toplam Kelime'
+    };
+    
+    return keyMap[key] || this.formatSectionTitle(key);
+  }
+
+  formatJSONValue(value) {
+    if (typeof value === 'string') {
+      return this.cleanJSONString(value);
+    } else if (typeof value === 'number') {
+      return String(value);
+    } else if (typeof value === 'boolean') {
+      return value ? 'Evet' : 'Hayır';
+    } else if (Array.isArray(value)) {
+      if (value.length === 0) return 'Boş liste';
+      if (value.length <= 5) {
+        return value.join(', ');
+      } else {
+        return `${value.slice(0, 3).join(', ')} ve ${value.length - 3} tane daha`;
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      return this.formatJSONObject(value);
+    } else if (value === null || value === undefined) {
+      return 'Belirtilmemiş';
+    }
+    return String(value);
+  }
+
+  cleanJSONString(text) {
+    if (!text || typeof text !== 'string') return String(text || '');
+    
+    // JSON escape karakterlerini temizle
+    let cleaned = text
+      .replace(/\\n/g, '\n')        // \n -> gerçek satır sonu
+      .replace(/\\r/g, '')         // \r kaldır
+      .replace(/\\t/g, ' ')        // \t -> boşluk
+      .replace(/\\"/g, '"')       // \" -> "
+      .replace(/\\\\/g, '/')      // \\ -> /
+      .replace(/\\u([0-9a-fA-F]{4})/g, (match, code) => {
+        // Unicode karakterleri çevir
+        try {
+          return String.fromCharCode(parseInt(code, 16));
+        } catch {
+          return match;
+        }
+      });
+    
+    // Çok uzun metinleri kısalt (PDF için)
+    if (cleaned.length > 2000) {
+      cleaned = cleaned.substring(0, 1950) + '...\n\n[Metin kısaltıldı]';
+    }
+    
+    // Çok fazla satır sonu varsa düzenle
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    
+    return cleaned.trim();
+  }
+
+  // JSON formatını otomatik algılayıp işlemek için yardımcı metot
+  processJSONContent(content) {
+    try {
+      // Eğer string ise JSON parse etmeyi dene
+      if (typeof content === 'string') {
+        // JSON string mi kontrol et
+        if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+          try {
+            const parsed = JSON.parse(content);
+            return this.formatJSONObject(parsed);
+          } catch {
+            return this.cleanJSONString(content);
+          }
+        }
+        return this.cleanJSONString(content);
+      }
+      
+      // Eğer object ise direkt formatla
+      if (typeof content === 'object' && content !== null) {
+        return this.formatJSONObject(content);
+      }
+      
+      return String(content);
+    } catch (error) {
+      console.warn('JSON content işleme hatası:', error);
+      return String(content);
+    }
+  }
+
+  // Analiz sonuçları için özel JSON export formatı
+  exportAnalysisAsJSON(analysisData) {
+    const cleanedData = this.cleanAnalysisDataForExport(analysisData);
+    return JSON.stringify(cleanedData, null, 2);
+  }
+
+  cleanAnalysisDataForExport(data) {
+    if (Array.isArray(data)) {
+      return data.map(item => this.cleanAnalysisDataForExport(item));
+    }
+    
+    if (typeof data === 'object' && data !== null) {
+      const cleaned = {};
+      Object.entries(data).forEach(([key, value]) => {
+        // Gereğinden fazla teknik detayları kaldır
+        if (!this.shouldExcludeFromExport(key)) {
+          cleaned[key] = this.cleanAnalysisDataForExport(value);
+        }
+      });
+      return cleaned;
+    }
+    
+    return data;
+  }
+
+  shouldExcludeFromExport(key) {
+    // PDF export için gereksiz alanlar
+    const excludeKeys = [
+      'isCustomAnalysis', 'isMultiAnalysis', 
+      '__proto__', 'constructor',
+      'error', 'stackTrace'
+    ];
+    return excludeKeys.includes(key);
+  }
+
+  processAnalysisData(data, prefix = '') {
+    // This method is kept for backward compatibility but now uses the new organized structure
+    this.processOrganizedAnalysisData(data);
+  }
+
+  processLegacyAnalysisData(data, prefix = '') {
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+
+    Object.entries(data).forEach(([key, value]) => {
+      if (value === null || value === undefined) return;
+      
+      const sectionTitle = prefix ? `${prefix} - ${this.formatSectionTitle(key)}` : this.formatSectionTitle(key);
+      
+      if (Array.isArray(value) && value.length > 0) {
+        // Handle arrays
+        const formattedContent = value.map((item, index) => {
+          if (typeof item === 'string') {
+            return `${index + 1}. ${item}`;
+          } else if (typeof item === 'object') {
+            return `${index + 1}. ${JSON.stringify(item, null, 2)}`;
+          }
+          return `${index + 1}. ${String(item)}`;
+        });
+        this.addSection(sectionTitle, formattedContent);
+      } else if (typeof value === 'object') {
+        // Handle nested objects
+        this.addSection(sectionTitle, '');
+        this.processLegacyAnalysisData(value, sectionTitle);
+      } else if (typeof value === 'string' && value.trim()) {
+        // Handle strings
+        this.addSection(sectionTitle, value);
+      } else if (typeof value === 'number') {
+        // Handle numbers
+        this.addSection(sectionTitle, String(value));
+      }
+    });
   }
 
   formatSectionTitle(key) {
@@ -249,13 +526,98 @@ export class PDFExportService {
       'productionAnalysis': 'Prodüksiyon Analizi',
       'budgetAnalysis': 'Bütçe Analizi',
       'riskAnalysis': 'Risk Analizi',
-      'dialogueAnalysis': 'Diyalog Analizi',
-      'characterDevelopment': 'Karakter Gelişimi',
-      'plotStructure': 'Olay Örgüsü',
-      'themeAnalysis': 'Tema Analizi'
+      'technicalAnalysis': 'Teknik Analiz',
+      'analysis': 'Analiz Sonuçları',
+      'scenes': 'Sahne Analizi',
+      'characters': 'Karakter Analizi',
+      'locations': 'Mekan Analizi',
+      'equipment': 'Ekipman Gereksinimleri',
+      'themes': 'Tematik Analiz',
+      'structure': 'Yapısal Analiz',
+      'dialogue': 'Diyalog Analizi',
+      'marketability': 'Pazarlanabilirlik Değerlendirmesi',
+      'production': 'Prodüksiyon Değerlendirmesi',
+      'recommendations': 'Öneriler ve Tavsiyeler',
+      'summary': 'Analiz Özeti',
+      'overview': 'Genel Değerlendirme',
+      'evaluation': 'Performans Değerlendirmesi',
+      'metadata': 'Proje Meta Verileri',
+      'specialAnalysis': 'Özel Analiz Sonuçları',
+      'customResults': 'Özelleştirilmiş Analiz Sonuçları',
+      'isCustomAnalysis': 'Analiz Türü',
+      'isMultiAnalysis': 'Çoklu Analiz',
+      'selectedTypes': 'Seçili Analiz Türleri',
+      'competitiveAnalysis': 'Rekabet Analizi',
+      'geographicAnalysis': 'Coğrafi Pazar Analizi',
+      'trendAnalysis': 'Trend Analizi',
+      'riskOpportunityAnalysis': 'Risk ve Fırsat Analizi',
+      'vfxRequirements': 'Görsel Efekt Gereksinimleri',
+      'sfxRequirements': 'Ses Efekti Gereksinimleri',
+      'virtualProductionSuitability': 'Sanal Prodüksiyon Uygunluğu',
+      'shootingTechniques': 'Çekim Teknikleri',
+      'estimatedDuration': 'Tahmini Süre',
+      'complexity': 'Karmaşıklık Düzeyi',
+      'genre': 'Tür',
+      'risk': 'Risk Değerlendirmesi',
+      'name': 'Analiz Adı',
+      'result': 'Sonuç'
     };
     
-    return titleMap[key] || key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+    return titleMap[key] || this.formatCamelCaseTitle(key);
+  }
+
+  formatCamelCaseTitle(text) {
+    return text
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, str => str.toUpperCase())
+      .trim();
+  }
+
+  addAnalysisSummary(analysisData) {
+    this.addSection('📊 Analiz Özeti', '');
+    
+    // Analiz türü
+    if (analysisData.isCustomAnalysis) {
+      this.addKeyValue('Analiz Türü', 'Özelleştirilmiş Analiz');
+      
+      if (analysisData.isMultiAnalysis) {
+        this.addKeyValue('Analiz Modu', 'Çoklu Analiz');
+        
+        if (analysisData.selectedTypes && analysisData.selectedTypes.length > 0) {
+          this.addKeyValue('Seçili Analiz Türleri', analysisData.selectedTypes.join(', '));
+        }
+      }
+    } else {
+      this.addKeyValue('Analiz Türü', 'Standart Senaryo Analizi');
+    }
+    
+    // Temel istatistikler
+    if (analysisData.summary) {
+      if (analysisData.summary.totalScenes) {
+        this.addKeyValue('Toplam Sahne Sayısı', String(analysisData.summary.totalScenes));
+      }
+      if (analysisData.summary.estimatedShootingDays) {
+        this.addKeyValue('Tahmini Çekim Günü', String(analysisData.summary.estimatedShootingDays));
+      }
+    }
+    
+    // Eleman sayıları
+    if (analysisData.scenes && analysisData.scenes.length > 0) {
+      this.addKeyValue('Sahne Sayısı', String(analysisData.scenes.length));
+    }
+    if (analysisData.characters && analysisData.characters.length > 0) {
+      this.addKeyValue('Karakter Sayısı', String(analysisData.characters.length));
+    }
+    if (analysisData.locations && analysisData.locations.length > 0) {
+      this.addKeyValue('Mekan Sayısı', String(analysisData.locations.length));
+    }
+    
+    // Özelleştirilmiş analiz sonuç sayısı
+    if (analysisData.customResults) {
+      this.addKeyValue('Analiz Sonuç Sayısı', String(Object.keys(analysisData.customResults).length));
+    }
+    
+    this.currentY += 10;
   }
 
   async save(filename = 'scenario-analysis-report.pdf') {

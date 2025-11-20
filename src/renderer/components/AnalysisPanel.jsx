@@ -1,18 +1,40 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useScriptStore } from '../store/scriptStore';
 import { useAIStore } from '../store/aiStore';
 import { usePromptStore } from '../store/promptStore';
+import { useReaderStore } from '../store/readerStore';
 import AIHandler from '../utils/aiHandler';
 import PDFExportService from '../utils/pdfExportService';
 
 export default function AnalysisPanel() {
-  const { cleanedText, scriptText, analysisData, setAnalysisData } = useScriptStore();
+  const { cleanedText, scriptText, analysisData, setAnalysisData, isAnalyzing, analysisProgress, setAnalysisProgress, setIsAnalyzing, clearAnalysisProgress } = useScriptStore();
   const { isConfigured, provider, getAIHandler } = useAIStore();
   const { getActivePrompt, getPromptTypes, activePrompts, getPrompt } = usePromptStore();
+  const { blacklist } = useReaderStore();
   const { t } = useTranslation();
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState(null);
+  
+  // Apply blacklist filtering to text for analysis
+  const filteredAnalysisText = useMemo(() => {
+    const baseText = cleanedText || scriptText;
+    if (!blacklist?.length || !baseText) {
+      return baseText;
+    }
+
+    let filtered = baseText;
+    blacklist.forEach(word => {
+      const trimmedWord = word?.trim();
+      if (trimmedWord && trimmedWord.length > 0) {
+        // Escape special regex characters and create regex for word boundaries
+        const escapedWord = trimmedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`\\b${escapedWord}\\b`, 'gi');
+        filtered = filtered.replace(regex, '');
+      }
+    });
+
+    return filtered.replace(/\s+/g, ' ').replace(/\n\s*\n/g, '\n').trim();
+  }, [cleanedText, scriptText, blacklist]);
+  
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'scenes', 'locations', 'characters', 'equipment', 'vfx', 'production', 'evaluation', 'audience', 'custom'
   const [useCustomAnalysis, setUseCustomAnalysis] = useState(false);
   const [selectedCustomPrompt, setSelectedCustomPrompt] = useState('character');
@@ -38,10 +60,10 @@ export default function AnalysisPanel() {
     }
 
     setIsAnalyzing(true);
-    setAnalysisProgress(null);
 
     try {
-      const text = cleanedText || scriptText;
+      // Use filtered text for analysis
+      const text = filteredAnalysisText;
       const aiHandler = getAIHandler();
 
       console.log(`🔍 Starting analysis with provider: ${provider}`);
@@ -61,10 +83,22 @@ export default function AnalysisPanel() {
 
       console.log('Running multi-analysis with selected types:', selectedTypes);
 
+      // Get language variable first
+      const currentLanguage = t('language.name', 'Türkçe');
+
       // Run multiple analyses
       const multiResults = {};
       const totalAnalyses = selectedTypes.length;
       let completed = 0;
+
+      // Initialize a structured analysis summary
+      const analysisMetadata = {
+        timestamp: new Date().toISOString(),
+        selectedTypes: selectedTypes,
+        provider: provider,
+        totalAnalysisCount: totalAnalyses,
+        language: currentLanguage
+      };
 
       for (const analysisType of selectedTypes) {
         const prompt = getPrompt('analysis', analysisType);
@@ -80,8 +114,7 @@ export default function AnalysisPanel() {
         });
 
         try {
-          // Inject language variable
-          const currentLanguage = t('language.name', 'Türkçe');
+          // Inject language variable consistently
           const systemPrompt = prompt.system.replace(/{{language}}/g, currentLanguage).replace(/{{lang}}/g, currentLanguage);
           const userPrompt = prompt.user.replace(/{{language}}/g, currentLanguage).replace(/{{lang}}/g, currentLanguage);
 
@@ -100,9 +133,14 @@ export default function AnalysisPanel() {
             },
           });
 
+          // Store structured results with metadata
           multiResults[analysisType] = {
             name: prompt.name,
-            result: analysisResult
+            type: analysisType,
+            result: analysisResult,
+            timestamp: new Date().toISOString(),
+            wordCount: analysisResult ? analysisResult.length : 0,
+            status: 'completed'
           };
           
           completed++;
@@ -110,39 +148,58 @@ export default function AnalysisPanel() {
           console.error(`Error analyzing ${analysisType}:`, error);
           multiResults[analysisType] = {
             name: prompt.name,
-            result: `❌ Analiz hatası: ${error.message}`
+            type: analysisType,
+            result: `❌ Analiz hatası: ${error.message}`,
+            timestamp: new Date().toISOString(),
+            wordCount: 0,
+            status: 'failed',
+            error: error.message
           };
           completed++;
         }
       }
 
-      // Store results
+      // Store results with enhanced structure
       setCustomResults(multiResults);
 
-      // Create structure compatible with tab display
+      // Create comprehensive structure compatible with tab display and PDF export
       const result = {
         isCustomAnalysis: true,
         isMultiAnalysis: true,
         customResults: multiResults,
         selectedTypes,
-        summary: { totalScenes: 0, estimatedShootingDays: 0 },
+        metadata: analysisMetadata,
+        summary: { 
+          totalScenes: 0, 
+          estimatedShootingDays: 0,
+          completedAnalysisCount: Object.keys(multiResults).filter(key => multiResults[key].status === 'completed').length,
+          failedAnalysisCount: Object.keys(multiResults).filter(key => multiResults[key].status === 'failed').length,
+          totalWordCount: Object.values(multiResults).reduce((sum, item) => sum + (item.wordCount || 0), 0)
+        },
         scenes: [],
         locations: [],
         characters: [],
-        equipment: []
+        equipment: [],
+        // Analysis result overview for consistent reporting
+        analysisOverview: {
+          provider: provider,
+          language: currentLanguage,
+          textLength: text.length,
+          analysisTypes: selectedTypes,
+          timestamp: new Date().toISOString(),
+          resultsGenerated: Object.keys(multiResults).length
+        }
       };
 
       setAnalysisData(result);
       
       // Auto-switch to custom tab
       setActiveTab('custom');
-      setAnalysisProgress(null);
     } catch (error) {
       console.error('Analysis failed:', error);
       alert(`Analysis failed: ${error.message}`);
-      setAnalysisProgress(null);
     } finally {
-      setIsAnalyzing(false);
+      clearAnalysisProgress();
     }
   };
 
@@ -177,7 +234,7 @@ export default function AnalysisPanel() {
       setShowExportMenu(false);
 
       if (format === 'pdf') {
-        // PDF Export - Debug
+        // PDF Export with improved error handling
         console.log('PDF Export başlatılıyor:', analysisData);
         
         if (!analysisData || Object.keys(analysisData).length === 0) {
@@ -185,17 +242,26 @@ export default function AnalysisPanel() {
           return;
         }
         
-        const pdfService = new PDFExportService();
-        const doc = pdfService.exportAnalysis(analysisData);
-        
-        if (!doc) {
-          alert('PDF oluşturulamadı. Analiz verilerini kontrol edin.');
-          return;
-        }
-        
-        const success = await pdfService.save('senaryo-analiz-raporu.pdf');
-        if (success) {
-          alert(t('analysis.exportSuccess', 'PDF raporu başarıyla kaydedildi!'));
+        try {
+          const pdfService = new PDFExportService();
+          
+          // JSON formatını optimize et ve PDF için işle
+          console.log('Analiz verisi JSON formatında işleniyor...');
+          const doc = pdfService.exportAnalysis(analysisData);
+          
+          if (!doc) {
+            throw new Error('PDF belgesi oluşturulamadı');
+          }
+          
+          const success = await pdfService.save('senaryo-analiz-raporu.pdf');
+          if (success) {
+            alert(t('analysis.exportSuccess', 'PDF raporu başarıyla kaydedildi! JSON formatı otomatik olarak işlendi.'));
+          } else {
+            alert('PDF kaydetme işlemi iptal edildi veya başarısız oldu.');
+          }
+        } catch (error) {
+          console.error('PDF Export Error:', error);
+          alert(`PDF oluşturulurken hata oluştu: ${error.message}`);
         }
         return;
       }
@@ -205,10 +271,15 @@ export default function AnalysisPanel() {
         return;
       }
 
-      // JSON Export
+      // JSON Export with optimization
       const defaultPath = 'screenplay-analysis.json';
       const filters = [{ name: 'JSON Files', extensions: ['json'] }, { name: 'All Files', extensions: ['*'] }];
-      const data = JSON.stringify(analysisData, null, 2);
+      
+      // PDF servisini kullanarak JSON'ı temizle ve optimize et
+      const pdfService = new PDFExportService();
+      const optimizedData = pdfService.exportAnalysisAsJSON(analysisData);
+      
+      console.log('JSON export için veri optimize edildi, boyut:', optimizedData.length, 'karakter');
 
       if (window.electronAPI && window.electronAPI.saveFile) {
         const filePath = await window.electronAPI.saveFile({
@@ -219,13 +290,13 @@ export default function AnalysisPanel() {
         if (filePath) {
           await window.electronAPI.saveFileContent({
             filePath,
-            data,
+            data: optimizedData,
           });
-          alert(t('analysis.exportSuccess', 'Analiz başarıyla kaydedildi!'));
+          alert(t('analysis.exportSuccess', 'Analiz başarıyla kaydedildi! JSON formatı optimize edildi.'));
         }
       } else {
         // Fallback: Browser download
-        const blob = new Blob([data], { type: 'application/json' });
+        const blob = new Blob([optimizedData], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -234,7 +305,7 @@ export default function AnalysisPanel() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        alert(t('analysis.exportSuccess', 'Analiz başarıyla kaydedildi!'));
+        alert(t('analysis.exportSuccess', 'Analiz başarıyla kaydedildi! JSON formatı optimize edildi.'));
       }
     } catch (error) {
       console.error('Export error:', error);
@@ -261,18 +332,23 @@ export default function AnalysisPanel() {
                 </button>
 
                 {showExportMenu && (
-                  <div className="absolute top-full right-0 mt-1 bg-cinema-dark border border-cinema-gray rounded-lg shadow-lg z-50 min-w-[200px]">
+                  <div className="absolute top-full right-0 mt-1 bg-cinema-dark border border-cinema-gray rounded-lg shadow-lg z-50 min-w-[240px]">
+                    <div className="px-3 py-2 text-xs text-cinema-text-dim border-b border-cinema-gray">
+                      📤 Export Formatları (JSON Optimized)
+                    </div>
                     <button
                       onClick={() => handleExport('json')}
                       className="w-full px-4 py-2 text-left text-sm text-cinema-text hover:bg-cinema-gray transition-colors flex items-center gap-2"
                     >
-                      📄 JSON (Data)
+                      📄 JSON (Optimized Data)
+                      <span className="text-xs text-cinema-accent ml-auto">✨ Temiz</span>
                     </button>
                     <button
                       onClick={() => handleExport('pdf')}
                       className="w-full px-4 py-2 text-left text-sm text-cinema-text hover:bg-cinema-gray transition-colors flex items-center gap-2"
                     >
-                      📋 PDF (Report)
+                      📋 PDF (Smart Report)
+                      <span className="text-xs text-cinema-accent ml-auto">✨ JSON Parser</span>
                     </button>
                     <button
                       onClick={() => handleExport('docx')}
@@ -462,27 +538,6 @@ export default function AnalysisPanel() {
         </div>
       </div>
 
-      {/* Progress Bar - Always visible at top when analyzing */}
-      {isAnalyzing && analysisProgress && (
-        <div className="bg-cinema-dark border-b border-cinema-gray px-4 py-3">
-          <div className="flex items-center justify-between text-sm text-cinema-text-dim mb-2">
-            <span className="font-medium">🎬 {analysisProgress.message}</span>
-            {analysisProgress.currentChunk && analysisProgress.totalChunks && (
-              <span className="text-xs">
-                Chunk {analysisProgress.currentChunk} / {analysisProgress.totalChunks}
-              </span>
-            )}
-            <span className="font-bold text-cinema-accent">{Math.round(analysisProgress.progress || 0)}%</span>
-          </div>
-          <div className="w-full bg-cinema-gray-light rounded-full h-2.5">
-            <div
-              className="bg-gradient-to-r from-cinema-accent to-cinema-accent/70 h-2.5 rounded-full transition-all duration-300 shadow-lg"
-              style={{ width: `${analysisProgress.progress || 0}%` }}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
         {!analysisData ? (
@@ -513,18 +568,23 @@ export default function AnalysisPanel() {
                         {analysisData.customResults ? Object.keys(analysisData.customResults).length : 0}
                       </div>
                     </div>
-                    <div className="text-sm text-cinema-text-dim">{t('analysis.tabs.customResults')}</div>
-                    <div className="text-xs text-cinema-accent mt-1">{t('analysis.clickToViewAnalysis')}</div>
+                    <div className="text-sm text-cinema-text-dim">Özel Sonuçlar</div>
+                    <div className="text-xs text-cinema-accent mt-1">Analizi görmek için tıklayın</div>
                   </div>
                   <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray">
                     <div className="flex items-center gap-3 mb-2">
                       <div className="text-2xl">📝</div>
                       <div className="text-3xl font-bold text-cinema-accent">
-                        {analysisData.activeCustomPrompt ? 1 : 0}
+                        {analysisData.customResults ? 
+                          Object.values(analysisData.customResults).filter(r => r.status === 'completed').length : 0}
                       </div>
                     </div>
-                    <div className="text-sm text-cinema-text-dim">{t('analysis.activeAnalysis')}</div>
-                    <div className="text-xs text-cinema-text-dim mt-1">{analysisData.activeCustomPrompt || 'None'}</div>
+                    <div className="text-sm text-cinema-text-dim">Aktif Analiz</div>
+                    <div className="text-xs text-cinema-text-dim mt-1">{
+                      analysisData.customResults && Object.keys(analysisData.customResults).length > 0 ?
+                      `${Object.values(analysisData.customResults).filter(r => r.status === 'completed').length} Tamamlandı` :
+                      'None'
+                    }</div>
                   </div>
                   <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray">
                     <div className="flex items-center gap-3 mb-2">
@@ -533,8 +593,8 @@ export default function AnalysisPanel() {
                         Custom
                       </div>
                     </div>
-                    <div className="text-sm text-cinema-text-dim">{t('analysis.analysisType')}</div>
-                    <div className="text-xs text-cinema-accent mt-1">{t('analysis.specializedPrompt')}</div>
+                    <div className="text-sm text-cinema-text-dim">Analiz Türü</div>
+                    <div className="text-xs text-cinema-accent mt-1">Özelleştirilmiş komut</div>
                   </div>
                 </div>
               ) : (
@@ -1149,6 +1209,35 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
   const getPromptTypes = usePromptStore(state => state.getPromptTypes);
   const getPrompt = usePromptStore(state => state.getPrompt);
   const [expandedResults, setExpandedResults] = React.useState({});
+  const [analysisStats, setAnalysisStats] = React.useState(null);
+
+  // Calculate analysis statistics
+  React.useEffect(() => {
+    if (customResults && Object.keys(customResults).length > 0) {
+      const stats = {
+        total: Object.keys(customResults).length,
+        completed: 0,
+        failed: 0,
+        totalWords: 0,
+        avgWordCount: 0,
+        successRate: 0
+      };
+
+      Object.values(customResults).forEach(result => {
+        if (result.status === 'completed') {
+          stats.completed++;
+        } else if (result.status === 'failed') {
+          stats.failed++;
+        }
+        stats.totalWords += result.wordCount || 0;
+      });
+
+      stats.avgWordCount = Math.round(stats.totalWords / stats.total);
+      stats.successRate = Math.round((stats.completed / stats.total) * 100);
+
+      setAnalysisStats(stats);
+    }
+  }, [customResults]);
 
   if (!customResults || Object.keys(customResults).length === 0) {
     return (
@@ -1162,19 +1251,69 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
 
   const availableResults = Object.keys(customResults);
 
+  const getAnalysisIcon = (promptKey) => {
+    if (promptKey.includes('character')) return '👥';
+    if (promptKey.includes('plot') || promptKey.includes('story')) return '📖';
+    if (promptKey.includes('theme')) return '🎭';
+    if (promptKey.includes('dialogue')) return '💬';
+    if (promptKey.includes('structure')) return '🏗️';
+    if (promptKey.includes('production')) return '🎬';
+    if (promptKey.includes('virtual')) return '🖥️';
+    if (promptKey.includes('market')) return '📊';
+    if (promptKey.includes('audience')) return '🎯';
+    if (promptKey.includes('risk')) return '⚠️';
+    if (promptKey.includes('budget')) return '💰';
+    if (promptKey.includes('technical')) return '🔧';
+    return '🎯';
+  };
+
+  const getStatusColor = (result) => {
+    if (result.status === 'completed') return 'text-green-400';
+    if (result.status === 'failed') return 'text-red-400';
+    return 'text-yellow-400';
+  };
+
+  const getStatusIcon = (result) => {
+    if (result.status === 'completed') return '✅';
+    if (result.status === 'failed') return '❌';
+    return '⏳';
+  };
+
   return (
     <div>
-      {/* Header */}
+      {/* Enhanced Header with Statistics */}
       <div className="mb-6">
         <h3 className="text-xl font-bold text-cinema-accent mb-2">
           📊 Çoklu Analiz Sonuçları
         </h3>
-        <p className="text-cinema-text-dim text-sm">
+        <p className="text-cinema-text-dim text-sm mb-4">
           {availableResults.length} farklı analiz türü sonuçlandı
         </p>
+
+        {/* Analysis Statistics Panel */}
+        {analysisStats && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-cinema-gray/30 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-cinema-accent">{analysisStats.total}</div>
+              <div className="text-xs text-cinema-text-dim">Toplam Analiz</div>
+            </div>
+            <div className="bg-cinema-gray/30 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-green-400">{analysisStats.completed}</div>
+              <div className="text-xs text-cinema-text-dim">Başarılı</div>
+            </div>
+            <div className="bg-cinema-gray/30 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-cinema-accent">{analysisStats.successRate}%</div>
+              <div className="text-xs text-cinema-text-dim">Başarı Oranı</div>
+            </div>
+            <div className="bg-cinema-gray/30 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-blue-400">{Math.round(analysisStats.totalWords / 1000)}K</div>
+              <div className="text-xs text-cinema-text-dim">Kelime Sayısı</div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* All Results Display - Grid Layout */}
+      {/* All Results Display - Enhanced Grid Layout */}
       <div className="space-y-4">
         {availableResults.map((promptKey) => {
           const resultData = customResults[promptKey];
@@ -1184,7 +1323,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
 
           return (
             <div key={promptKey} className="bg-cinema-gray rounded-lg border border-cinema-gray-light overflow-hidden">
-              {/* Header - Always visible */}
+              {/* Header - Always visible with enhanced information */}
               <div 
                 className="flex items-center justify-between p-4 cursor-pointer hover:bg-cinema-gray-light transition-colors"
                 onClick={() => setExpandedResults({
@@ -1194,31 +1333,43 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
               >
                 <div className="flex items-center gap-3">
                   <div className="text-2xl">
-                    {promptKey.includes('character') && '👥'}
-                    {promptKey.includes('plot') && '📖'}
-                    {promptKey.includes('theme') && '🎭'}
-                    {promptKey.includes('dialogue') && '💬'}
-                    {promptKey.includes('structure') && '🏗️'}
-                    {promptKey.includes('production') && '🎬'}
-                    {promptKey.includes('virtual') && '🖥️'}
-                    {!promptKey.includes('character') && !promptKey.includes('plot') && !promptKey.includes('theme') && 
-                     !promptKey.includes('dialogue') && !promptKey.includes('structure') && 
-                     !promptKey.includes('production') && !promptKey.includes('virtual') && '🎯'}
+                    {getAnalysisIcon(promptKey)}
                   </div>
                   <div>
-                    <h4 className="text-lg font-bold text-cinema-text">
-                      {promptName}
-                    </h4>
-                    <p className="text-cinema-text-dim text-xs">
-                      {typeof resultText === 'string' ? `${resultText.substring(0, 100)}...` : 'Analiz tamamlandı'}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-lg font-bold text-cinema-text">
+                        {promptName}
+                      </h4>
+                      <span className={`text-sm ${getStatusColor(resultData)}`}>
+                        {getStatusIcon(resultData)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-cinema-text-dim">
+                      <span>
+                        {typeof resultText === 'string' ? `${resultText.substring(0, 80)}...` : 'Analiz tamamlandı'}
+                      </span>
+                      {resultData.wordCount && (
+                        <span className="text-cinema-accent">
+                          {resultData.wordCount} kelime
+                        </span>
+                      )}
+                      {resultData.timestamp && (
+                        <span>
+                          {new Date(resultData.timestamp).toLocaleTimeString('tr-TR', { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      navigator.clipboard.writeText(typeof resultText === 'string' ? resultText : JSON.stringify(resultText, null, 2));
+                      const textToCopy = typeof resultText === 'string' ? resultText : JSON.stringify(resultText, null, 2);
+                      navigator.clipboard.writeText(`=== ${promptName} ===\n\n${textToCopy}`);
                     }}
                     className="px-3 py-1 bg-cinema-accent/20 hover:bg-cinema-accent/30 text-cinema-accent text-xs rounded transition-colors"
                   >
@@ -1230,9 +1381,41 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                 </div>
               </div>
 
-              {/* Content - Expandable */}
+              {/* Content - Expandable with better formatting */}
               {isExpanded && (
                 <div className="p-4 bg-cinema-black/50 border-t border-cinema-gray-light">
+                  {/* Analysis metadata */}
+                  {(resultData.timestamp || resultData.wordCount || resultData.type) && (
+                    <div className="mb-4 pb-3 border-b border-cinema-gray/30">
+                      <div className="grid grid-cols-3 gap-4 text-xs">
+                        {resultData.timestamp && (
+                          <div>
+                            <span className="text-cinema-text-dim">Oluşturulma:</span>
+                            <div className="text-cinema-text">
+                              {new Date(resultData.timestamp).toLocaleString('tr-TR')}
+                            </div>
+                          </div>
+                        )}
+                        {resultData.wordCount && (
+                          <div>
+                            <span className="text-cinema-text-dim">Kelime Sayısı:</span>
+                            <div className="text-cinema-accent font-bold">{resultData.wordCount}</div>
+                          </div>
+                        )}
+                        {resultData.status && (
+                          <div>
+                            <span className="text-cinema-text-dim">Durum:</span>
+                            <div className={`font-medium ${getStatusColor(resultData)}`}>
+                              {resultData.status === 'completed' ? 'Başarılı' : 
+                               resultData.status === 'failed' ? 'Başarısız' : 'İşleniyor'}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Analysis result content */}
                   <div className="bg-cinema-black rounded-lg p-4">
                     <div className="text-cinema-text whitespace-pre-wrap text-sm leading-relaxed">
                       {typeof resultText === 'string' ? resultText : JSON.stringify(resultText, null, 2)}
@@ -1297,7 +1480,7 @@ function OverviewTab({ analysisData }) {
     );
   }
 
-  // Extract key metrics from analysis data
+  // Enhanced metrics extraction with consistent data handling
   const getMetrics = () => {
     const metrics = {
       scenes: 0,
@@ -1309,7 +1492,13 @@ function OverviewTab({ analysisData }) {
       duration: 'Belirlenmedi',
       complexity: 'Orta',
       marketability: 'N/A',
-      risk: 'Orta'
+      risk: 'Orta',
+      analysisCount: 0,
+      completedAnalysis: 0,
+      failedAnalysis: 0,
+      totalWordCount: 0,
+      provider: 'N/A',
+      language: 'Türkçe'
     };
 
     // Count scenes
@@ -1323,6 +1512,35 @@ function OverviewTab({ analysisData }) {
     // Count locations
     if (analysisData.locations) metrics.locations = analysisData.locations.length;
     if (analysisData.analysis?.locations) metrics.locations = analysisData.analysis.locations.length;
+
+    // Extract analysis metadata
+    if (analysisData.metadata) {
+      if (analysisData.metadata.provider) metrics.provider = analysisData.metadata.provider;
+      if (analysisData.metadata.language) metrics.language = analysisData.metadata.language;
+      if (analysisData.metadata.totalAnalysisCount) metrics.analysisCount = analysisData.metadata.totalAnalysisCount;
+    }
+
+    // Extract from summary
+    if (analysisData.summary) {
+      if (analysisData.summary.completedAnalysisCount) metrics.completedAnalysis = analysisData.summary.completedAnalysisCount;
+      if (analysisData.summary.failedAnalysisCount) metrics.failedAnalysis = analysisData.summary.failedAnalysisCount;
+      if (analysisData.summary.totalWordCount) metrics.totalWordCount = analysisData.summary.totalWordCount;
+    }
+
+    // Extract from custom results
+    if (analysisData.customResults) {
+      metrics.analysisCount = Object.keys(analysisData.customResults).length;
+      metrics.completedAnalysis = Object.values(analysisData.customResults).filter(r => r.status === 'completed').length;
+      metrics.failedAnalysis = Object.values(analysisData.customResults).filter(r => r.status === 'failed').length;
+      metrics.totalWordCount = Object.values(analysisData.customResults).reduce((sum, r) => sum + (r.wordCount || 0), 0);
+    }
+
+    // Extract from analysisOverview  
+    if (analysisData.analysisOverview) {
+      if (analysisData.analysisOverview.provider) metrics.provider = analysisData.analysisOverview.provider;
+      if (analysisData.analysisOverview.language) metrics.language = analysisData.analysisOverview.language;
+      if (analysisData.analysisOverview.analysisTypes) metrics.analysisCount = analysisData.analysisOverview.analysisTypes.length;
+    }
 
     // Extract other metrics from analysis
     if (analysisData.analysis) {
@@ -1434,56 +1652,78 @@ function OverviewTab({ analysisData }) {
 
   return (
     <div className="space-y-6">
-      {/* Header Stats */}
+      {/* Header Stats - Enhanced with Analysis Statistics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
-          <div className="text-3xl font-bold text-cinema-accent mb-2">{metrics.scenes}</div>
-          <div className="text-sm text-cinema-text-dim">Sahneler</div>
+          <div className="text-3xl font-bold text-cinema-accent mb-2">{metrics.analysisCount || metrics.scenes}</div>
+          <div className="text-sm text-cinema-text-dim">
+            {analysisData.isCustomAnalysis ? 'Analiz Sonuçları' : 'Sahneler'}
+          </div>
         </div>
         <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
-          <div className="text-3xl font-bold text-purple-400 mb-2">{metrics.characters}</div>
-          <div className="text-sm text-cinema-text-dim">Karakterler</div>
+          <div className="text-3xl font-bold text-purple-400 mb-2">{metrics.completedAnalysis || metrics.characters}</div>
+          <div className="text-sm text-cinema-text-dim">
+            {analysisData.isCustomAnalysis ? 'Başarılı Analiz' : 'Karakterler'}
+          </div>
         </div>
         <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
-          <div className="text-3xl font-bold text-blue-400 mb-2">{metrics.locations}</div>
-          <div className="text-sm text-cinema-text-dim">Mekanlar</div>
+          <div className="text-3xl font-bold text-blue-400 mb-2">{metrics.failedAnalysis || metrics.locations}</div>
+          <div className="text-sm text-cinema-text-dim">
+            {analysisData.isCustomAnalysis ? 'Başarısız Analiz' : 'Mekanlar'}
+          </div>
         </div>
         <div className="bg-cinema-black/50 rounded-xl border border-cinema-gray p-4 text-center">
-          <div className="text-3xl font-bold text-green-400 mb-2">{analysisScore.score || 0}</div>
-          <div className="text-sm text-cinema-text-dim">Değerlendirme Puanı</div>
-          <div className="text-xs text-cinema-accent mt-1">{analysisScore.label}</div>
+          <div className="text-3xl font-bold text-green-400 mb-2">{Math.round(metrics.totalWordCount / 1000) || 0}</div>
+          <div className="text-sm text-cinema-text-dim">
+            {analysisData.isCustomAnalysis ? 'Kelime (K)' : 'Değerlendirme Puanı'}
+          </div>
         </div>
       </div>
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Project Overview */}
+        {/* Analysis Overview */}
         <div className="bg-cinema-black/30 rounded-xl border border-cinema-gray p-6">
           <h3 className="text-lg font-semibold text-cinema-text mb-4 flex items-center gap-2">
-            🎬 Proje Genel Bakış
+            🎬 Analiz Genel Bakış
           </h3>
           <div className="space-y-3">
             <div className="flex justify-between items-center py-2 border-b border-cinema-gray/30">
-              <span className="text-cinema-text-dim">Tür:</span>
-              <span className="text-cinema-text font-medium">{metrics.genre}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b border-cinema-gray/30">
-              <span className="text-cinema-text-dim">Süre:</span>
-              <span className="text-cinema-text font-medium">{metrics.duration}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b border-cinema-gray/30">
-              <span className="text-cinema-text-dim">Karmaşıklık:</span>
-              <span className={`font-medium px-2 py-1 rounded text-xs ${
-                metrics.complexity === 'Yüksek' || metrics.complexity === 'High' ? 'bg-red-500/20 text-red-400' :
-                metrics.complexity === 'Orta' || metrics.complexity === 'Medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                'bg-green-500/20 text-green-400'
-              }`}>
-                {metrics.complexity}
+              <span className="text-cinema-text-dim">Analiz Türü:</span>
+              <span className="text-cinema-text font-medium">
+                {analysisData.isCustomAnalysis ? 'Özelleştirilmiş' : 'Standart'}
               </span>
             </div>
+            <div className="flex justify-between items-center py-2 border-b border-cinema-gray/30">
+              <span className="text-cinema-text-dim">AI Provider:</span>
+              <span className="text-cinema-text font-medium capitalize">{metrics.provider}</span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-cinema-gray/30">
+              <span className="text-cinema-text-dim">Dil:</span>
+              <span className="text-cinema-text font-medium">{metrics.language}</span>
+            </div>
+            {analysisData.isCustomAnalysis && (
+              <>
+                <div className="flex justify-between items-center py-2 border-b border-cinema-gray/30">
+                  <span className="text-cinema-text-dim">Toplam Analiz:</span>
+                  <span className="text-cinema-accent font-bold">{metrics.analysisCount}</span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-cinema-gray/30">
+                  <span className="text-cinema-text-dim">Başarı Oranı:</span>
+                  <span className={`font-medium ${metrics.completedAnalysis / metrics.analysisCount > 0.8 ? 'text-green-400' : 'text-yellow-400'}`}>
+                    {Math.round((metrics.completedAnalysis / metrics.analysisCount) * 100) || 0}%
+                  </span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between items-center py-2">
-              <span className="text-cinema-text-dim">Pazarlanabilirlik:</span>
-              <span className="text-cinema-text font-medium">{metrics.marketability}</span>
+              <span className="text-cinema-text-dim">Oluşturulma:</span>
+              <span className="text-cinema-text font-medium text-sm">
+                {analysisData.metadata?.timestamp 
+                  ? new Date(analysisData.metadata.timestamp).toLocaleDateString('tr-TR')
+                  : new Date().toLocaleDateString('tr-TR')
+                }
+              </span>
             </div>
           </div>
         </div>
@@ -1533,24 +1773,63 @@ function OverviewTab({ analysisData }) {
             📊 Analiz Özeti
           </h3>
           <div className="space-y-4">
-            {analysisData.analysis?.summary && (
-              <div className="text-cinema-text-dim leading-relaxed">
-                {typeof analysisData.analysis.summary === 'string' 
-                  ? analysisData.analysis.summary.substring(0, 200) + (analysisData.analysis.summary.length > 200 ? '...' : '')
-                  : 'Analiz özeti mevcut değil'
-                }
-              </div>
-            )}
-            {analysisData.analysis?.themes && (
+            {analysisData.isCustomAnalysis && analysisData.customResults ? (
               <div>
-                <div className="text-sm text-cinema-accent font-medium mb-2">Ana Temalar:</div>
-                <div className="flex flex-wrap gap-2">
-                  {analysisData.analysis.themes.slice(0, 3).map((theme, index) => (
-                    <span key={index} className="bg-cinema-accent/20 text-cinema-accent px-2 py-1 rounded text-xs">
-                      {typeof theme === 'string' ? theme : theme.name || 'Tema'}
-                    </span>
-                  ))}
+                <div className="text-cinema-text-dim leading-relaxed mb-4">
+                  {Object.keys(analysisData.customResults).length} farklı analiz türü tamamlandı. 
+                  Toplam {Math.round(metrics.totalWordCount / 1000)}K kelime analiz sonucu üretildi.
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-cinema-gray/10 p-3 rounded-lg">
+                    <div className="text-sm text-cinema-accent font-medium">Tamamlanan Analizler:</div>
+                    <div className="text-lg font-bold text-green-400">{metrics.completedAnalysis}</div>
+                  </div>
+                  <div className="bg-cinema-gray/10 p-3 rounded-lg">
+                    <div className="text-sm text-cinema-accent font-medium">Başarı Oranı:</div>
+                    <div className="text-lg font-bold text-cinema-accent">
+                      {Math.round((metrics.completedAnalysis / metrics.analysisCount) * 100) || 0}%
+                    </div>
+                  </div>
+                </div>
+                {/* Show top analysis types */}
+                <div>
+                  <div className="text-sm text-cinema-accent font-medium mb-2">Analiz Türleri:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.keys(analysisData.customResults).slice(0, 5).map((key, index) => (
+                      <span key={index} className="bg-cinema-accent/20 text-cinema-accent px-2 py-1 rounded text-xs">
+                        {analysisData.customResults[key]?.name || key}
+                      </span>
+                    ))}
+                    {Object.keys(analysisData.customResults).length > 5 && (
+                      <span className="text-xs text-cinema-text-dim">
+                        +{Object.keys(analysisData.customResults).length - 5} daha
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                {analysisData.analysis?.summary && (
+                  <div className="text-cinema-text-dim leading-relaxed">
+                    {typeof analysisData.analysis.summary === 'string' 
+                      ? analysisData.analysis.summary.substring(0, 200) + (analysisData.analysis.summary.length > 200 ? '...' : '')
+                      : 'Analiz özeti mevcut değil'
+                    }
+                  </div>
+                )}
+                {analysisData.analysis?.themes && (
+                  <div>
+                    <div className="text-sm text-cinema-accent font-medium mb-2">Ana Temalar:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {analysisData.analysis.themes.slice(0, 3).map((theme, index) => (
+                        <span key={index} className="bg-cinema-accent/20 text-cinema-accent px-2 py-1 rounded text-xs">
+                          {typeof theme === 'string' ? theme : theme.name || 'Tema'}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1570,6 +1849,20 @@ function OverviewTab({ analysisData }) {
               <span className="text-cinema-text">Bütçe Tahmini:</span>
               <span className="text-green-400 font-bold text-lg">{metrics.budget}</span>
             </div>
+            {/* Custom analysis specific information */}
+            {analysisData.isCustomAnalysis && (
+              <div className="p-3 bg-cinema-gray/20 rounded-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-cinema-text">Analiz Süresi:</span>
+                  <span className="text-cinema-accent font-medium">
+                    {analysisData.metadata?.timestamp 
+                      ? `${new Date(analysisData.metadata.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`
+                      : 'Bilinmiyor'
+                    }
+                  </span>
+                </div>
+              </div>
+            )}
             {analysisData.evaluation?.risk && (
               <div className="p-3 bg-cinema-gray/20 rounded-lg">
                 <div className="flex justify-between items-center mb-2">

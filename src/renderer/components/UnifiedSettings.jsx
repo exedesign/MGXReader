@@ -2,61 +2,38 @@ import React, { useState, useEffect } from 'react';
 import { useAIStore } from '../store/aiStore';
 import { usePromptStore } from '../store/promptStore';
 import { useReaderStore } from '../store/readerStore';
-import { useTranslation } from 'react-i18next';
 import { AI_PROVIDERS } from '../utils/aiHandler';
 import ProvidersTab from './ProvidersTab';
 import PromptsTab from './PromptsTab';
 
 export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
-  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(initialTab);
   const [customLogo, setCustomLogo] = useState(localStorage.getItem('customLogo') || '');
   const [showPreview, setShowPreview] = useState(false);
   const [newFilterWord, setNewFilterWord] = useState('');
+
+  // Store hooks
+  const aiStore = useAIStore();
+  const promptStore = usePromptStore();
+  const readerStore = useReaderStore();
+  const { blacklist, addToBlacklist, removeFromBlacklist, clearBlacklist } = readerStore;
+
+  // Local settings state
+  const [localSettings, setLocalSettings] = useState({
+    wordsPerMinute: 200,
+    highlightColor: '#ffd700',
+    fontSize: 16,
+    wordFilter: readerStore.blacklist || [],
+    customLogo: ''
+  });
 
   // Check for saved active tab on mount
   useEffect(() => {
     const savedTab = localStorage.getItem('unifiedSettingsActiveTab');
     if (savedTab) {
       setActiveTab(savedTab);
-      localStorage.removeItem('unifiedSettingsActiveTab'); // Clean up after use
     }
   }, []);
-
-  // Update local settings when store values change
-  useEffect(() => {
-    setLocalSettings({
-      wordsPerMinute: wordsPerMinute || 200,
-      highlightColor: highlightColor || '#ffd700',
-      fontSize: fontSize || 16,
-      wordFilter: wordFilter || [],
-      customLogo: customLogo || ''
-    });
-  }, [wordsPerMinute, highlightColor, fontSize, wordFilter, customLogo]);
-
-  // Reader settings
-  const {
-    wordsPerMinute,
-    highlightColor,
-    fontSize,
-    setWordsPerMinute,
-    setHighlightColor,
-    setFontSize,
-    wordFilter,
-    setWordFilter
-  } = useReaderStore();
-
-  // AI Store
-  const aiStore = useAIStore();
-  const promptStore = usePromptStore();
-
-  const [localSettings, setLocalSettings] = useState({
-    wordsPerMinute: wordsPerMinute || 200,
-    highlightColor: highlightColor || '#ffd700',
-    fontSize: fontSize || 16,
-    wordFilter: wordFilter || [],
-    customLogo: customLogo || ''
-  });
 
   // Logo upload handler
   const handleLogoUpload = (event) => {
@@ -90,29 +67,20 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
 
   const handleAddFilterWord = () => {
     const word = newFilterWord.trim();
-    if (word && !localSettings.wordFilter.includes(word.toLowerCase())) {
-      const newFilter = [...localSettings.wordFilter, word.toLowerCase()];
-      setLocalSettings(prev => ({ ...prev, wordFilter: newFilter }));
+    if (word && !blacklist.includes(word.toUpperCase())) {
+      addToBlacklist(word);
+      setLocalSettings(prev => ({ ...prev, wordFilter: [...prev.wordFilter, word.toUpperCase()] }));
       setNewFilterWord('');
     }
   };
 
   const handleRemoveFilterWord = (index) => {
-    const newFilter = localSettings.wordFilter.filter((_, i) => i !== index);
-    setLocalSettings(prev => ({ ...prev, wordFilter: newFilter }));
-  };
-
-  const saveSettings = () => {
-    // Save reader settings
-    setWordsPerMinute(localSettings.wordsPerMinute);
-    setHighlightColor(localSettings.highlightColor);
-    setFontSize(localSettings.fontSize);
-    setWordFilter(localSettings.wordFilter);
-    
-    // Save custom logo
-    localStorage.setItem('customLogo', localSettings.customLogo);
-    
-    alert('Ayarlar başarıyla kaydedildi!');
+    const wordToRemove = blacklist[index];
+    if (wordToRemove) {
+      removeFromBlacklist(wordToRemove);
+      const newFilter = localSettings.wordFilter.filter((_, i) => i !== index);
+      setLocalSettings(prev => ({ ...prev, wordFilter: newFilter }));
+    }
   };
 
   const resetSettings = () => {
@@ -162,11 +130,10 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all ${
-                    activeTab === tab.key
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all ${activeTab === tab.key
                       ? 'bg-cinema-accent text-cinema-black font-medium'
                       : 'text-cinema-text hover:bg-cinema-gray/50'
-                  }`}
+                    }`}
                 >
                   <span className="text-xl">{tab.icon}</span>
                   <span>{tab.label}</span>
@@ -182,7 +149,7 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-xl font-semibold text-cinema-text mb-4">AI Sağlayıcı Ayarları</h3>
-                  <ProvidersTab 
+                  <ProvidersTab
                     provider={aiStore.provider}
                     setProvider={aiStore.setProvider}
                     config={aiStore.config}
@@ -198,7 +165,7 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-xl font-semibold text-cinema-text mb-4">Prompt Yönetimi</h3>
-                  <PromptsTab 
+                  <PromptsTab
                     getPromptTypes={promptStore.getPromptTypes}
                     getPrompt={promptStore.getPrompt}
                     getAllPrompts={promptStore.getAllPrompts}
@@ -217,7 +184,7 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
               <div className="space-y-8">
                 <div>
                   <h3 className="text-xl font-semibold text-cinema-text mb-4">Hızlı Okuma Ayarları</h3>
-                  
+
                   {/* Reading Speed */}
                   <div className="bg-cinema-black/30 rounded-lg p-6 mb-6">
                     <h4 className="text-lg font-medium text-cinema-text mb-4">Okuma Hızı</h4>
@@ -287,17 +254,18 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-xl font-semibold text-cinema-text mb-4">Kelime Filtresi Yönetimi</h3>
-                  
+
                   <div className="bg-cinema-gray/20 p-6 rounded-lg border border-cinema-gray-light">
                     <div className="mb-4 flex items-center justify-between">
                       <h4 className="text-lg font-medium text-cinema-text flex items-center gap-2">
                         🔍 Filtrelenecek Kelimeler
                         <span className="text-xs bg-cinema-accent text-black px-2 py-1 rounded-full">
-                          {localSettings.wordFilter?.length || 0} kelime
+                          {blacklist?.length || 0} kelime
                         </span>
                       </h4>
                       <button
                         onClick={() => {
+                          clearBlacklist();
                           setLocalSettings(prev => ({ ...prev, wordFilter: [] }));
                         }}
                         className="px-3 py-1 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors text-sm"
@@ -305,7 +273,7 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                         Tümünü Temizle
                       </button>
                     </div>
-                    
+
                     <div className="space-y-4">
                       <div>
                         <label className="text-cinema-text font-medium block mb-2">
@@ -331,7 +299,7 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
 
                       <div className="space-y-2">
                         <div className="flex flex-wrap gap-2">
-                          {localSettings.wordFilter?.map((word, index) => (
+                          {blacklist?.map((word, index) => (
                             <span
                               key={index}
                               className="inline-flex items-center gap-2 px-3 py-1 bg-cinema-accent/20 text-cinema-accent rounded-full text-sm"
@@ -346,8 +314,8 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                             </span>
                           ))}
                         </div>
-                        
-                        {localSettings.wordFilter?.length === 0 && (
+
+                        {blacklist?.length === 0 && (
                           <div className="text-center py-8 text-cinema-text-dim">
                             <p>🔍 Henüz filtrelenmiş kelime yok</p>
                             <p className="text-xs mt-2">Filtrelemek istediğiniz kelimeleri yukarıdan ekleyin</p>
@@ -375,14 +343,14 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
               <div className="space-y-8">
                 <div>
                   <h3 className="text-xl font-semibold text-cinema-text mb-4">Görünüm Ayarları</h3>
-                  
+
                   {/* Logo Settings */}
                   <div className="bg-cinema-black/30 rounded-lg p-6">
                     <h4 className="text-lg font-medium text-cinema-text mb-4">Özel Logo</h4>
                     <p className="text-cinema-text-dim text-sm mb-4">
                       Uygulamanın sol üst kısmında görünecek özel logo yükleyin. (PNG, SVG, JPEG)
                     </p>
-                    
+
                     <div className="space-y-4">
                       <div className="flex items-center gap-4">
                         <input
@@ -433,12 +401,12 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
               <div className="space-y-8">
                 <div>
                   <h3 className="text-xl font-semibold text-cinema-text mb-6">Hakkında</h3>
-                  
+
                   <div className="bg-cinema-black/30 rounded-lg p-8">
                     <div className="text-center space-y-6">
                       {/* Logo/Icon */}
                       <div className="text-6xl mb-4">🎬</div>
-                      
+
                       <div>
                         <h4 className="text-2xl font-bold text-cinema-accent mb-2">MGX Reader</h4>
                         <p className="text-cinema-text-dim text-lg">Senaryo Analiz ve Hızlı Okuma Uygulaması</p>
@@ -448,15 +416,15 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                         <div>
                           <p className="text-cinema-text font-medium mb-1">Proje MGX Film için geliştirilmiştir</p>
                         </div>
-                        
+
                         <div className="space-y-2">
                           <p className="text-cinema-text">
                             <span className="font-medium">Yaratıcı:</span> Fatih Eke
                           </p>
                           <p className="text-cinema-text">
                             <span className="font-medium">İletişim:</span>{' '}
-                            <a 
-                              href="mailto:fatiheke@gmail.com" 
+                            <a
+                              href="mailto:fatiheke@gmail.com"
                               className="text-cinema-accent hover:underline"
                             >
                               fatiheke@gmail.com
@@ -475,7 +443,7 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                       <div className="border-t border-cinema-gray pt-4 text-sm text-cinema-text-dim">
                         <p>Sürüm 1.0.0 • {new Date().getFullYear()}</p>
                         <p className="mt-2">
-                          AI destekli senaryo analizi, hızlı okuma teknolojisi ve PDF export özellikleri ile 
+                          AI destekli senaryo analizi, hızlı okuma teknolojisi ve PDF export özellikleri ile
                           profesyonel senaryo değerlendirme aracı.
                         </p>
                       </div>
@@ -498,12 +466,6 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
               className="btn-secondary px-4 py-2"
             >
               Sıfırla
-            </button>
-            <button
-              onClick={saveSettings}
-              className="btn-primary px-6 py-2"
-            >
-              Kaydet
             </button>
             <button
               onClick={onClose}

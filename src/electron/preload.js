@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   // Dialog APIs
   openFile: () => ipcRenderer.invoke('dialog:openFile'),
+  openFiles: () => ipcRenderer.invoke('dialog:openFiles'),
   saveFile: (options) => ipcRenderer.invoke('dialog:saveFile', options),
 
   // PDF APIs
