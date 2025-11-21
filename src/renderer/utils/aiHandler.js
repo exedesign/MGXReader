@@ -115,42 +115,29 @@ export class AIHandler {
     const { size = '1024x1024' } = options;
     
     try {
-      // Correct Gemini Imagen API v1beta endpoint
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:generateImage?key=${this.apiKey}`;
+      // Imagen API uses projects endpoint (not direct model endpoint)
+      // Format: https://generativelanguage.googleapis.com/v1/projects/PROJECT_ID/locations/us-central1/publishers/google/models/imagen-3.0-generate-001:predict
+      // For now, use simple endpoint without project ID (API should handle it)
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/projects/default/locations/us-central1/publishers/google/models/imagen-3.0-generate-001:predict?key=${this.apiKey}`;
       
       console.log('Gemini Image Generation Request:', {
-        url: apiUrl,
-        prompt: prompt,
+        url: apiUrl.substring(0, 80) + '...',
+        prompt: prompt.substring(0, 60) + '...',
         size: size
       });
 
       const response = await axios.post(
         apiUrl,
         {
-          prompt: {
-            text: prompt
-          },
-          sizeConfig: {
-            aspectRatio: this.mapSizeToAspectRatio(size)
-          },
-          safetySettings: [
+          instances: [
             {
-              category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-              threshold: 'BLOCK_ONLY_HIGH'
-            },
-            {
-              category: 'HARM_CATEGORY_HATE_SPEECH', 
-              threshold: 'BLOCK_ONLY_HIGH'
-            },
-            {
-              category: 'HARM_CATEGORY_HARASSMENT',
-              threshold: 'BLOCK_ONLY_HIGH'
-            },
-            {
-              category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-              threshold: 'BLOCK_ONLY_HIGH'
+              prompt: prompt
             }
-          ]
+          ],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: this.mapSizeToAspectRatio(size)
+          }
         },
         {
           headers: {
@@ -160,12 +147,35 @@ export class AIHandler {
         }
       );
 
-      console.log('Gemini Image Generation Response:', response.status, response.data);
+      console.log('Gemini Image Generation Response:', response.status);
 
-      if (response.data && response.data.generatedImages && response.data.generatedImages.length > 0) {
-        const imageData = response.data.generatedImages[0];
+      // Handle predict endpoint response format
+      if (response.data && response.data.predictions && response.data.predictions.length > 0) {
+        const prediction = response.data.predictions[0];
+        let imageUrl;
         
-        // Convert base64 to data URL if needed
+        // Extract image bytes from prediction
+        if (prediction.bytesBase64) {
+          imageUrl = `data:image/jpeg;base64,${prediction.bytesBase64}`;
+        } else if (prediction.image && prediction.image.bytesBase64) {
+          imageUrl = `data:image/jpeg;base64,${prediction.image.bytesBase64}`;
+        } else if (prediction.bytesBase64Uri) {
+          imageUrl = prediction.bytesBase64Uri;
+        } else {
+          throw new Error('No image data in prediction response');
+        }
+        
+        return {
+          success: true,
+          imageUrl: imageUrl,
+          provider: 'gemini',
+          model: 'imagen-3.0-generate-001',
+          revisedPrompt: prompt,
+          generatedAt: new Date().toISOString()
+        };
+      } else if (response.data && response.data.generatedImages && response.data.generatedImages.length > 0) {
+        // Fallback to old format if needed
+        const imageData = response.data.generatedImages[0];
         let imageUrl;
         if (imageData.bytesBase64Uri) {
           imageUrl = imageData.bytesBase64Uri;
