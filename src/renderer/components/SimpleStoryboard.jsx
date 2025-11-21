@@ -276,7 +276,7 @@ Sadece ana sahneleri seç, çok detaya girme. En fazla 10-15 sahne çıkar.`;
                   </>
                 ) : (
                   <>
-                    <span>�</span>
+                    <span>🔍</span>
                     <span>Senaryoyu Analiz Et</span>
                   </>
                 )}
@@ -320,7 +320,7 @@ Sadece ana sahneleri seç, çok detaya girme. En fazla 10-15 sahne çıkar.`;
           <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="font-medium text-green-300">📋 Analiz Tamamlandı</h4>
+                <h4 className="font-medium text-green-300">✅ Analiz Tamamlandı</h4>
                 <p className="text-sm text-green-400">{scenes.length} sahne bulundu ve storyboard için hazır</p>
               </div>
               <div className="text-green-300">
@@ -336,7 +336,7 @@ Sadece ana sahneleri seç, çok detaya girme. En fazla 10-15 sahne çıkar.`;
       <div className="flex-1 overflow-y-auto p-6">
         {scenes.length === 0 ? (
           <div className="text-center text-cinema-text-dim py-12">
-            <div className="text-6xl mb-4">�</div>
+            <div className="text-6xl mb-4">📊</div>
             <h3 className="text-xl font-bold mb-2">Senaryo Analizi</h3>
             <p>Senaryonuzu analiz ederek storyboard sahnelerini çıkaralım</p>
           </div>

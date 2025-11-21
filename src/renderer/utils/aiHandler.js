@@ -63,7 +63,7 @@ export class AIHandler {
 
   /**
    * Generate image using AI provider
-   * Currently supports OpenAI DALL-E
+   * Currently supports OpenAI DALL-E and Gemini (with fallback)
    * @param {string} prompt - Image generation prompt
    * @param {object} options - Generation options
    * @returns {Promise<object>} - Generation result with image URL
@@ -82,7 +82,13 @@ export class AIHandler {
           return await this.generateImageOpenAI(prompt, { size, quality, style, model });
           
         case AI_PROVIDERS.GEMINI:
-          return await this.generateImageGemini(prompt, options);
+          // Try Gemini image generation, fallback to error message
+          try {
+            return await this.generateImageGemini(prompt, options);
+          } catch (geminiError) {
+            console.warn('Gemini image generation failed, providing helpful error:', geminiError.message);
+            throw new Error('Imagen 3 API henüz public API key ile desteklenmiyor. Lütfen OpenAI provider kullanın veya Google Cloud Vertex AI projesi oluşturun.');
+          }
           
         case AI_PROVIDERS.LOCAL:
         case AI_PROVIDERS.MLX:
@@ -115,13 +121,13 @@ export class AIHandler {
     const { size = '1024x1024' } = options;
     
     try {
-      // Imagen API uses projects endpoint (not direct model endpoint)
-      // Format: https://generativelanguage.googleapis.com/v1/projects/PROJECT_ID/locations/us-central1/publishers/google/models/imagen-3.0-generate-001:predict
-      // For now, use simple endpoint without project ID (API should handle it)
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/projects/default/locations/us-central1/publishers/google/models/imagen-3.0-generate-001:predict?key=${this.apiKey}`;
+      // Imagen 3 uses the generateImage endpoint (not predict)
+      // Format: https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:generateImage
+      const modelName = options.model || 'imagen-3.0-generate-001';
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateImage?key=${this.apiKey}`;
       
       console.log('Gemini Image Generation Request:', {
-        url: apiUrl.substring(0, 80) + '...',
+        url: apiUrl.replace(this.apiKey, '***'),
         prompt: prompt.substring(0, 60) + '...',
         size: size
       });
@@ -129,15 +135,30 @@ export class AIHandler {
       const response = await axios.post(
         apiUrl,
         {
-          instances: [
-            {
-              prompt: prompt
-            }
-          ],
-          parameters: {
-            sampleCount: 1,
+          prompt: {
+            text: prompt
+          },
+          sizeConfig: {
             aspectRatio: this.mapSizeToAspectRatio(size)
-          }
+          },
+          safetySettings: [
+            {
+              category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+              threshold: 'BLOCK_ONLY_HIGH'
+            },
+            {
+              category: 'HARM_CATEGORY_HATE_SPEECH',
+              threshold: 'BLOCK_ONLY_HIGH'
+            },
+            {
+              category: 'HARM_CATEGORY_HARASSMENT',
+              threshold: 'BLOCK_ONLY_HIGH'
+            },
+            {
+              category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+              threshold: 'BLOCK_ONLY_HIGH'
+            }
+          ]
         },
         {
           headers: {
@@ -149,38 +170,21 @@ export class AIHandler {
 
       console.log('Gemini Image Generation Response:', response.status);
 
-      // Handle predict endpoint response format
-      if (response.data && response.data.predictions && response.data.predictions.length > 0) {
-        const prediction = response.data.predictions[0];
-        let imageUrl;
-        
-        // Extract image bytes from prediction
-        if (prediction.bytesBase64) {
-          imageUrl = `data:image/jpeg;base64,${prediction.bytesBase64}`;
-        } else if (prediction.image && prediction.image.bytesBase64) {
-          imageUrl = `data:image/jpeg;base64,${prediction.image.bytesBase64}`;
-        } else if (prediction.bytesBase64Uri) {
-          imageUrl = prediction.bytesBase64Uri;
-        } else {
-          throw new Error('No image data in prediction response');
-        }
-        
-        return {
-          success: true,
-          imageUrl: imageUrl,
-          provider: 'gemini',
-          model: 'imagen-3.0-generate-001',
-          revisedPrompt: prompt,
-          generatedAt: new Date().toISOString()
-        };
-      } else if (response.data && response.data.generatedImages && response.data.generatedImages.length > 0) {
-        // Fallback to old format if needed
+      // Handle generateImage endpoint response format
+      if (response.data && response.data.generatedImages && response.data.generatedImages.length > 0) {
         const imageData = response.data.generatedImages[0];
         let imageUrl;
+        
+        // Extract image URL or base64
         if (imageData.bytesBase64Uri) {
           imageUrl = imageData.bytesBase64Uri;
+        } else if (imageData.bytesBase64Encoded) {
+          imageUrl = `data:image/jpeg;base64,${imageData.bytesBase64Encoded}`;
         } else if (imageData.bytesBase64) {
           imageUrl = `data:image/jpeg;base64,${imageData.bytesBase64}`;
+        } else if (imageData.gcsUri) {
+          // For GCS URIs, we might need to handle them differently
+          imageUrl = imageData.gcsUri;
         } else {
           throw new Error('No image data in response');
         }
@@ -189,7 +193,7 @@ export class AIHandler {
           success: true,
           imageUrl: imageUrl,
           provider: 'gemini',
-          model: 'imagen-3.0-generate-001',
+          model: modelName,
           revisedPrompt: prompt,
           generatedAt: new Date().toISOString()
         };

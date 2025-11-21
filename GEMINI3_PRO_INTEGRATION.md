@@ -65,14 +65,27 @@ generationConfig: {
 - Daha iyi senaryo analizi
 - Sınırsız thinking depth
 
-### 3. **Image Generation (Imagen-3)** ✅
+### 3. Image Generation (Imagen 3)
 
 ```javascript
 // Model
 Model: 'imagen-3.0-generate-001'
 
 // Endpoint
-https://generativelanguage.googleapis.com/v1/models/imagen-3.0-generate-001:generateImage?key={API_KEY}
+https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key={API_KEY}
+
+// Payload (Predict API)
+{
+  "instances": [
+    {
+      "prompt": "Image description..."
+    }
+  ],
+  "parameters": {
+    "sampleCount": 1,
+    "aspectRatio": "1:1"
+  }
+}
 
 // Supported Aspect Ratios
 - 1:1 (1024x1024)
