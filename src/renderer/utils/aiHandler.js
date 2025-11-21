@@ -115,8 +115,8 @@ export class AIHandler {
     const { size = '1024x1024' } = options;
     
     try {
-      // Correct Gemini Imagen API v1 endpoint
-      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/imagen-3.0-generate-001:generateImage?key=${this.apiKey}`;
+      // Correct Gemini Imagen API v1beta endpoint
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:generateImage?key=${this.apiKey}`;
       
       console.log('Gemini Image Generation Request:', {
         url: apiUrl,
@@ -383,8 +383,8 @@ export class AIHandler {
     // Use the latest Gemini 3 Pro model by default
     let model = this.model || 'gemini-3-pro-preview';
 
-    // API v1 endpoint - API key goes in URL
-    const apiUrl = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${this.apiKey}`;
+    // API v1beta endpoint - More stable for Gemini 3
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
 
     // Debug logging
     console.log('Gemini API Debug:', {
@@ -393,33 +393,27 @@ export class AIHandler {
       apiKeyLength: this.apiKey ? this.apiKey.length : 0
     });
 
-    // Determine if this is a Gemini 3 model (supports thinking)
+    // Determine if this is a Gemini 3 model (supports reasoning)
     const isGemini3 = model.includes('gemini-3');
     
-    // Gemini v1 API format with Gemini 3 Pro support
+    // Gemini v1beta API format
     const requestBody = {
-      systemInstruction: {
-        parts: [{
-          text: systemPrompt || 'You are a helpful AI assistant.'
-        }]
-      },
       contents: [
         {
           role: 'user',
           parts: [
             {
-              text: userPrompt,
+              text: `${systemPrompt}\n\n${userPrompt}`,
             },
           ],
         },
       ],
       generationConfig: {
-        temperature: temperature || (isGemini3 ? 1.0 : 0.7), // Gemini 3 defaults to 1.0
+        temperature: temperature || (isGemini3 ? 1.0 : 0.7),
         maxOutputTokens: maxTokens || 8192,
         topP: 0.95,
         topK: 40,
         candidateCount: 1,
-        ...(isGemini3 && { thinkingLevel: 'low' }), // Add thinking level for Gemini 3
       },
       safetySettings: [
         {
