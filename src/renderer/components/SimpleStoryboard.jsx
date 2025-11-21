@@ -40,8 +40,8 @@ export default function SimpleStoryboard() {
       const aiHandler = new AIHandler({
         provider: AI_PROVIDERS.GEMINI,
         apiKey: geminiApiKey,
-        model: 'gemini-2.0-flash',
-        temperature: 0.3
+        model: 'gemini-3-pro-preview',
+        temperature: 1.0
       });
       
       const analysisPrompt = `Bu senaryoyu analiz et ve storyboard için uygun sahneleri çıkar. Her sahne için şu bilgileri ver:

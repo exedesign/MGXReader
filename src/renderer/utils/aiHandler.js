@@ -22,20 +22,18 @@ export const OPENAI_MODELS = [
 ];
 
 export const GEMINI_MODELS = [
-  { id: 'gemini-3.0-pro', name: 'Gemini 3.0 Pro - New! 🚀', contextWindow: 2000000, recommended: true },
-  { id: 'gemini-3.0-deep-think', name: 'Gemini 3.0 Deep Think - Reasoning 🧠', contextWindow: 1000000 },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash - Fast', contextWindow: 1000000, fast: true },
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', contextWindow: 2000000 },
-  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', contextWindow: 1000000, fast: true },
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', contextWindow: 1000000 },
-  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', contextWindow: 1000000, fast: true },
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Latest) ✨', contextWindow: 1000000, recommended: true, inputTokens: 2, outputTokens: 12 },
+  { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image (Image Gen) 🎨', contextWindow: 65000, fast: true, inputTokens: 2, outputTokens: 0.134 },
+  { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash Experimental', contextWindow: 1000000, fast: true },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash ⚡ Fast', contextWindow: 1000000, fast: true },
   { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', contextWindow: 2000000 },
 ];
 
 // Preview models (experimental)
 export const GEMINI_PREVIEW_MODELS = [
-  { id: 'gemini-exp-1206', name: 'Gemini Exp 1206 - Experimental', contextWindow: 2000000, preview: true },
-  { id: 'gemini-exp-1121', name: 'Gemini Exp 1121 - Experimental', contextWindow: 2000000, preview: true },
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Preview - Jan 2025)', contextWindow: 1000000, preview: true, recommended: true },
+  { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image (Preview)', contextWindow: 65000, preview: true },
+  { id: 'learnlm-1.5-pro-experimental', name: 'LearnLM 1.5 Pro (Experimental)', contextWindow: 2000000, preview: true },
 ];
 
 export const MLX_MODELS = [
@@ -111,42 +109,48 @@ export class AIHandler {
    */
   async generateImageGemini(prompt, options = {}) {
     if (!this.apiKey) {
-      throw new Error('Gemini API key is required for image generation');
+      throw new Error('Google Gemini API key is required for image generation');
     }
 
     const { size = '1024x1024' } = options;
     
     try {
-      // Use the correct Gemini Imagen API endpoint
+      // Correct Gemini Imagen API v1 endpoint
+      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/imagen-3.0-generate-001:generateImage?key=${this.apiKey}`;
+      
+      console.log('Gemini Image Generation Request:', {
+        url: apiUrl,
+        prompt: prompt,
+        size: size
+      });
+
       const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:generateImage?key=${this.apiKey}`,
+        apiUrl,
         {
           prompt: {
             text: prompt
           },
+          sizeConfig: {
+            aspectRatio: this.mapSizeToAspectRatio(size)
+          },
           safetySettings: [
             {
               category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-              threshold: 'BLOCK_LOW_AND_ABOVE'
+              threshold: 'BLOCK_ONLY_HIGH'
             },
             {
               category: 'HARM_CATEGORY_HATE_SPEECH', 
-              threshold: 'BLOCK_LOW_AND_ABOVE'
+              threshold: 'BLOCK_ONLY_HIGH'
             },
             {
               category: 'HARM_CATEGORY_HARASSMENT',
-              threshold: 'BLOCK_LOW_AND_ABOVE'
+              threshold: 'BLOCK_ONLY_HIGH'
             },
             {
               category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-              threshold: 'BLOCK_LOW_AND_ABOVE'
+              threshold: 'BLOCK_ONLY_HIGH'
             }
-          ],
-          generationConfig: {
-            aspectRatio: this.mapSizeToAspectRatio(size),
-            negativePrompt: 'blurry, low quality, distorted, ugly',
-            personGeneration: 'ALLOW_ADULT'
-          }
+          ]
         },
         {
           headers: {
@@ -155,6 +159,8 @@ export class AIHandler {
           timeout: 120000 // 2 minutes timeout for image generation
         }
       );
+
+      console.log('Gemini Image Generation Response:', response.status, response.data);
 
       if (response.data && response.data.generatedImages && response.data.generatedImages.length > 0) {
         const imageData = response.data.generatedImages[0];
@@ -174,13 +180,19 @@ export class AIHandler {
           imageUrl: imageUrl,
           provider: 'gemini',
           model: 'imagen-3.0-generate-001',
-          revisedPrompt: prompt
+          revisedPrompt: prompt,
+          generatedAt: new Date().toISOString()
         };
       } else {
         throw new Error('No image generated from Gemini response');
       }
     } catch (error) {
-      console.error('Gemini Image Generation Error:', error);
+      console.error('Gemini Image Generation Error:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
       
       if (error.response) {
         const errorData = error.response.data;
@@ -290,6 +302,16 @@ export class AIHandler {
   }
 
   /**
+   * Process a single prompt - alias for generateText with simplified interface
+   * @param {string} prompt - The prompt to process
+   * @param {object} options - Optional parameters
+   * @returns {Promise<string>} - AI response
+   */
+  async processPrompt(prompt, options = {}) {
+    return await this.generateText('', prompt, options);
+  }
+
+  /**
    * Main method to call AI based on provider
    */
   async generateText(systemPrompt, userPrompt, options = {}) {
@@ -358,25 +380,27 @@ export class AIHandler {
       throw new Error('Google API key is required');
     }
 
-    // Use the latest v1beta API endpoint
-    let model = this.model || 'gemini-2.5-flash';
+    // Use the latest Gemini 3 Pro model by default
+    let model = this.model || 'gemini-3-pro-preview';
 
-    // Model names are correct for v1beta API
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    // API v1 endpoint - API key goes in URL
+    const apiUrl = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${this.apiKey}`;
 
     // Debug logging
     console.log('Gemini API Debug:', {
       model,
-      apiUrl,
-      apiKeyLength: this.apiKey ? this.apiKey.length : 0,
-      apiKeyPrefix: this.apiKey ? this.apiKey.substring(0, 8) + '...' : 'none'
+      apiUrl: apiUrl.replace(this.apiKey, '***'),
+      apiKeyLength: this.apiKey ? this.apiKey.length : 0
     });
 
-    // Gemini v1beta API format with proper system instruction support
+    // Determine if this is a Gemini 3 model (supports thinking)
+    const isGemini3 = model.includes('gemini-3');
+    
+    // Gemini v1 API format with Gemini 3 Pro support
     const requestBody = {
       systemInstruction: {
         parts: [{
-          text: systemPrompt
+          text: systemPrompt || 'You are a helpful AI assistant.'
         }]
       },
       contents: [
@@ -390,12 +414,12 @@ export class AIHandler {
         },
       ],
       generationConfig: {
-        temperature: temperature || 0.7,
+        temperature: temperature || (isGemini3 ? 1.0 : 0.7), // Gemini 3 defaults to 1.0
         maxOutputTokens: maxTokens || 8192,
         topP: 0.95,
         topK: 40,
-        responseMimeType: 'text/plain',
         candidateCount: 1,
+        ...(isGemini3 && { thinkingLevel: 'low' }), // Add thinking level for Gemini 3
       },
       safetySettings: [
         {
@@ -414,10 +438,6 @@ export class AIHandler {
           category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
           threshold: 'BLOCK_ONLY_HIGH',
         },
-        {
-          category: 'HARM_CATEGORY_CIVIC_INTEGRITY',
-          threshold: 'BLOCK_ONLY_HIGH',
-        },
       ],
     };
 
@@ -429,7 +449,6 @@ export class AIHandler {
         {
           headers: {
             'Content-Type': 'application/json',
-            'x-goog-api-key': this.apiKey,
           },
           timeout: 60000, // 60 seconds timeout
         }
@@ -465,7 +484,7 @@ export class AIHandler {
         statusText: error.response?.statusText,
         data: error.response?.data,
         model: model,
-        apiUrl: apiUrl,
+        apiUrl: apiUrl.replace(this.apiKey, '***'),
         config: {
           url: error.config?.url,
           method: error.config?.method,
@@ -485,14 +504,21 @@ export class AIHandler {
           if (errorData?.error?.message?.includes('API key')) {
             throw new Error('Invalid Gemini API key. Please check your API key.');
           }
+          if (errorData?.error?.message?.includes('unsafe')) {
+            throw new Error('Request content was flagged as unsafe. Please rephrase your prompt.');
+          }
         }
 
         if (status === 403) {
-          throw new Error('Gemini API access denied. Please check your API key permissions.');
+          throw new Error('Gemini API access denied. Please check your API key permissions and quota.');
         }
 
         if (status === 429) {
           throw new Error('Gemini API rate limit exceeded. Please try again later.');
+        }
+
+        if (status === 500) {
+          throw new Error('Gemini API internal server error. Please try again later.');
         }
 
         const errorMessage = errorData?.error?.message || error.response.statusText;
@@ -503,7 +529,7 @@ export class AIHandler {
         throw new Error('Network error: Cannot connect to Gemini API. Please check your internet connection.');
       }
 
-      throw error;
+      throw error;;
     }
   }
 
