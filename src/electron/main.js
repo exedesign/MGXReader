@@ -33,6 +33,9 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      webSecurity: false, // Disable web security for API calls
+      allowRunningInsecureContent: true,
+      experimentalFeatures: true
     },
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     frame: true, // Always show frame for better UX
@@ -701,3 +704,72 @@ Estimated Shoot Days: ${sectionContent.metrics.shootDays}
       return 'Content not available for this section.';
   }
 }
+
+// Additional File System API handlers
+ipcMain.handle('file:readContent', async (event, filePath) => {
+  try {
+    const data = await fs.readFile(filePath, 'utf8');
+    return data;
+  } catch (error) {
+    console.error('Error reading file content:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('file:exists', async (event, filePath) => {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (error) {
+    return false;
+  }
+});
+
+ipcMain.handle('file:directoryExists', async (event, dirPath) => {
+  try {
+    const stats = await fs.stat(dirPath);
+    return stats.isDirectory();
+  } catch (error) {
+    return false;
+  }
+});
+
+ipcMain.handle('file:ensureDir', async (event, dirPath) => {
+  try {
+    await fs.mkdir(dirPath, { recursive: true });
+    return true;
+  } catch (error) {
+    console.error('Error creating directory:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('file:listDirectory', async (event, dirPath) => {
+  try {
+    const files = await fs.readdir(dirPath);
+    return files;
+  } catch (error) {
+    console.error('Error listing directory:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('file:delete', async (event, filePath) => {
+  try {
+    await fs.unlink(filePath);
+    return true;
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('file:getTempDir', async () => {
+  try {
+    const os = require('os');
+    return os.tmpdir();
+  } catch (error) {
+    console.error('Error getting temp directory:', error);
+    throw error;
+  }
+});

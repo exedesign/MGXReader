@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
+import { analysisStorageService } from '../utils/analysisStorageService';
 
 export const useScriptStore = create((set, get) => ({
   // Multi-script management
@@ -39,8 +40,86 @@ export const useScriptStore = create((set, get) => ({
   locations: [],
   equipment: [],
 
+  // Helper function for fuzzy project title matching
+  normalizeProjectTitle: (title) => {
+    if (!title) return '';
+    return title
+      .toLowerCase()
+      .replace(/[''\u2019]/g, "'") // Normalize apostrophes
+      .replace(/[i̇ı]/g, 'i') // Normalize Turkish i
+      .replace(/[çğöşü]/g, match => ({ 'ç': 'c', 'ğ': 'g', 'ö': 'o', 'ş': 's', 'ü': 'u' })[match])
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .replace(/\.pdf$/i, '') // Remove .pdf
+      .replace(/[^a-z0-9\s]/g, '') // Remove special chars
+      .trim();
+  },
+
+  // Enhanced fuzzy project title matching
+  findSimilarProjectTitle: (newTitle) => {
+    const { scripts } = get();
+    const normalizedNew = get().normalizeProjectTitle(newTitle);
+    
+    if (!normalizedNew) return null;
+    
+    // Get all existing project titles
+    const existingTitles = [...new Set(
+      scripts
+        .map(s => s.structure?.projectTitle || s.structure?.seriesTitle)
+        .filter(Boolean)
+    )];
+    
+    // Find best match
+    let bestMatch = null;
+    let highestSimilarity = 0.7; // Minimum similarity threshold
+    
+    existingTitles.forEach(existingTitle => {
+      const normalizedExisting = get().normalizeProjectTitle(existingTitle);
+      
+      // Calculate similarity (simple word overlap)
+      const newWords = new Set(normalizedNew.split(/\s+/));
+      const existingWords = new Set(normalizedExisting.split(/\s+/));
+      
+      const intersection = new Set([...newWords].filter(x => existingWords.has(x)));
+      const union = new Set([...newWords, ...existingWords]);
+      
+      const similarity = intersection.size / union.size;
+      
+      // Also check if one is substring of another
+      const substringMatch = normalizedNew.includes(normalizedExisting) || 
+                           normalizedExisting.includes(normalizedNew);
+      
+      const finalSimilarity = substringMatch ? Math.max(similarity, 0.8) : similarity;
+      
+      if (finalSimilarity > highestSimilarity) {
+        highestSimilarity = finalSimilarity;
+        bestMatch = existingTitle;
+      }
+    });
+    
+    return bestMatch;
+  },
+
   // Multi-script management actions
   addScript: (scriptData) => {
+    const structure = scriptData.structure || {};
+    
+    // Enhanced project matching with fuzzy logic
+    const candidateProjectTitle = structure.projectTitle || structure.seriesTitle;
+    const similarProjectTitle = get().findSimilarProjectTitle(candidateProjectTitle);
+    
+    // Use the existing similar title if found, otherwise use the new one
+    const finalProjectTitle = similarProjectTitle || candidateProjectTitle;
+    
+    console.log('🔍 Project title matching:', {
+      candidate: candidateProjectTitle,
+      foundSimilar: similarProjectTitle,
+      final: finalProjectTitle,
+      method: similarProjectTitle ? 'fuzzy-match' : 'new-project'
+    });
+    
+    // Check if this script belongs to an existing project
+    const existingProjectScript = get().findProjectScript({ projectTitle: finalProjectTitle });
+    
     const newScript = {
       id: uuidv4(),
       title: scriptData.title || scriptData.fileName || 'Untitled Script',
@@ -51,21 +130,34 @@ export const useScriptStore = create((set, get) => ({
       metadata: scriptData.metadata || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      // Scene/chapter structure
-      structure: scriptData.structure || {
-        chapters: [], // For series: [{title: "Episode 1", scenes: [...]}]
-        scenes: [], // For single script: [{title: "Scene 1", content: "..."}]
-        type: scriptData.structure?.type || 'single' // 'single', 'series', 'movie'
+      
+      // Enhanced project structure
+      structure: {
+        type: structure.type || 'single',
+        projectTitle: finalProjectTitle || structure.seriesTitle || null,
+        title: structure.title || scriptData.title || scriptData.fileName,
+        chapterNumber: structure.chapterNumber || structure.episodeNumber || null,
+        chapterTitle: structure.chapterTitle || null,
+        seriesTitle: structure.seriesTitle || null,
+        episodeNumber: structure.episodeNumber || null,
+        seasonNumber: structure.seasonNumber || null,
+        chapters: structure.chapters || [],
+        scenes: structure.scenes || []
       },
+      
       // Analysis data
       analysisData: scriptData.analysisData || null,
       scenes: scriptData.scenes || [],
       characters: scriptData.characters || [],
       locations: scriptData.locations || [],
       equipment: scriptData.equipment || [],
+      
       // Status
-      status: 'imported', // 'importing', 'imported', 'processing', 'analyzed', 'error'
-      progress: 100
+      status: 'imported',
+      progress: 100,
+      
+      // Project grouping
+      projectGroup: finalProjectTitle || structure.seriesTitle || null
     };
     
     const { scripts } = get();
@@ -80,6 +172,97 @@ export const useScriptStore = create((set, get) => ({
     get().switchToScript(newScript.id);
     
     return newScript.id;
+  },
+
+  // Find if a script belongs to an existing project
+  findProjectScript: (structure) => {
+    const { scripts } = get();
+    const projectTitle = structure.projectTitle || structure.seriesTitle;
+    
+    if (!projectTitle) return null;
+    
+    return scripts.find(script => 
+      script.structure?.projectTitle === projectTitle ||
+      script.structure?.seriesTitle === projectTitle
+    );
+  },
+
+  // Get scripts grouped by project
+  getGroupedScripts: () => {
+    const { scripts } = get();
+    const grouped = {};
+    const ungrouped = [];
+    
+    scripts.forEach(script => {
+      // 🎯 Yeni sistem: projectGroup kullan
+      const projectTitle = script.projectGroup || 
+                          script.structure?.projectTitle || 
+                          script.structure?.seriesTitle ||
+                          script.metadata?.projectTitle;
+      
+      if (projectTitle) {
+        // Use fuzzy matching to find existing group
+        const existingGroupKey = Object.keys(grouped).find(key => {
+          const similarity = get().normalizeProjectTitle(key) === get().normalizeProjectTitle(projectTitle);
+          return similarity || get().findSimilarProjectTitle(projectTitle) === key;
+        });
+        
+        const groupKey = existingGroupKey || projectTitle;
+        
+        if (!grouped[groupKey]) {
+          grouped[groupKey] = [];
+        }
+        grouped[groupKey].push(script);
+      } else {
+        ungrouped.push(script);
+      }
+    });
+    
+    // Sort chapters/episodes within each project
+    Object.keys(grouped).forEach(projectTitle => {
+      grouped[projectTitle].sort((a, b) => {
+        const aNum = a.chapterNumber || a.structure?.chapterNumber || a.structure?.episodeNumber || 0;
+        const bNum = b.chapterNumber || b.structure?.chapterNumber || b.structure?.episodeNumber || 0;
+        return aNum - bNum;
+      });
+    });
+    
+    return { grouped, ungrouped };
+  },
+
+  // Get project summary
+  getProjectSummary: (projectTitle) => {
+    const { scripts } = get();
+    const projectScripts = scripts.filter(script => 
+      script.structure?.projectTitle === projectTitle ||
+      script.structure?.seriesTitle === projectTitle
+    );
+    
+    if (projectScripts.length === 0) return null;
+    
+    const chapters = projectScripts
+      .filter(script => script.structure?.chapterNumber || script.structure?.episodeNumber)
+      .sort((a, b) => {
+        const aNum = a.structure?.chapterNumber || a.structure?.episodeNumber || 0;
+        const bNum = b.structure?.chapterNumber || b.structure?.episodeNumber || 0;
+        return aNum - bNum;
+      });
+    
+    return {
+      title: projectTitle,
+      totalChapters: chapters.length,
+      chapters: chapters.map(script => ({
+        id: script.id,
+        number: script.structure?.chapterNumber || script.structure?.episodeNumber,
+        title: script.structure?.chapterTitle || script.structure?.title,
+        fileName: script.fileName,
+        status: script.status,
+        pageCount: script.pageCount
+      })),
+      type: projectScripts[0]?.structure?.type || 'series',
+      createdAt: Math.min(...projectScripts.map(s => new Date(s.createdAt).getTime())),
+      updatedAt: Math.max(...projectScripts.map(s => new Date(s.updatedAt).getTime()))
+    };
   },
 
   removeScript: (scriptId) => {
@@ -245,8 +428,8 @@ export const useScriptStore = create((set, get) => ({
   },
 
   // Actions (updated to work with current script)
-  setScriptText: (text, metadata = null) => {
-    const { currentScriptId } = get();
+  setScriptText: async (text, metadata = null) => {
+    const { currentScriptId, originalFileName } = get();
     
     // Update legacy state
     set({
@@ -255,6 +438,36 @@ export const useScriptStore = create((set, get) => ({
       metadata,
       error: null,
     });
+    
+    // Try to load existing analysis from persistent storage
+    if (originalFileName) {
+      try {
+        const existingAnalysis = await analysisStorageService.loadAnalysis(text, originalFileName);
+        if (existingAnalysis) {
+          console.log('Loaded existing analysis from storage');
+          set({
+            analysisData: existingAnalysis,
+            scenes: existingAnalysis?.scenes || [],
+            characters: existingAnalysis?.characters || [],
+            locations: existingAnalysis?.locations || [],
+            equipment: existingAnalysis?.equipment || [],
+          });
+          
+          // Update current script if exists
+          if (currentScriptId) {
+            get().updateScript(currentScriptId, {
+              analysisData: existingAnalysis,
+              scenes: existingAnalysis?.scenes || [],
+              characters: existingAnalysis?.characters || [],
+              locations: existingAnalysis?.locations || [],
+              equipment: existingAnalysis?.equipment || []
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load existing analysis:', error);
+      }
+    }
     
     // Update current script if exists
     if (currentScriptId) {
@@ -349,8 +562,8 @@ export const useScriptStore = create((set, get) => ({
 
   setError: (error) => set({ error }),
 
-  setAnalysisData: (data) => {
-    const { currentScriptId } = get();
+  setAnalysisData: async (data) => {
+    const { currentScriptId, scriptText, originalFileName } = get();
     
     // Update legacy state
     set({
@@ -360,6 +573,16 @@ export const useScriptStore = create((set, get) => ({
       locations: data?.locations || [],
       equipment: data?.equipment || [],
     });
+    
+    // Save analysis to persistent storage
+    if (scriptText && originalFileName && data) {
+      try {
+        await analysisStorageService.saveAnalysis(scriptText, originalFileName, data);
+        console.log('Analysis saved to persistent storage');
+      } catch (error) {
+        console.error('Failed to save analysis to persistent storage:', error);
+      }
+    }
     
     // Update current script if exists
     if (currentScriptId) {

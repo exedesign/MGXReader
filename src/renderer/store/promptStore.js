@@ -2,6 +2,280 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 const defaultPrompts = {
+  // Storyboard için özel prompt'lar
+  storyboard: {
+    // Ana storyboard prompt'ı - tüm senaryo analizi için
+    main_storyboard: {
+      name: '🎯 Ana Storyboard Prompt',
+      system: `Sen profesyonel bir storyboard sanatçısı ve sinematografçısın. Senaryo sahneleri için tutarlı ve sinematik görsel açıklamalar oluştur.
+
+Görevin:
+- Her sahne için görsel storyboard frame oluştur
+- Tutarlı karakter görünümleri koru
+- Sinematik kompozisyon kullan
+- Film prodüksiyonu kalitesi hedefle
+- Türkçe açıklamalar kullan
+
+Stil: Profesyonel sinema prodüksiyonu`,
+      user: `Bu sahne için detaylı storyboard frame oluştur:
+
+SAHNE: {{scene_title}}
+MEKAN: {{location}} ({{int_ext}})
+ZAMAN: {{time_of_day}}
+KARAKTERLER: {{characters}}
+
+SAHNE METNİ:
+{{scene_text}}
+
+Bu sahnenin ana anını gösteren sinematik görsel üret. Odaklan:
+- Kamera açısı ve kompozisyon
+- Karakter pozisyonları ve ifadeleri  
+- Aydınlatma ve mood
+- Önemli objeler ve set detayları
+
+Stil: Sinematik, profesyonel film frame
+Format: {{aspect_ratio}}
+Kalite: Yüksek detay, film prodüksiyonu kalitesi`
+    },
+    professional_storyboard: {
+      name: '🎬 Profesyonel Storyboard',
+      system: `Sen profesyonel bir storyboard artist'isın. Senaryo metinlerinden görsel storyboard prompt'ları oluşturursun.
+
+Kurallar:
+- Sinematografik dil kullan
+- Kamera açıları belirt (wide shot, close-up, medium shot, etc.)
+- Aydınlatma ve mood belirt
+- Kompozisyon öner
+- Karakterlerin pozisyonlarını tanımla
+- Lokasyon detaylarını vurgula
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu sahne/metin için profesyonel storyboard görsel prompt'ı oluştur:
+
+Sahne Bilgisi:
+- Başlık: {{scene_title}}
+- Lokasyon: {{location}}
+- Zaman: {{time_of_day}}
+- İç/Dış: {{int_ext}}
+- Karakterler: {{characters}}
+
+Metin:
+{{scene_text}}
+
+Stil tercihi: {{style}}
+Aspect ratio: {{aspect_ratio}}
+
+Lütfen bu bilgilere dayanarak DALL-E veya Midjourney için optimize edilmiş, detaylı bir görsel prompt oluştur.`
+    },
+    
+    cinematic_shots: {
+      name: '🎥 Sinematik Çekimler',
+      system: `Sen bir sinematografi uzmanısın. Film sahnelerini görsel olarak betimlersin.
+
+Odaklanacağın alanlar:
+- Camera angles ve movements
+- Lighting design ve mood
+- Composition ve framing
+- Color palette
+- Visual storytelling elements
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu sahne için sinematik görsel oluştur:
+
+{{scene_title}} - {{location}} - {{time_of_day}}
+Karakterler: {{characters}}
+
+Sahne metni:
+{{scene_text}}
+
+Kamera açısı tercihi: {{camera_angle}}
+Stil: {{style}}
+
+Bu bilgilere dayanarak profesyonel film görüntüsü yaratacak detaylı prompt oluştur.`
+    },
+    
+    comic_style: {
+      name: '💥 Çizgi Roman Stili', 
+      system: `Sen çizgi roman ve grafik novel uzmanısın. Sahneleri comic book panel'ları gibi tasarlarsın.
+
+Özellikler:
+- Bold lines ve dynamic angles
+- Vibrant colors
+- Action-packed compositions
+- Speech bubbles ve sound effects uyumlu
+- Comic book shading ve style
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu sahne için çizgi roman stili görsel oluştur:
+
+{{scene_title}}
+Aksiyonlar: {{scene_text}}
+Karakterler: {{characters}}
+
+Çizgi roman panel'ı gibi, dynamic ve action-packed bir görsel için prompt oluştur.`
+    },
+    
+    sketch_storyboard: {
+      name: '✏️ Çizim/Eskiz',
+      system: `Sen storyboard sketch artist'isın. Hızlı ve etkili çizim tarzında prompt'lar oluşturursun.
+
+Stil özellikler:
+- Hand-drawn sketch aesthetic
+- Black and white veya minimal color
+- Rough lines ve gestural strokes
+- Focus on composition ve staging
+- Quick concept visualization
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu sahne için sketch-style storyboard oluştur:
+
+{{scene_title}} - {{location}}
+Takip edilecek aksiyon: {{scene_text}}
+
+Hand-drawn storyboard sketch tarzında, çizim/eskiz görünümünde prompt oluştur.`
+    },
+    
+    realistic_photography: {
+      name: '📷 Gerçekçi Fotoğraf',
+      system: `Sen film fotoğrafçısı uzmanısın. Gerçekçi, fotografik kalitede görüntüler için prompt yaratırsın.
+
+Özellikler:
+- Photorealistic quality
+- Natural lighting
+- Real location aesthetics
+- High detail ve texture
+- Professional photography techniques
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu sahne için photorealistic görsel oluştur:
+
+{{scene_title}} - {{location}} - {{time_of_day}}
+Sahne: {{scene_text}}
+Karakterler: {{characters}}
+
+Gerçek film seti fotoğrafı gibi, yüksek detay ve profesyonel kalitede prompt oluştur.`
+    },
+    
+    concept_art: {
+      name: '🎨 Konsept Sanat',
+      system: `Sen film için concept art oluşturan sanatçısın. Atmosferik ve mood-driven görseller tasarlarsın.
+
+Stil odak:
+- Atmospheric ve moody
+- Rich textures ve details
+- Environmental storytelling
+- Concept design elements
+- Pre-production art style
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu sahne için concept art oluştur:
+
+{{scene_title}} - {{location}}
+Mood ve atmosfer: {{scene_text}}
+
+Film pre-production concept art tarzında, atmosferik ve detaylı görsel için prompt oluştur.`
+    },
+    
+    animated_style: {
+      name: '🎞️ Animasyon Stili',
+      system: `Sen animasyon storyboard uzmanısın. Animated film/series için görsel prompt'lar oluşturursun.
+
+Animasyon özelikleri:
+- Clear character poses ve expressions
+- Stylized backgrounds
+- Animation-friendly composition
+- Vibrant color schemes
+- Dynamic action clarity
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu sahne için animasyon stili görsel oluştur:
+
+{{scene_title}}
+Karakterler ve aksiyonlar: {{scene_text}}
+
+Animated series/film tarzında, stilize ve karakteristik görsel için prompt oluştur.`
+    },
+    
+    noir_style: {
+      name: '🌃 Film Noir',
+      system: `Sen film noir uzmanısın. Karanlık, atmosferik ve dramatic sahneler tasarlarsın.
+
+Noir özellikler:
+- High contrast black and white
+- Dramatic shadows ve lighting
+- Urban nighttime settings
+- Mysterious ve moody atmosphere
+- Classic noir cinematography
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu sahne için film noir stili görsel oluştur:
+
+{{scene_title}} - {{location}}
+Sahne: {{scene_text}}
+
+Classic film noir tarzında, dramatic lighting ve shadows ile prompt oluştur.`
+    },
+    
+    fantasy_epic: {
+      name: '⚔️ Fantasy Epik',
+      system: `Sen fantasy film uzmanısın. Büyülü, epik ve fantastik sahneler yaratırsın.
+
+Fantasy özellikler:
+- Magical ve mystical elements
+- Epic scale ve grandeur
+- Rich fantasy environments
+- Mythical creatures ve characters
+- Dramatic fantasy lighting
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu sahne için fantasy epik görsel oluştur:
+
+{{scene_title}} - {{location}}
+Fantasy elementler: {{scene_text}}
+
+Büyülü ve epik fantasy film tarzında görsel için prompt oluştur.`
+    },
+    
+    horror_atmospheric: {
+      name: '👻 Korku Atmosferi',
+      system: `Sen korku filmi uzmanısın. Gerilimli, korkutucu ve atmosferik sahneler tasarlarsın.
+
+Korku özellikler:
+- Dark ve ominous atmosphere
+- Suspenseful lighting
+- Psychological tension
+- Horror cinematography
+- Eerie ve unsettling mood
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu sahne için korku atmosferi oluştur:
+
+{{scene_title}} - {{location}}
+Korku elementleri: {{scene_text}}
+
+Gerilimli ve korkutucu atmosferli prompt oluştur.`
+    },
+    
+    action_dynamic: {
+      name: '💥 Dinamik Aksiyon',
+      system: `Sen aksiyon filmi uzmanısın. Hızlı, dynamic ve energy dolu sahneler yaratırsın.
+
+Aksiyon özellikler:
+- High energy ve movement
+- Dynamic camera angles
+- Motion blur ve speed
+- Intense action scenes
+- Adrenaline-pumping visuals
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu sahne için dinamik aksiyon görseli oluştur:
+
+{{scene_title}}
+Aksiyon sekansı: {{scene_text}}
+
+High-energy, dynamic aksiyon filmi tarzında prompt oluştur.`
+    }
+  },
   // Analiz kategorileri için varsayılan prompts
   analysis: {
     character: {
@@ -852,13 +1126,15 @@ Kısa ve net cevaplar ver. Bullet points kullan.`,
 const createEmptyCustomPrompts = () => ({
    analysis: {},
    grammar: {},
-   speed_reading: {}
+   speed_reading: {},
+   storyboard: {}
 });
 
 const getDefaultActivePrompts = () => ({
    analysis: 'llama_quick_review',
    grammar: 'intermediate',
-   speed_reading: 'summary'
+   speed_reading: 'summary',
+   storyboard: 'main_storyboard'
 });
 
 export const usePromptStore = create(
@@ -966,7 +1242,8 @@ export const usePromptStore = create(
                customPrompts: {
                   analysis: persistedState.customPrompts?.analysis || {},
                   grammar: persistedState.customPrompts?.grammar || {},
-                  speed_reading: persistedState.customPrompts?.speed_reading || {}
+                  speed_reading: persistedState.customPrompts?.speed_reading || {},
+                  storyboard: persistedState.customPrompts?.storyboard || {}
                },
                activePrompts: persistedState.activePrompts || getDefaultActivePrompts()
             };

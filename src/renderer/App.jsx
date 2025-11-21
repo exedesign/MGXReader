@@ -6,13 +6,15 @@ import MultiScriptImporter from './components/MultiScriptImporter';
 import TextEditor from './components/TextEditor';
 import AnalysisPanel from './components/AnalysisPanel';
 import SpeedReader from './components/SpeedReader';
-import SceneManagement from './components/SceneManagement';
+import AIStoryboard from './components/SimpleStoryboard';
 import Header from './components/Header';
 
 function App() {
-  const { scriptText, currentView, scripts, currentScriptId, isAnalyzing, analysisProgress } = useScriptStore();
+  const { currentView, scripts, currentScriptId, isAnalyzing, analysisProgress, getCurrentScript } = useScriptStore();
   const { isFullscreen } = useReaderStore();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
+
+  const currentScript = getCurrentScript();
 
   // In fullscreen mode, hide everything except the reader
   if (isFullscreen && currentView === 'reader') {
@@ -30,7 +32,7 @@ function App() {
 
       {/* Global Analysis Progress Bar */}
       {isAnalyzing && analysisProgress && (
-        <div className="bg-cinema-dark border-b border-cinema-gray px-4 py-3 z-50">
+        <div className="bg-cinema-dark border-b border-cinema-gray px-4 py-3 z-10">
           <div className="flex items-center justify-between text-sm text-cinema-text-dim mb-2">
             <span className="font-medium">🎬 {analysisProgress.message}</span>
             {analysisProgress.currentChunk && analysisProgress.totalChunks && (
@@ -59,11 +61,11 @@ function App() {
         {/* Main Panel */}
         <div className="flex-1 overflow-hidden min-w-0">
           {/* Main Content */}
-          {currentView === 'uploader' || (!scriptText && scripts.length === 0) ? (
+          {currentView === 'uploader' || (scripts.length === 0) ? (
             // No scripts yet or uploader view - show universal importer
             <MultiScriptImporter />
-          ) : !scriptText && scripts.length > 0 ? (
-            // Scripts exist but none selected - show universal importer
+          ) : !currentScript ? (
+            // Scripts exist but none selected - show universal importer  
             <MultiScriptImporter />
           ) : (
             // Script is selected - show content
@@ -71,7 +73,7 @@ function App() {
               {currentView === 'editor' && <TextEditor />}
               {currentView === 'analysis' && <AnalysisPanel />}
               {currentView === 'reader' && <SpeedReader />}
-              {currentView === 'scenes' && <SceneManagement />}
+              {currentView === 'scenes' && <AIStoryboard />}
             </>
           )}
         </div>

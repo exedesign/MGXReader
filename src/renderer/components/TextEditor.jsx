@@ -72,11 +72,7 @@ export default function TextEditor() {
     return () => document.removeEventListener('click', handleClick);
   }, []);
 
-  const handleClean = () => {
-    const cleaned = cleanScreenplayText(scriptText);
-    setCleanedText(cleaned);
-    setViewMode('cleaned');
-  };
+
 
   const handleTextChange = (e) => {
     if (viewMode === 'cleaned') {
@@ -172,12 +168,6 @@ export default function TextEditor() {
 
           {/* Right side - Actions */}
           <div className="flex items-center gap-3">
-            {viewMode === 'raw' && (
-              <button onClick={handleClean} className="btn-secondary text-sm">
-                🧹 {t('editor.cleanText')}
-              </button>
-            )}
-
             <button onClick={handleExport} className="btn-primary text-sm">
               💾 {t('editor.export')}
             </button>

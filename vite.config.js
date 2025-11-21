@@ -20,6 +20,23 @@ export default defineConfig({
     port: 3000,
     host: 'localhost',
     strictPort: false,
+    cors: {
+      origin: '*',
+      credentials: true
+    },
+    proxy: {
+      '/api/gemini': {
+        target: 'https://generativelanguage.googleapis.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/gemini/, ''),
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            // Add necessary headers
+            proxyReq.setHeader('User-Agent', 'ScriptMaster-AI/1.0');
+          });
+        }
+      }
+    },
     fs: {
       // Allow serving files from node_modules
       allow: ['..']

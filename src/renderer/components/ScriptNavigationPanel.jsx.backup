@@ -31,41 +31,34 @@ export default function ScriptNavigationPanel() {
     localStorage.setItem('scriptPanelWidth', panelWidth.toString());
   }, [panelWidth]);
 
-  // 📱 Responsive breakpoints
-  const isNarrow = panelWidth < 280;
-  const isMedium = panelWidth >= 280 && panelWidth < 350;
-  const isWide = panelWidth >= 350;
-
-  // 🖱️ Resize handlers - Basit ve güvenilir sistem
+  // 🖱️ Resize handlers
   const handleMouseDown = useCallback((e) => {
-    console.log('🔧 Resize start');
-    e.preventDefault();
     setIsResizing(true);
-    
-    const handleMouseMove = (moveEvent) => {
-      if (moveEvent.clientX >= 250 && moveEvent.clientX <= 600) {
-        setPanelWidth(moveEvent.clientX);
-        console.log('🔧 Resize move:', moveEvent.clientX);
-      }
-    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    e.preventDefault();
+  }, []);
 
-    const handleMouseUp = () => {
-      console.log('🔧 Resize end');
-      setIsResizing(false);
+  const handleMouseMove = useCallback((e) => {
+    if (!isResizing) return;
+    
+    const newWidth = Math.max(250, Math.min(600, e.clientX));
+    setPanelWidth(newWidth);
+  }, [isResizing]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  // 🧹 Cleanup
+  useEffect(() => {
+    return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, []);
-
-  // 🧹 Cleanup - Sadece component unmount
-  useEffect(() => {
-    return () => {
-      setIsResizing(false);
-    };
-  }, []);
+  }, [handleMouseMove, handleMouseUp]);
 
   // Group and sort scripts with enhanced project grouping
   const organizedScripts = useMemo(() => {
@@ -195,48 +188,34 @@ export default function ScriptNavigationPanel() {
 
   return (
     <div 
-      className="h-full flex relative bg-cinema-dark border-r border-cinema-gray overflow-hidden"
-      style={{ 
-        width: `${panelWidth}px`,
-        minWidth: '250px',
-        maxWidth: '600px'
-      }}
+      className="h-full flex relative bg-cinema-dark border-r border-cinema-gray"
+      style={{ width: `${panelWidth}px` }}
     >
       {/* Main Panel Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col">
         {/* Header */}
         <div className="flex-shrink-0 p-4 border-b border-cinema-gray">
           <div className="flex items-center justify-between mb-3">
-            <h2 className={`font-bold text-cinema-text flex items-center gap-2 truncate ${
-              isNarrow ? 'text-base' : 'text-lg'
-            }`}>
-              <svg className={`text-cinema-accent flex-shrink-0 ${
-                isNarrow ? 'w-4 h-4' : 'w-5 h-5'
-              }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <h2 className="text-lg font-bold text-cinema-text flex items-center gap-2">
+              <svg className="w-5 h-5 text-cinema-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
-              <span className="truncate">
-                {isNarrow ? t('scriptNav.titleShort', 'Senaryo') : t('scriptNav.title', 'Senaryolar')}
-              </span>
+              {t('scriptNav.title', 'Senaryolar')}
             </h2>
-            <span className={`bg-cinema-accent text-white rounded flex-shrink-0 ${
-              isNarrow ? 'px-1.5 py-0.5 text-xs' : 'px-2 py-1 text-xs'
-            }`}>
+            <span className="text-xs bg-cinema-accent text-white px-2 py-1 rounded">
               {scripts.length}
             </span>
           </div>
 
         {/* Controls */}
         <div className="space-y-2">
-          <div className={`flex gap-2 ${isNarrow ? 'flex-col' : ''}`}>
+          <div className="flex gap-2">
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className={`flex-1 px-2 py-1.5 bg-cinema-gray border border-cinema-gray-light rounded text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:outline-none ${
-                isNarrow ? 'text-xs' : 'text-xs'
-              }`}
+              className="flex-1 text-xs px-2 py-1.5 bg-cinema-gray border border-cinema-gray-light rounded text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:outline-none"
             >
-              <option value="recent">{isNarrow ? t('scriptNav.sortRecentShort', 'Son') : t('scriptNav.sortRecent', 'Son güncellenen')}</option>
+              <option value="recent">{t('scriptNav.sortRecent', 'Son güncellenen')}</option>
               <option value="name">{t('scriptNav.sortName', 'İsim')}</option>
               <option value="type">{t('scriptNav.sortType', 'Tür')}</option>
             </select>
@@ -245,7 +224,7 @@ export default function ScriptNavigationPanel() {
       </div>
 
       {/* Scripts List */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-y-auto">
         {/* Projects (grouped scripts like "GUSTAV MAIER'IN TUHAF ÖYKÜSÜ") */}
         {organizedScripts.projects.map((project) => (
           <div key={project.title} className="border-b border-cinema-gray/50">
@@ -255,27 +234,23 @@ export default function ScriptNavigationPanel() {
               className="w-full p-3 text-left hover:bg-cinema-gray/30 transition-colors flex items-center gap-2"
             >
               <svg 
-                className={`text-cinema-text-dim transition-transform flex-shrink-0 ${
+                className={`w-4 h-4 text-cinema-text-dim transition-transform ${
                   expandedSeries.has(project.title) ? 'rotate-90' : ''
-                } ${isNarrow ? 'w-3 h-3' : 'w-4 h-4'}`}
+                }`}
                 fill="none" 
                 stroke="currentColor" 
                 viewBox="0 0 24 24"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
-              <span className={isNarrow ? 'text-base' : 'text-lg'}>📚</span>
+              <span className="text-lg">📚</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h3 className={`font-medium text-cinema-text truncate ${
-                    isNarrow ? 'text-xs' : 'text-sm'
-                  }`}>
+                  <h3 className="font-medium text-cinema-text text-sm truncate">
                     {project.title}
                   </h3>
-                  <span className={`bg-purple-500/20 text-purple-400 rounded flex-shrink-0 ${
-                    isNarrow ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-0.5 text-xs'
-                  }`}>
-                    {project.totalChapters} {isNarrow ? 'böl' : 'bölüm'}
+                  <span className="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
+                    {project.totalChapters} bölüm
                   </span>
                   {project.firstChapter !== project.lastChapter && (
                     <span className="text-xs bg-cinema-accent/20 text-cinema-accent px-1.5 py-0.5 rounded">
@@ -315,19 +290,12 @@ export default function ScriptNavigationPanel() {
                             </span>
                           )}
                         </div>
-                        <p className={`text-cinema-text-dim ${
-                          isNarrow ? 'text-xs' : 'text-xs'
-                        }`}>
-                          {isNarrow 
-                            ? `${chapter.structure?.scenes?.length || 0}s • ${chapter.pageCount}p`
-                            : `${chapter.structure?.scenes?.length || 0} sahne • ${chapter.pageCount} sayfa`
-                          }
+                        <p className="text-xs text-cinema-text-dim">
+                          {chapter.structure?.scenes?.length || 0} sahne • {chapter.pageCount} sayfa
                         </p>
-                        {!isNarrow && (
-                          <p className="text-xs text-cinema-text-dim truncate">
-                            {chapter.fileName}
-                          </p>
-                        )}
+                        <p className="text-xs text-cinema-text-dim truncate">
+                          {chapter.fileName}
+                        </p>
                       </div>
                       
                       <div className="flex items-center gap-1">
@@ -419,27 +387,18 @@ export default function ScriptNavigationPanel() {
                 currentScriptId === script.id ? 'bg-cinema-accent/20 border-r-2 border-cinema-accent' : ''
               }`}
             >
-              <span className={isNarrow ? 'text-base' : 'text-lg'}>{getScriptIcon(script)}</span>
+              <span className="text-lg">{getScriptIcon(script)}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h3 className={`font-medium text-cinema-text truncate ${
-                    isNarrow ? 'text-xs' : 'text-sm'
-                  }`}>
+                  <h3 className="font-medium text-cinema-text text-sm truncate">
                     {script.title}
                   </h3>
-                  <span className={`bg-gray-500/20 text-gray-400 rounded flex-shrink-0 ${
-                    isNarrow ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-0.5 text-xs'
-                  }`}>
+                  <span className="text-xs bg-gray-500/20 text-gray-400 px-1.5 py-0.5 rounded">
                     {script.structure?.type || 'single'}
                   </span>
                 </div>
-                <p className={`text-cinema-text-dim ${
-                  isNarrow ? 'text-xs' : 'text-xs'
-                }`}>
-                  {isNarrow 
-                    ? `${script.structure?.scenes?.length || 0}s • ${script.pageCount}p`
-                    : `${script.structure?.scenes?.length || 0} sahne • ${script.pageCount} sayfa`
-                  }
+                <p className="text-xs text-cinema-text-dim">
+                  {script.structure?.scenes?.length || 0} sahne • {script.pageCount} sayfa
                 </p>
               </div>
               
@@ -524,50 +483,44 @@ export default function ScriptNavigationPanel() {
         ))}
       </div>
 
-      {/* Footer Actions - Sadece debug için */}
-      {scripts.length > 0 && (
-        <div className="flex-shrink-0 p-3 border-t border-cinema-gray">
+      {/* Footer Actions */}
+      <div className="flex-shrink-0 p-3 border-t border-cinema-gray">
+        <div className="space-y-2">
           <button
-            onClick={() => {
-              if (confirm('Tüm senaryoları silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
-                const { clearAllScripts } = useScriptStore.getState();
-                clearAllScripts();
-              }
-            }}
-            className="w-full text-xs px-3 py-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-600/30 rounded transition-colors"
+            onClick={() => setCurrentView('uploader')}
+            className="w-full btn-primary text-sm flex items-center justify-center gap-2"
           >
-            🗑️ Tüm Senaryoları Temizle
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            {t('scriptNav.addNew', 'Yeni Senaryo Ekle')}
           </button>
+          
+          {/* Debug: Clear All Scripts */}
+          {scripts.length > 0 && (
+            <button
+              onClick={() => {
+                if (confirm('Tüm senaryoları silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
+                  const { clearAllScripts } = useScriptStore.getState();
+                  clearAllScripts();
+                }
+              }}
+              className="w-full text-xs px-3 py-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-600/30 rounded transition-colors"
+            >
+              🗑️ Tüm Senaryoları Temizle
+            </button>
+          )}
         </div>
-      )}
-      </div>
+      </div> {/* Main Panel Content closing */}
       
-      {/* 🔧 Resize Handle - İyileştirilmiş */}
+      {/* 🔧 Resize Handle */}
       <div
-        className={`absolute top-0 right-0 w-2 h-full cursor-col-resize transition-all duration-200 z-10 ${
-          isResizing 
-            ? 'bg-yellow-500 shadow-xl' 
-            : 'bg-yellow-400/70 hover:bg-yellow-500'
+        className={`absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-cinema-accent/30 transition-colors group ${
+          isResizing ? 'bg-cinema-accent/50' : ''
         }`}
         onMouseDown={handleMouseDown}
-        style={{ 
-          right: '-2px',
-          background: isResizing 
-            ? 'linear-gradient(90deg, transparent, #facc15, #facc15, transparent)'
-            : 'linear-gradient(90deg, transparent, rgba(250, 204, 21, 0.7), rgba(250, 204, 21, 0.7), transparent)'
-        }}
       >
-        {/* Merkez çizgi */}
-        <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-0.5 h-12 rounded transition-all duration-200 ${
-          isResizing
-            ? 'bg-yellow-800 shadow-lg'
-            : 'bg-yellow-600/90 hover:bg-yellow-800'
-        }`}></div>
-        
-        {/* Resize ipucu */}
-        <div className="absolute top-1/2 right-4 transform -translate-y-1/2 text-xs text-white opacity-0 hover:opacity-100 transition-opacity bg-black/80 px-2 py-1 rounded whitespace-nowrap pointer-events-none">
-          ↔️ Panel Genişliği
-        </div>
+        <div className="absolute top-1/2 right-0 transform -translate-y-1/2 w-1 h-12 bg-cinema-gray/50 group-hover:bg-cinema-accent/70 transition-colors"></div>
       </div>
     </div>
   );

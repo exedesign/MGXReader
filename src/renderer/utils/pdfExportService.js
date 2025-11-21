@@ -14,12 +14,20 @@ export class PDFExportService {
   createDocument() {
     this.doc = new jsPDF('p', 'mm', 'a4');
     this.currentY = 20;
+    
+    // Set font to support Turkish characters
+    try {
+      this.doc.setFont('helvetica');
+    } catch (error) {
+      console.warn('Font setting failed, using default:', error);
+    }
   }
 
   addHeader(title) {
     this.doc.setFontSize(20);
     this.doc.setFont('helvetica', 'bold');
-    this.doc.text(title, this.leftMargin, this.currentY);
+    const cleanTitle = title ? String(title).normalize('NFC') : '';
+    this.doc.text(cleanTitle, this.leftMargin, this.currentY);
     this.currentY += 15;
     
     // Add line under header
@@ -34,7 +42,8 @@ export class PDFExportService {
     // Section title
     this.doc.setFontSize(14);
     this.doc.setFont('helvetica', 'bold');
-    this.doc.text(title, this.leftMargin, this.currentY);
+    const cleanTitle = title ? String(title).normalize('NFC') : '';
+    this.doc.text(cleanTitle, this.leftMargin, this.currentY);
     this.currentY += 8;
     
     // Section content
@@ -61,7 +70,9 @@ export class PDFExportService {
   }
 
   addText(text) {
-    const lines = this.doc.splitTextToSize(text, this.contentWidth);
+    // Ensure proper encoding for Turkish characters
+    const cleanText = text ? String(text).normalize('NFC') : '';
+    const lines = this.doc.splitTextToSize(cleanText, this.contentWidth);
     lines.forEach(line => {
       this.checkPageBreak(6);
       this.doc.text(line, this.leftMargin, this.currentY);
@@ -73,7 +84,9 @@ export class PDFExportService {
     this.checkPageBreak(8);
     this.doc.text('•', this.leftMargin, this.currentY);
     
-    const lines = this.doc.splitTextToSize(text, this.contentWidth - 10);
+    // Ensure proper encoding for Turkish characters
+    const cleanText = text ? String(text).normalize('NFC') : '';
+    const lines = this.doc.splitTextToSize(cleanText, this.contentWidth - 10);
     lines.forEach((line, index) => {
       if (index > 0) this.checkPageBreak(6);
       this.doc.text(line, this.leftMargin + 10, this.currentY);
@@ -103,11 +116,13 @@ export class PDFExportService {
     this.checkPageBreak(8);
     
     this.doc.setFont('helvetica', 'bold');
-    this.doc.text(key + ':', this.leftMargin + 5, this.currentY);
+    const cleanKey = key ? String(key).normalize('NFC') : '';
+    this.doc.text(cleanKey + ':', this.leftMargin + 5, this.currentY);
     
     this.doc.setFont('helvetica', 'normal');
     if (typeof value === 'string') {
-      const valueLines = this.doc.splitTextToSize(value, this.contentWidth - 50);
+      const cleanValue = value ? String(value).normalize('NFC') : '';
+      const valueLines = this.doc.splitTextToSize(cleanValue, this.contentWidth - 50);
       valueLines.forEach((line, index) => {
         if (index === 0) {
           this.doc.text(line, this.leftMargin + 50, this.currentY);
@@ -178,6 +193,8 @@ export class PDFExportService {
     // Priority sections for organized reporting
     const prioritySections = [
       { key: 'summary', title: '📋 Genel Özet' },
+      { key: 'budgetAndSchedule', title: '💰 Bütçe & Zaman', handler: 'handleBudgetAndSchedule' },
+      { key: 'productionScope', title: '🛠️ Prodüksiyon Kapsamı', handler: 'handleProductionScope' },
       { key: 'customResults', title: '🎯 Özelleştirilmiş Analiz Sonuçları' },
       { key: 'scenes', title: '🎬 Sahne Detayları' },
       { key: 'characters', title: '👥 Karakter Analizi' },
@@ -194,8 +211,12 @@ export class PDFExportService {
     const processedKeys = new Set();
     
     // Process priority sections first
-    prioritySections.forEach(({ key, title }) => {
-      if (analysisData[key] !== undefined && analysisData[key] !== null) {
+    prioritySections.forEach(({ key, title, handler }) => {
+      if (handler) {
+        // Use special handler for synthetic sections
+        this[handler](analysisData, title);
+        processedKeys.add(key);
+      } else if (analysisData[key] !== undefined && analysisData[key] !== null) {
         this.processPrioritySection(key, analysisData[key], title);
         processedKeys.add(key);
       }
@@ -598,7 +619,17 @@ export class PDFExportService {
       }
       if (analysisData.summary.estimatedShootingDays) {
         this.addKeyValue('Tahmini Çekim Günü', String(analysisData.summary.estimatedShootingDays));
+      } else {
+        this.addKeyValue('Tahmini Çekim Günü', 'Belirlenmedi');
       }
+      if (analysisData.summary.budgetEstimate) {
+        this.addKeyValue('Bütçe Tahmini', String(analysisData.summary.budgetEstimate));
+      } else {
+        this.addKeyValue('Bütçe Tahmini', 'N/A');
+      }
+    } else {
+      this.addKeyValue('Tahmini Çekim Günü', 'Belirlenmedi');
+      this.addKeyValue('Bütçe Tahmini', 'N/A');
     }
     
     // Eleman sayıları
@@ -611,6 +642,25 @@ export class PDFExportService {
     if (analysisData.locations && analysisData.locations.length > 0) {
       this.addKeyValue('Mekan Sayısı', String(analysisData.locations.length));
     }
+    
+    // Prodüksiyon kapsamı
+    const equipmentCount = analysisData.equipment ? analysisData.equipment.length : 0;
+    this.addKeyValue('Ekipman Öğeleri', String(equipmentCount));
+    
+    const vfxCount = analysisData.vfxRequirements ? 
+      (Array.isArray(analysisData.vfxRequirements) ? analysisData.vfxRequirements.length : 
+       analysisData.vfxRequirements.sequences ? analysisData.vfxRequirements.sequences.length : 0) : 0;
+    this.addKeyValue('VFX Sekansları', String(vfxCount));
+    
+    const sfxCount = analysisData.sfxRequirements ? 
+      (Array.isArray(analysisData.sfxRequirements) ? analysisData.sfxRequirements.length :
+       analysisData.sfxRequirements.effects ? analysisData.sfxRequirements.effects.length : 0) : 0;
+    this.addKeyValue('SFX İhtiyaçları', String(sfxCount));
+    
+    const virtualProdSuitability = analysisData.virtualProductionSuitability ? 
+      (analysisData.virtualProductionSuitability.suitability || 
+       analysisData.virtualProductionSuitability.recommendation || 'Değerlendirildi') : 'Değerlendirilmedi';
+    this.addKeyValue('Sanal Prodüksiyon', virtualProdSuitability);
     
     // Özelleştirilmiş analiz sonuç sayısı
     if (analysisData.customResults) {
@@ -658,6 +708,46 @@ export class PDFExportService {
       console.error('PDF kaydetme hatası:', error);
       throw error;
     }
+  }
+
+  // Special handlers for synthetic sections
+  handleBudgetAndSchedule(analysisData, title) {
+    this.addSection(title, '');
+    
+    const estimatedDays = analysisData.summary?.estimatedShootingDays || 
+                         analysisData.estimatedShootingDays || 0;
+    this.addKeyValue('Çekim Günleri', estimatedDays > 0 ? String(estimatedDays) : 'Belirlenmedi');
+    
+    const budgetEstimate = analysisData.summary?.budgetEstimate || 
+                          analysisData.budgetEstimate || 
+                          analysisData.budget?.estimate;
+    this.addKeyValue('Bütçe Tahmini', budgetEstimate || 'N/A');
+    
+    this.currentY += 5;
+  }
+
+  handleProductionScope(analysisData, title) {
+    this.addSection(title, '');
+    
+    const equipmentCount = analysisData.equipment ? analysisData.equipment.length : 0;
+    this.addKeyValue('Ekipman Öğeleri', String(equipmentCount));
+    
+    const vfxCount = analysisData.vfxRequirements ? 
+      (Array.isArray(analysisData.vfxRequirements) ? analysisData.vfxRequirements.length : 
+       analysisData.vfxRequirements.sequences ? analysisData.vfxRequirements.sequences.length : 0) : 0;
+    this.addKeyValue('VFX Sekansları', String(vfxCount));
+    
+    const sfxCount = analysisData.sfxRequirements ? 
+      (Array.isArray(analysisData.sfxRequirements) ? analysisData.sfxRequirements.length :
+       analysisData.sfxRequirements.effects ? analysisData.sfxRequirements.effects.length : 0) : 0;
+    this.addKeyValue('SFX İhtiyaçları', String(sfxCount));
+    
+    const virtualProdSuitability = analysisData.virtualProductionSuitability ? 
+      (analysisData.virtualProductionSuitability.suitability || 
+       analysisData.virtualProductionSuitability.recommendation || 'Değerlendirildi') : 'Değerlendirilmedi';
+    this.addKeyValue('Sanal Prodüksiyon', virtualProdSuitability);
+    
+    this.currentY += 5;
   }
 }
 

@@ -32,6 +32,12 @@ export const GEMINI_MODELS = [
   { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', contextWindow: 2000000 },
 ];
 
+// Preview models (experimental)
+export const GEMINI_PREVIEW_MODELS = [
+  { id: 'gemini-exp-1206', name: 'Gemini Exp 1206 - Experimental', contextWindow: 2000000, preview: true },
+  { id: 'gemini-exp-1121', name: 'Gemini Exp 1121 - Experimental', contextWindow: 2000000, preview: true },
+];
+
 export const MLX_MODELS = [
   { id: 'mlx-community/Llama-3.2-3B-Instruct-4bit', name: 'Llama 3.2 3B (4-bit) - Fast', contextWindow: 128000, recommended: true },
   { id: 'mlx-community/Llama-3.2-1B-Instruct-4bit', name: 'Llama 3.2 1B (4-bit) - Ultra Fast', contextWindow: 128000 },
@@ -55,6 +61,232 @@ export class AIHandler {
     // Initialize advanced analysis engines
     // Initialize advanced analysis engines
     this.enhancedAnalysisEngine = createEnhancedAnalysisEngine(this);
+  }
+
+  /**
+   * Generate image using AI provider
+   * Currently supports OpenAI DALL-E
+   * @param {string} prompt - Image generation prompt
+   * @param {object} options - Generation options
+   * @returns {Promise<object>} - Generation result with image URL
+   */
+  async generateImage(prompt, options = {}) {
+    const {
+      size = '1024x1024',
+      quality = 'standard',
+      style = 'vivid',
+      model = 'dall-e-3'
+    } = options;
+
+    try {
+      switch (this.provider) {
+        case AI_PROVIDERS.OPENAI:
+          return await this.generateImageOpenAI(prompt, { size, quality, style, model });
+          
+        case AI_PROVIDERS.GEMINI:
+          return await this.generateImageGemini(prompt, options);
+          
+        case AI_PROVIDERS.LOCAL:
+        case AI_PROVIDERS.MLX:
+          throw new Error('Local AI providers do not support image generation. Please use OpenAI or Gemini provider.');
+          
+        default:
+          throw new Error(`Image generation not supported for provider: ${this.provider}`);
+      }
+    } catch (error) {
+      console.error(`Image Generation Error (${this.provider}):`, error);
+      return {
+        success: false,
+        error: error.message,
+        provider: this.provider
+      };
+    }
+  }
+
+  /**
+   * Gemini Image Generation (Imagen 3)
+   * @param {string} prompt - Image prompt
+   * @param {object} options - Generation options
+   * @returns {Promise<object>} - Generation result
+   */
+  async generateImageGemini(prompt, options = {}) {
+    if (!this.apiKey) {
+      throw new Error('Gemini API key is required for image generation');
+    }
+
+    const { size = '1024x1024' } = options;
+    
+    try {
+      // Use the correct Gemini Imagen API endpoint
+      const response = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:generateImage?key=${this.apiKey}`,
+        {
+          prompt: {
+            text: prompt
+          },
+          safetySettings: [
+            {
+              category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+              threshold: 'BLOCK_LOW_AND_ABOVE'
+            },
+            {
+              category: 'HARM_CATEGORY_HATE_SPEECH', 
+              threshold: 'BLOCK_LOW_AND_ABOVE'
+            },
+            {
+              category: 'HARM_CATEGORY_HARASSMENT',
+              threshold: 'BLOCK_LOW_AND_ABOVE'
+            },
+            {
+              category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+              threshold: 'BLOCK_LOW_AND_ABOVE'
+            }
+          ],
+          generationConfig: {
+            aspectRatio: this.mapSizeToAspectRatio(size),
+            negativePrompt: 'blurry, low quality, distorted, ugly',
+            personGeneration: 'ALLOW_ADULT'
+          }
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 120000 // 2 minutes timeout for image generation
+        }
+      );
+
+      if (response.data && response.data.generatedImages && response.data.generatedImages.length > 0) {
+        const imageData = response.data.generatedImages[0];
+        
+        // Convert base64 to data URL if needed
+        let imageUrl;
+        if (imageData.bytesBase64Uri) {
+          imageUrl = imageData.bytesBase64Uri;
+        } else if (imageData.bytesBase64) {
+          imageUrl = `data:image/jpeg;base64,${imageData.bytesBase64}`;
+        } else {
+          throw new Error('No image data in response');
+        }
+        
+        return {
+          success: true,
+          imageUrl: imageUrl,
+          provider: 'gemini',
+          model: 'imagen-3.0-generate-001',
+          revisedPrompt: prompt
+        };
+      } else {
+        throw new Error('No image generated from Gemini response');
+      }
+    } catch (error) {
+      console.error('Gemini Image Generation Error:', error);
+      
+      if (error.response) {
+        const errorData = error.response.data;
+        let errorMessage;
+        
+        if (errorData.error) {
+          errorMessage = errorData.error.message || errorData.error.code || 'Unknown API error';
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        } else {
+          errorMessage = `HTTP ${error.response.status}: ${error.response.statusText}`;
+        }
+        
+        throw new Error(`Gemini API Error: ${errorMessage}`);
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error('Gemini API timeout - image generation took too long');
+      }
+      
+      throw new Error(`Gemini request failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Map OpenAI size format to Gemini aspect ratio
+   * @param {string} size - Size in format '1024x1024'
+   * @returns {string} - Aspect ratio for Gemini
+   */
+  mapSizeToAspectRatio(size) {
+    const aspectRatioMap = {
+      '1024x1024': '1:1',
+      '1152x864': '4:3', 
+      '1792x1024': '16:9',
+      '1024x1792': '9:16'
+    };
+    
+    return aspectRatioMap[size] || '1:1';
+  }
+
+  /**
+   * OpenAI DALL-E Image Generation
+   * @param {string} prompt - Image prompt
+   * @param {object} options - Generation options
+   * @returns {Promise<object>} - Generation result
+   */
+  async generateImageOpenAI(prompt, options = {}) {
+    if (!this.apiKey) {
+      throw new Error('OpenAI API key is required for image generation');
+    }
+
+    const { size, quality, style, model } = options;
+
+    try {
+      const response = await axios.post(
+        'https://api.openai.com/v1/images/generations',
+        {
+          model: model || 'dall-e-3',
+          prompt: prompt,
+          n: 1,
+          size: size || '1024x1024',
+          quality: quality || 'standard',
+          style: style || 'vivid'
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          timeout: 120000, // 2 minutes timeout for image generation
+        }
+      );
+
+      if (response.data && response.data.data && response.data.data[0]) {
+        return {
+          success: true,
+          imageUrl: response.data.data[0].url,
+          revisedPrompt: response.data.data[0].revised_prompt,
+          provider: AI_PROVIDERS.OPENAI,
+          model: model || 'dall-e-3',
+          generatedAt: new Date().toISOString()
+        };
+      } else {
+        throw new Error('Invalid response from OpenAI image API');
+      }
+    } catch (error) {
+      if (error.response) {
+        const status = error.response.status;
+        const errorData = error.response.data;
+        
+        if (status === 400) {
+          const message = errorData?.error?.message || 'Bad request';
+          throw new Error(`OpenAI Image API Error: ${message}`);
+        }
+        
+        if (status === 401) {
+          throw new Error('Invalid OpenAI API key for image generation');
+        }
+        
+        if (status === 429) {
+          throw new Error('OpenAI rate limit exceeded. Please try again later.');
+        }
+        
+        throw new Error(`OpenAI Image API Error (${status}): ${errorData?.error?.message || error.response.statusText}`);
+      }
+      
+      throw error;
+    }
   }
 
   /**

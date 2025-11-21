@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AI_PROVIDERS, OPENAI_MODELS, GEMINI_MODELS, MLX_MODELS } from '../utils/aiHandler';
+import { AI_PROVIDERS, OPENAI_MODELS, GEMINI_MODELS, GEMINI_PREVIEW_MODELS, MLX_MODELS } from '../utils/aiHandler';
 import { useAIStore } from '../store/aiStore';
 
 export default function ProvidersTab({
@@ -31,7 +31,7 @@ export default function ProvidersTab({
   const [localOpenAIKey, setLocalOpenAIKey] = useState(config?.openai?.apiKey || '');
   const [localOpenAIModel, setLocalOpenAIModel] = useState(config?.openai?.model || 'gpt-4');
   const [localGeminiKey, setLocalGeminiKey] = useState(config?.gemini?.apiKey || '');
-  const [localGeminiModel, setLocalGeminiModel] = useState(config?.gemini?.model || 'gemini-2.0-flash');
+  const [localGeminiModel, setLocalGeminiModel] = useState(config?.gemini?.model || 'gemini-1.5-pro-latest');
   const [localEndpointInput, setLocalEndpointInput] = useState(config?.local?.endpoint || '');
   const [localModelInput, setLocalModelInput] = useState(config?.local?.model || '');
   const [localTempInput, setLocalTempInput] = useState(config?.local?.temperature || 0.7);
@@ -55,8 +55,9 @@ export default function ProvidersTab({
 
   // Handler functions
   const handleResetGemini = () => {
+    setLocalGeminiModel('gemini-1.5-pro-latest');
     if (setGeminiModel) {
-      setGeminiModel('gemini-2.0-flash');
+      setGeminiModel('gemini-1.5-pro-latest');
     }
   };
 
@@ -132,7 +133,7 @@ export default function ProvidersTab({
       setLocalOpenAIKey(currentConfig.openai?.apiKey || '');
       setLocalOpenAIModel(currentConfig.openai?.model || 'gpt-4');
       setLocalGeminiKey(currentConfig.gemini?.apiKey || '');
-      setLocalGeminiModel(currentConfig.gemini?.model || 'gemini-2.0-flash');
+      setLocalGeminiModel(currentConfig.gemini?.model || 'gemini-1.5-pro-latest');
       setLocalEndpointInput(currentConfig.local?.endpoint || '');
       setLocalModelInput(currentConfig.local?.model || '');
       setLocalTempInput(currentConfig.local?.temperature || 0.7);
@@ -256,16 +257,24 @@ export default function ProvidersTab({
                 onChange={(e) => setLocalGeminiModel(e.target.value)}
                 className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
               >
-                {GEMINI_MODELS.filter(model => !model.deprecated).map(model => (
-                  <option key={model.id} value={model.id}>
-                    {model.name} {model.recommended && '⭐ Recommended'} 
-                    {model.new && ' 🆕 New!'} 
-                    {model.fast && ' ⚡ Fast'}
-                  </option>
-                ))}
+                <optgroup label="🟢 Stable Models (Recommended)">
+                  {GEMINI_MODELS.filter(model => !model.deprecated).map(model => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} {model.recommended && '⭐ Recommended'} 
+                      {model.fast && ' ⚡ Fast'}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="🔶 Preview Models (May not be available)">
+                  {GEMINI_PREVIEW_MODELS.map(model => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} 
+                    </option>
+                  ))}
+                </optgroup>
               </select>
               <p className="text-xs text-cinema-text-dim mt-2">
-                💡 Gemini 2.5 Flash is perfect for quick analysis, Pro for complex scripts
+                💡 Use stable models for production. Preview models may not work for all API keys.
               </p>
             </div>
             <button

@@ -4,6 +4,7 @@ import { useScriptStore } from '../store/scriptStore';
 import { cleanScreenplayText, parseScenes } from '../utils/textProcessing';
 import { parseScreenplayFile } from '../utils/screenplayParser';
 import { performPDFOCR, isOCRAvailable } from '../utils/ocrService';
+import { extractBestTitle, findCommonProjectTitle, extractProjectInfo } from '../utils/titleExtractor';
 
 export default function MultiScriptImporter() {
   const [isDragging, setIsDragging] = useState(false);
@@ -32,13 +33,115 @@ export default function MultiScriptImporter() {
   // Detect script structure (movie, series episode, etc.)
   const detectScriptStructure = (text, fileName) => {
     const cleanName = fileName.toLowerCase();
+    const originalName = fileName.replace(/\.[^/.]+$/, ''); // Remove extension
     
-    // Series episode detection patterns
+    // Enhanced chapter/part detection patterns with Turkish support
+    const chapterPatterns = [
+      // Turkish patterns - most specific first
+      /(\d+)\.\s*(?:BÖLÜM|bölüm|BOLUM|bolum)/i,  // "1. BÖLÜM"
+      /(\d+)\s*(?:BÖLÜM|bölüm|BOLUM|bolum)/i,    // "1 BÖLÜM"
+      /(?:BÖLÜM|bölüm|BOLUM|bolum)\s*(\d+)/i,    // "BÖLÜM 1"
+      // English patterns  
+      /(\d+)\.\s*(?:CHAPTER|chapter|PART|part)/i,
+      /(\d+)\s*(?:CHAPTER|chapter|PART|part)/i,
+      /(?:CHAPTER|chapter|PART|part)\s*(\d+)/i,
+      // Episode patterns
+      /(\d+)\.\s*(?:EPISODE|episode|EP|ep)/i,
+      /(?:EPISODE|episode|EP|ep)\s*(\d+)/i,
+    ];
+
+    // More sophisticated project title extraction - fix pattern order
+    const projectTitlePatterns = [
+      // Most specific patterns first
+      /^(.+?)\s+(\d+)\.\s*(?:BÖLÜM|bölüm|BOLUM|bolum|CHAPTER|chapter|PART|part|EPISODE|episode|EP|ep).*$/i,
+      /^(.+?)\s+(?:BÖLÜM|bölüm|BOLUM|bolum|CHAPTER|chapter|PART|part|EPISODE|episode|EP|ep)\s*(\d+).*$/i,
+      /^(.+?)\s*(\d+)\s*$/i,  // Generic number at end
+    ];
+
+    let structure = {
+      type: 'single',
+      title: originalName,
+      projectTitle: null,
+      chapterNumber: null,
+      chapterTitle: null,
+      seriesTitle: null,
+      episodeNumber: null,
+      seasonNumber: null,
+      chapters: [],
+      scenes: []
+    };
+
+    console.log('Analyzing file:', originalName);
+
+    // First priority: Check for chapter/part patterns (like "GUSTAV MAIER'IN TUHAF ÖYKÜSÜ 1. BÖLÜM")
+    let foundChapter = false;
+    for (let i = 0; i < chapterPatterns.length; i++) {
+      const pattern = chapterPatterns[i];
+      const match = originalName.match(pattern);
+      if (match) {
+        console.log('✅ Chapter detected:', match[0], '- Chapter number:', parseInt(match[1]));
+        structure.type = 'chapter';
+        structure.chapterNumber = parseInt(match[1]);
+        
+        // Try to extract project title using more sophisticated patterns
+        let projectTitle = originalName;
+        let titleFound = false;
+        
+        for (let j = 0; j < projectTitlePatterns.length; j++) {
+          const titlePattern = projectTitlePatterns[j];
+          const titleMatch = originalName.match(titlePattern);
+          if (titleMatch && titleMatch[1] && titleMatch[1].trim()) {
+            projectTitle = titleMatch[1].trim();
+            // Clean up common artifacts
+            projectTitle = projectTitle.replace(/[\s\-_']+$/, ''); // Remove trailing separators and quotes
+            if (projectTitle.length > 0) {
+              titleFound = true;
+              console.log('✅ Project title extracted:', projectTitle);
+              break;
+            }
+          }
+        }
+        
+        // If no pattern matched, try manual cleanup approach
+        if (!titleFound) {
+          console.log('🔧 Trying manual cleanup...');
+          // Try multiple cleanup approaches
+          const cleanupApproaches = [
+            // Remove " 1. BÖLÜM" style
+            text => text.replace(/\s+\d+\.\s*(?:BÖLÜM|bölüm|BOLUM|bolum|CHAPTER|chapter|PART|part).*$/i, ''),
+            // Remove " BÖLÜM 1" style  
+            text => text.replace(/\s+(?:BÖLÜM|bölüm|BOLUM|bolum|CHAPTER|chapter|PART|part)\s*\d+.*$/i, ''),
+            // Remove just the number at the end
+            text => text.replace(/\s+\d+\s*$/, ''),
+          ];
+          
+          for (const approach of cleanupApproaches) {
+            const cleaned = approach(originalName).trim();
+            if (cleaned && cleaned !== originalName && cleaned.length > 0) {
+              projectTitle = cleaned;
+              console.log('✅ Manual cleanup success:', projectTitle);
+              break;
+            }
+          }
+        }
+        
+        structure.projectTitle = projectTitle;
+        structure.seriesTitle = projectTitle; // For compatibility
+        structure.title = `${structure.chapterNumber}. Bölüm`;
+        structure.chapterTitle = `${structure.chapterNumber}. BÖLÜM`;
+        structure.type = 'series'; // Treat chapters as series episodes
+        structure.episodeNumber = structure.chapterNumber;
+        
+        foundChapter = true;
+        break;
+      }
+    }
+
+    // Legacy series episode detection patterns
     const episodePatterns = [
-      /(?:episode|bölüm|ep|s\d+e\d+)\s*(\d+)/i,
-      /(\d+)\s*(?:episode|bölüm|ep)/i,
       /season\s*(\d+)\s*episode\s*(\d+)/i,
-      /sezon\s*(\d+)\s*bölüm\s*(\d+)/i
+      /sezon\s*(\d+)\s*bölüm\s*(\d+)/i,
+      /s(\d+)e(\d+)/i
     ];
 
     // Movie patterns
@@ -47,31 +150,35 @@ export default function MultiScriptImporter() {
       /(?:screenplay|senaryo)/i
     ];
 
-    let structure = {
-      type: 'single',
-      title: fileName.replace(/\.[^/.]+$/, ''), // Remove extension
-      episodes: [],
-      chapters: [],
-      scenes: []
-    };
+    // Second priority: Check for legacy series episodes (S01E01 format)
+    if (!foundChapter) {
+      for (const pattern of episodePatterns) {
+        const match = cleanName.match(pattern);
+        if (match) {
+          structure.type = 'series';
+          structure.episodeNumber = parseInt(match[2]);
+          structure.seasonNumber = parseInt(match[1]);
+          
+          const seriesName = originalName
+            .replace(pattern, '')
+            .replace(/[_\-\.]/g, ' ')
+            .trim();
+          
+          structure.seriesTitle = seriesName || `Series S${structure.seasonNumber}`;
+          structure.projectTitle = structure.seriesTitle;
+          structure.title = `S${structure.seasonNumber}E${structure.episodeNumber}`;
+          break;
+        }
+      }
+    }
 
-    // Check for series episodes
-    for (const pattern of episodePatterns) {
-      const match = cleanName.match(pattern);
-      if (match) {
-        structure.type = 'series';
-        structure.episodeNumber = parseInt(match[1]);
-        
-        // Extract series name (remove episode info)
-        const seriesName = fileName
-          .replace(pattern, '')
-          .replace(/[_\-\.]/g, ' ')
-          .trim()
-          .replace(/\.[^/.]+$/, '');
-        
-        structure.seriesTitle = seriesName || `Series ${structure.episodeNumber}`;
-        structure.title = `Episode ${structure.episodeNumber}`;
-        break;
+    // Third priority: Check for movie patterns
+    if (structure.type === 'single') {
+      for (const pattern of moviePatterns) {
+        if (pattern.test(cleanName)) {
+          structure.type = 'movie';
+          break;
+        }
       }
     }
 
@@ -88,6 +195,12 @@ export default function MultiScriptImporter() {
       intExt: scene.intExt
     }));
 
+    console.log('📋 Final structure:', {
+      type: structure.type,
+      projectTitle: structure.projectTitle,
+      chapterNumber: structure.chapterNumber,
+      title: structure.title
+    });
     return structure;
   };
 
@@ -136,20 +249,45 @@ export default function MultiScriptImporter() {
       return;
     }
 
+    // 🔄 Windows sıralama düzeltmesi: Dosya adlarına göre sırala
+    const sortedFiles = [...selectedFiles].sort((a, b) => {
+      // Dosya adından sayı çıkar
+      const getNumberFromName = (name) => {
+        const match = name.match(/(\d+)/);
+        return match ? parseInt(match[1]) : 0;
+      };
+      
+      const aNum = getNumberFromName(a.name);
+      const bNum = getNumberFromName(b.name);
+      
+      console.log('📊 Dosya sıralama:', {
+        fileA: a.name,
+        fileB: b.name,
+        numA: aNum,
+        numB: bNum,
+        result: aNum - bNum
+      });
+      
+      return aNum - bNum;
+    });
+
+    console.log('🔄 Sıralama sonucu:', sortedFiles.map((f, i) => `${i + 1}. ${f.name}`));
+
     // Multiple files - batch processing
     try {
       startBulkImport();
       updateImportProgress({
-        total: selectedFiles.length,
+        total: sortedFiles.length,
         completed: 0,
         current: null,
         errors: []
       });
 
       const importedScripts = [];
+      let globalProjectTitle = null; // 🎯 İlk dosyadan proje adını al
 
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i];
+      for (let i = 0; i < sortedFiles.length; i++) {
+        const file = sortedFiles[i];
         
         updateImportProgress({
           current: file.name,
@@ -159,13 +297,59 @@ export default function MultiScriptImporter() {
         try {
           const result = await processFile(file);
           if (result.success) {
-            const structure = importSettings.autoDetectStructure 
-              ? detectScriptStructure(result.text, file.name)
-              : { type: 'single', title: file.name.replace(/\.[^/.]+$/, ''), scenes: [] };
+            // 🎯 Basit sıralı sistem: Dosya seçim sırasına göre bölüm numarası
+            const titleWithChapter = extractBestTitle(result.text, result.metadata, file.name, i);
+            
+            console.log('📋 Sıralı bölüm sistemi:', {
+              fileName: file.name,
+              fileIndex: i,
+              chapterNumber: i + 1,
+              finalTitle: titleWithChapter,
+              method: 'sequential-chapter-system'
+            });
+            
+            // Proje adını çıkar (bölüm bilgisi olmadan)
+            let projectTitle = file.name.split(/[\\\/]/).pop()
+              .replace(/\.[^.]+$/, '') // uzantıyı kaldır
+              .replace(/[-_\s]*(?:bölüm|bolum|chapter|part|episode|ep)[-_\s]*\d+/gi, '') // bölüm numarasını temizle
+              .replace(/[-_\s]*\d+[-_\s]*(?:bölüm|bolum|chapter|part|episode|ep)/gi, '')
+              .replace(/[-_\s]*\d+$/gi, '')
+              .replace(/[-_\s]+$/, '')
+              .trim();
+              
+            // 🎯 İlk dosya proje adını belirler, sonrakiler aynı proje grubuna girer
+            if (i === 0 || !globalProjectTitle) {
+              globalProjectTitle = projectTitle || 'Bilinmeyen Proje';
+            }
+            projectTitle = globalProjectTitle; // Tüm dosyalar aynı proje grubunda
+            
+            const script = {
+              id: Date.now() + Math.random() + i,
+              title: titleWithChapter,
+              content: result.text,
+              fileName: file.name,
+              fileSize: file.size,
+              pageCount: result.pageCount || 0,
+              uploadDate: new Date().toISOString(),
+              projectGroup: projectTitle || 'Bilinmeyen Proje', // Proje gruplandırması için
+              chapterNumber: i + 1,
+              chapterTitle: `${i + 1}. Bölüm`,
+              displayTitle: projectTitle || 'Bilinmeyen Proje'
+            };
+            
+            // Script yapısı - basit sıralı sistem
+            const structure = {
+              type: 'series',
+              projectTitle: projectTitle,
+              title: titleWithChapter,
+              chapterNumber: i + 1,
+              chapterTitle: `${i + 1}. Bölüm`,
+              scenes: []
+            };
 
             const scriptData = {
-              title: structure.title,
-              fileName: file.name,
+              title: titleWithChapter,
+              fileName: titleWithChapter, // "Proje Adı - 1. Bölüm" formatında
               scriptText: result.text,
               cleanedText: cleanScreenplayText(result.text),
               pageCount: result.pages || 1,
@@ -173,7 +357,10 @@ export default function MultiScriptImporter() {
                 ...result.metadata,
                 importedAt: new Date().toISOString(),
                 originalFileSize: file.size,
-                fileType: file.name.split('.').pop()?.toLowerCase()
+                fileType: file.name.split('.').pop()?.toLowerCase(),
+                originalFileName: file.name, // Orijinal dosya adını sakla
+                extractedTitle: titleWithChapter,
+                extractionMethod: 'sequential-chapter-system'
               },
               structure
             };
@@ -193,7 +380,7 @@ export default function MultiScriptImporter() {
       }
 
       updateImportProgress({
-        completed: selectedFiles.length,
+        completed: sortedFiles.length,
         current: null
       });
 
@@ -201,6 +388,27 @@ export default function MultiScriptImporter() {
       if (importSettings.groupBySeries && importedScripts.length > 1) {
         const grouped = groupScriptsBySeries(importedScripts);
         console.log('Grouped scripts:', grouped);
+        
+        // Ortak başlıklar için dosya adlarından çıkarım yap
+        if (sortedFiles.length > 1) {
+          const fileNames = sortedFiles.map(f => f.name);
+          const commonTitle = findCommonProjectTitle(fileNames);
+          if (commonTitle) {
+            console.log('📁 Common project title detected for batch:', {
+              files: fileNames.slice(0, 3), // İlk 3 dosyayı göster
+              totalFiles: fileNames.length,
+              commonTitle: commonTitle
+            });
+            
+            // Tüm scriptlere ortak başlık ekle (eğer daha iyi bir başlık yoksa)
+            importedScripts.forEach(script => {
+              if (!script.structure?.projectTitle) {
+                script.structure.projectTitle = commonTitle;
+                script.metadata.commonTitle = commonTitle;
+              }
+            });
+          }
+        }
       }
 
       // Clear selected files
@@ -223,9 +431,48 @@ export default function MultiScriptImporter() {
         // Use legacy scriptStore methods for single file
         const { setScriptText, setOriginalFileName, setPageCount } = useScriptStore.getState();
         
-        setOriginalFileName(file.name);
+        // Akıllı başlık çıkarma - önce metadata, sonra dosya adı
+        let extractedTitle = extractBestTitle(result.text, result.metadata, file.name);
+        
+        // PDF metadata'da temiz title varsa onu tercih et
+        if (result.metadata?.title && 
+            typeof result.metadata.title === 'string' && 
+            result.metadata.title.length > 3) {
+          extractedTitle = result.metadata.title.trim();
+        } else if (result.metadata?.info?.Title && 
+                   typeof result.metadata.info.Title === 'string' && 
+                   result.metadata.info.Title.length > 3 &&
+                   !result.metadata.info.Title.toLowerCase().includes('untitled')) {
+          extractedTitle = result.metadata.info.Title.trim();
+        }
+        
+        // titleExtractor kullanarak temiz başlık al
+        const { extractProjectInfo } = await import('../utils/titleExtractor.js');
+        const projectInfo = extractProjectInfo(file.name);
+        setOriginalFileName(projectInfo.displayTitle);
         setPageCount(result.pages || 1);
-        setScriptText(result.text, result.metadata);
+        
+        // Script store'a proje yapısını da ekle
+        const scriptData = {
+          title: projectInfo.displayTitle,
+          fileName: projectInfo.displayTitle, // Temiz dosya adı 
+          scriptText: result.text,
+          cleanedText: cleanScreenplayText(result.text),
+          pageCount: result.pages || 1,
+          metadata: { ...result.metadata, extractedTitle },
+          structure: {
+            type: projectInfo.isMultipart ? 'series' : 'single',
+            projectTitle: projectInfo.projectTitle,
+            title: projectInfo.displayTitle,
+            chapterNumber: projectInfo.chapterNumber,
+            chapterTitle: projectInfo.chapterTitle,
+            scenes: []
+          }
+        };
+        
+        // Multi-script store'a ekle
+        const { addScript } = useScriptStore.getState();
+        addScript(scriptData);
 
         // Clean the text automatically
         const cleaned = cleanScreenplayText(result.text);
@@ -549,7 +796,7 @@ export default function MultiScriptImporter() {
                   <span className="text-2xl">{getFileTypeIcon(file.name)}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-cinema-text truncate">
-                      {file.name}
+                      {file.name.replace(/.*[/\\]([^/\\]+)$/, '$1').replace(/\.[^.]+$/, '')}
                     </p>
                     <p className="text-xs text-cinema-text-dim">
                       {file.size ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : 'Unknown size'}

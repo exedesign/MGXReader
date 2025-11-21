@@ -19,14 +19,14 @@ export default function TabbedSidebar() {
     },
     {
       id: 'settings',
-      label: t('sidebar.settingsTab', 'Ayarlar'),
-      icon: '⚙️',
+      label: t('sidebar.infoTab', 'Bilgiler'),
+      icon: '📋',
       component: Sidebar
     }
   ];
 
   return (
-    <div className="w-64 md:w-72 lg:w-80 bg-cinema-dark border-r border-cinema-gray overflow-hidden flex flex-col">
+    <div className="bg-cinema-dark border-r border-cinema-gray overflow-hidden flex flex-col">
       {/* Tab Headers */}
       <div className="flex-shrink-0 border-b border-cinema-gray">
         <div className="flex">

@@ -34,6 +34,10 @@ export const useAIStore = create(
       isConnected: false,
       lastTestedProvider: null,
       
+      // Image Generation Status
+      isGeneratingImage: false,
+      generatingScenes: new Set(),
+      
       // Actions
       setProvider: (provider) => set({ provider }),
       
@@ -192,6 +196,85 @@ export const useAIStore = create(
         geminiModel: 'gemini-2.0-flash'
       }),
 
+      // Image Generation Methods
+      setGeneratingImage: (isGenerating) => set({ isGeneratingImage: isGenerating }),
+      
+      addGeneratingScene: (sceneId) => set((state) => ({
+        generatingScenes: new Set([...state.generatingScenes, sceneId])
+      })),
+      
+      removeGeneratingScene: (sceneId) => set((state) => {
+        const newSet = new Set(state.generatingScenes);
+        newSet.delete(sceneId);
+        return { generatingScenes: newSet };
+      }),
+      
+      clearGeneratingScenes: () => set({ generatingScenes: new Set() }),
+      
+      // Generate image using current AI provider with Google priority for storyboards
+      generateImage: async (prompt, options = {}) => {
+        const state = get();
+        
+        try {
+          state.setGeneratingImage(true);
+          
+          // Try Google Gemini first, then OpenAI as fallback
+          const providers = [];
+          
+          if (state.geminiApiKey) {
+            providers.push({
+              type: AI_PROVIDERS.GEMINI,
+              handler: new AIHandler({
+                provider: AI_PROVIDERS.GEMINI,
+                apiKey: state.geminiApiKey,
+                model: state.geminiModel,
+                temperature: state.temperature,
+                maxTokens: state.maxTokens
+              })
+            });
+          }
+          
+          if (state.openaiApiKey) {
+            providers.push({
+              type: AI_PROVIDERS.OPENAI,
+              handler: new AIHandler({
+                provider: AI_PROVIDERS.OPENAI,
+                apiKey: state.openaiApiKey,
+                model: state.openaiModel,
+                temperature: state.temperature,
+                maxTokens: state.maxTokens
+              })
+            });
+          }
+          
+          if (providers.length === 0) {
+            throw new Error('Hiçbir AI sağlayıcı yapılandırılmamış');
+          }
+          
+          // Try providers in order
+          let lastError;
+          for (const providerInfo of providers) {
+            try {
+              console.log(`Trying image generation with: ${providerInfo.type}`);
+              const result = await providerInfo.handler.generateImage(prompt, options);
+              return result;
+            } catch (error) {
+              console.warn(`Image generation failed with ${providerInfo.type}:`, error);
+              lastError = error;
+              continue;
+            }
+          }
+          
+          throw lastError || new Error('Tüm sağlayıcılar başarısız oldu');
+          
+        } catch (error) {
+          console.error('Image generation failed:', error);
+          throw error;
+        } finally {
+          state.setGeneratingImage(false);
+        }
+      },
+      
       // Get configured AI handler instance
       getAIHandler: () => {
         const state = get();

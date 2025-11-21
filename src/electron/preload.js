@@ -20,6 +20,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readFile: (filePath) => ipcRenderer.invoke('file:read', filePath),
   saveFileContent: (options) => ipcRenderer.invoke('file:saveContent', options),
   generateDocument: (options) => ipcRenderer.invoke('document:generate', options),
+  readFileContent: (filePath) => ipcRenderer.invoke('file:readContent', filePath),
+  fileExists: (filePath) => ipcRenderer.invoke('file:exists', filePath),
+  directoryExists: (dirPath) => ipcRenderer.invoke('file:directoryExists', dirPath),
+  ensureDir: (dirPath) => ipcRenderer.invoke('file:ensureDir', dirPath),
+  listDirectory: (dirPath) => ipcRenderer.invoke('file:listDirectory', dirPath),
+  deleteFile: (filePath) => ipcRenderer.invoke('file:delete', filePath),
+  getTempDir: () => ipcRenderer.invoke('file:getTempDir'),
 
   // App APIs
   getAppPath: (name) => ipcRenderer.invoke('app:getPath', name),

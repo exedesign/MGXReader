@@ -4,6 +4,7 @@ import { useScriptStore } from '../store/scriptStore';
 import { cleanScreenplayText, parseScenes } from '../utils/textProcessing';
 import { parseScreenplayFile } from '../utils/screenplayParser';
 import { performPDFOCR, isOCRAvailable } from '../utils/ocrService';
+import { extractBestTitle } from '../utils/titleExtractor';
 
 export default function PDFUploader() {
   const [isDragging, setIsDragging] = useState(false);
@@ -141,7 +142,29 @@ export default function PDFUploader() {
           }
         }
 
-        setOriginalFileName(fileName);
+        const fileName = filePath.split('/').pop() || filePath.split('\\').pop();
+        
+        // 🎯 Basit sistem: Tekil dosya her zaman 1. Bölüm
+        const titleWithChapter = extractBestTitle(result.text, result.metadata, fileName, 0);
+        
+        console.log('📋 Tekil PDF yükleme:', {
+          fileName: fileName,
+          titleWithChapter: titleWithChapter,
+          method: 'single-file-first-chapter'
+        });
+        
+        // Proje adını çıkar (bölüm bilgisi olmadan)
+        const projectTitle = fileName
+          .replace(/\.[^.]+$/, '') // uzantıyı kaldır
+          .replace(/[-_\s]*(?:bölüm|bolum|chapter|part|episode|ep)[-_\s]*\d+/gi, '') // bölüm numarasını temizle
+          .replace(/[-_\s]*\d+[-_\s]*(?:bölüm|bolum|chapter|part|episode|ep)/gi, '')
+          .replace(/[-_\s]*\d+$/gi, '')
+          .replace(/[-_\s]+$/, '')
+          .trim();
+        
+        // Final display title = proje adı (header'da gösterilecek)
+        const finalDisplayTitle = projectTitle || 'Bilinmeyen Proje';
+        setOriginalFileName(finalDisplayTitle);
         setPageCount(result.pages);
         setScriptText(result.text, result.metadata);
 
@@ -167,8 +190,46 @@ export default function PDFUploader() {
 
         const screenplay = await parseScreenplayFile(buffer, fileName);
         
-        setOriginalFileName(fileName);
-        setPageCount(screenplay.scenes?.length || 1); // Use scene count as page estimate
+        // 🎯 Basit sistem: Tekil dosya her zaman 1. Bölüm
+        const titleWithChapter = extractBestTitle(screenplay.text, screenplay.metadata, fileName, 0);
+        
+        // Proje adını çıkar (bölüm bilgisi olmadan)
+        const projectTitle = fileName
+          .replace(/\.[^.]+$/, '') // uzantıyı kaldır
+          .replace(/[-_\s]*(?:bölüm|bolum|chapter|part|episode|ep)[-_\s]*\d+/gi, '') // bölüm numarasını temizle
+          .replace(/[-_\s]*\d+[-_\s]*(?:bölüm|bolum|chapter|part|episode|ep)/gi, '')
+          .replace(/[-_\s]*\d+$/gi, '')
+          .replace(/[-_\s]+$/, '')
+          .trim() || 'Bilinmeyen Proje';
+        
+        setOriginalFileName(projectTitle);
+        setPageCount(screenplay.scenes?.length || 1);
+        
+        // Script store'a ekle
+        const scriptData = {
+          title: titleWithChapter,
+          fileName: titleWithChapter,
+          scriptText: screenplay.text,
+          cleanedText: screenplay.text,
+          pageCount: screenplay.scenes?.length || 1,
+          metadata: screenplay.metadata,
+          projectGroup: projectTitle, // 🎯 Gruplandırma için
+          chapterNumber: 1,
+          chapterTitle: '1. Bölüm',
+          displayTitle: projectTitle,
+          structure: {
+            type: 'series',
+            projectTitle: projectTitle,
+            title: titleWithChapter,
+            chapterNumber: 1,
+            chapterTitle: '1. Bölüm',
+            scenes: screenplay.scenes || []
+          }
+        };
+        
+        // Multi-script store'a ekle
+        const { addScript } = useScriptStore.getState();
+        addScript(scriptData);
         
         // Set both original and cleaned text
         setScriptText(screenplay.text, screenplay.metadata);
@@ -238,12 +299,22 @@ export default function PDFUploader() {
           // Get PDF page count
           try {
             const pdfInfo = await window.electronAPI.getPDFInfo(filePath);
-            if (pdfInfo && pdfInfo.pageCount) {
+            if (pdfInfo && pdfInfo.success && pdfInfo.pageCount) {
               setTotalPdfPages(pdfInfo.pageCount);
               setPageRangeEnd(pdfInfo.pageCount.toString());
             }
           } catch (err) {
             console.error('Failed to get PDF info:', err);
+            // Fallback: Try to get info from a basic parse
+            try {
+              const basicInfo = await window.electronAPI.parsePDF(filePath);
+              if (basicInfo && basicInfo.success && basicInfo.pages) {
+                setTotalPdfPages(basicInfo.pages);
+                setPageRangeEnd(basicInfo.pages.toString());
+              }
+            } catch (fallbackErr) {
+              console.error('Fallback PDF info failed too:', fallbackErr);
+            }
           }
           
           // Show page selection modal

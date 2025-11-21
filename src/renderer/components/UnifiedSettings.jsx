@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAIStore } from '../store/aiStore';
 import { usePromptStore } from '../store/promptStore';
 import { useReaderStore } from '../store/readerStore';
@@ -7,6 +8,7 @@ import ProvidersTab from './ProvidersTab';
 import PromptsTab from './PromptsTab';
 
 export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState(initialTab);
   const [customLogo, setCustomLogo] = useState(localStorage.getItem('customLogo') || '');
   const [showPreview, setShowPreview] = useState(false);
@@ -34,6 +36,11 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
       setActiveTab(savedTab);
     }
   }, []);
+
+  // Change language
+  const changeLanguage = (lng) => {
+    i18n.changeLanguage(lng);
+  };
 
   // Logo upload handler
   const handleLogoUpload = (event) => {
@@ -101,6 +108,7 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
     { key: 'prompts', label: 'Prompt Yönetimi', icon: '📝' },
     { key: 'reader', label: 'Hızlı Okuma', icon: '⚡' },
     { key: 'filter', label: 'Kelime Filtresi', icon: '🔍' },
+    { key: 'general', label: 'Genel Ayarlar', icon: '⚙️' },
     { key: 'appearance', label: 'Görünüm', icon: '🎨' },
     { key: 'about', label: 'Hakkında', icon: 'ℹ️' }
   ];
@@ -331,6 +339,77 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                           <li>• Kelime gruplarını da ekleyebilirsiniz (örn: "çok güzel")</li>
                           <li>• Filtreleme otomatik olarak aktif, manuel açma/kapama gereksiz</li>
                         </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* General Settings Tab */}
+            {activeTab === 'general' && (
+              <div className="space-y-8">
+                <div>
+                  <h3 className="text-xl font-semibold text-cinema-text mb-4">Genel Ayarlar</h3>
+
+                  {/* Language Settings */}
+                  <div className="bg-cinema-black/30 rounded-lg p-6">
+                    <h4 className="text-lg font-medium text-cinema-text mb-4">Dil Seçimi</h4>
+                    <p className="text-cinema-text-dim text-sm mb-4">
+                      Uygulama dilini değiştirin. Değişiklikler anında uygulanır.
+                    </p>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => changeLanguage('tr')}
+                        className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                          i18n.language === 'tr'
+                            ? 'bg-cinema-accent text-cinema-black'
+                            : 'bg-cinema-gray text-cinema-text hover:bg-cinema-gray-light'
+                        }`}
+                      >
+                        🇹🇷 Türkçe
+                      </button>
+                      <button
+                        onClick={() => changeLanguage('en')}
+                        className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                          i18n.language === 'en'
+                            ? 'bg-cinema-accent text-cinema-black'
+                            : 'bg-cinema-gray text-cinema-text hover:bg-cinema-gray-light'
+                        }`}
+                      >
+                        🇺🇸 English
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Other General Settings */}
+                  <div className="bg-cinema-black/30 rounded-lg p-6">
+                    <h4 className="text-lg font-medium text-cinema-text mb-4">Diğer Ayarlar</h4>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="text-cinema-text">Otomatik Kaydetme</label>
+                          <p className="text-cinema-text-dim text-sm">Değişiklikler otomatik olarak kaydedilir</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          defaultChecked={true}
+                          className="rounded"
+                        />
+                      </div>
+                      
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="text-cinema-text">Debug Modu</label>
+                          <p className="text-cinema-text-dim text-sm">Gelişmiş hata ayıklama bilgilerini gösterir</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          defaultChecked={localStorage.getItem('debugMode') === 'true'}
+                          onChange={(e) => localStorage.setItem('debugMode', e.target.checked)}
+                          className="rounded"
+                        />
                       </div>
                     </div>
                   </div>
