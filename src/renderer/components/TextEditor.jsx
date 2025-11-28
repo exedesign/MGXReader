@@ -1,70 +1,106 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useScriptStore } from '../store/scriptStore';
-import { useAIStore } from '../store/aiStore';
+import { useReaderStore } from '../store/readerStore';
 import { cleanScreenplayText } from '../utils/textProcessing';
-import { correctScreenplayText } from '../utils/aiService2';
 
 export default function TextEditor() {
+  const { t } = useTranslation();
   const { scriptText, cleanedText, setCleanedText } = useScriptStore();
-  const { isConfigured, provider } = useAIStore();
+  const { wordFilter, wordFilterEnabled, setWordFilterEnabled, setWordFilter, blacklist, addToBlacklist } = useReaderStore();
   const [isEditing, setIsEditing] = useState(false);
   const [viewMode, setViewMode] = useState('cleaned'); // 'raw' or 'cleaned'
-  const [isCorrectingGrammar, setIsCorrectingGrammar] = useState(false);
+  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, selectedText: '' });
 
-  const displayText = viewMode === 'raw' ? scriptText : cleanedText;
+  const baseDisplayText = viewMode === 'raw' ? scriptText : cleanedText;
 
-  const handleClean = () => {
-    const cleaned = cleanScreenplayText(scriptText);
-    setCleanedText(cleaned);
-    setViewMode('cleaned');
-  };
-
-  const handleGrammarCorrection = async () => {
-    if (!isConfigured()) {
-      alert('Please configure your AI provider in Settings first.');
-      return;
+  // Apply blacklist filter automatically if blacklist exists
+  const finalDisplayText = useMemo(() => {
+    if (!blacklist?.length || !baseDisplayText) {
+      return baseDisplayText;
     }
 
-    setIsCorrectingGrammar(true);
-    try {
-      const result = await correctScreenplayText(cleanedText || scriptText);
-      
-      if (result.success) {
-        setCleanedText(result.text);
-        setViewMode('cleaned');
-        alert('Grammar correction completed!');
-      } else {
-        alert(`Grammar correction failed: ${result.error}`);
+    let filteredText = baseDisplayText;
+    blacklist.forEach(word => {
+      const trimmedWord = word?.trim();
+      if (trimmedWord && trimmedWord.length > 0) {
+        // Escape special regex characters and create regex for word boundaries
+        const escapedWord = trimmedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`\\b${escapedWord}\\b`, 'gi');
+        filteredText = filteredText.replace(regex, '');
       }
-    } catch (error) {
-      alert(`Grammar correction failed: ${error.message}`);
-    } finally {
-      setIsCorrectingGrammar(false);
+    });
+
+    // Clean up extra whitespace and multiple spaces
+    return filteredText.replace(/\s+/g, ' ').replace(/\n\s*\n/g, '\n').trim();
+  }, [baseDisplayText, blacklist]);
+
+  // Context menu handlers
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+    
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+    
+    if (selectedText) {
+      setContextMenu({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        selectedText
+      });
     }
   };
+
+  const handleAddToFilter = () => {
+    if (contextMenu.selectedText && !blacklist.includes(contextMenu.selectedText.toUpperCase())) {
+      addToBlacklist(contextMenu.selectedText);
+      // Visual feedback
+      console.log(`"${contextMenu.selectedText}" kelimesi blacklist'e eklendi`);
+    }
+    setContextMenu({ visible: false, x: 0, y: 0, selectedText: '' });
+  };
+
+  const handleCloseContextMenu = () => {
+    setContextMenu({ visible: false, x: 0, y: 0, selectedText: '' });
+  };
+
+  // Close context menu when clicking outside
+  React.useEffect(() => {
+    const handleClick = () => handleCloseContextMenu();
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
+
 
   const handleTextChange = (e) => {
-    setCleanedText(e.target.value);
-  };
-
-  const handleExport = async () => {
-    try {
-      const filePath = await window.electronAPI.saveFile({
-        defaultPath: 'screenplay-cleaned.txt',
-        filters: [{ name: 'Text Files', extensions: ['txt'] }],
-      });
-
-      if (filePath) {
-        await window.electronAPI.saveFileContent({
-          filePath,
-          data: cleanedText,
-        });
-        alert('File saved successfully!');
-      }
-    } catch (error) {
-      alert(`Export failed: ${error.message}`);
+    if (viewMode === 'cleaned') {
+      setCleanedText(e.target.value);
     }
   };
+
+  const handleExport = () => {
+    const textToExport = finalDisplayText;
+    const element = document.createElement('a');
+    const file = new Blob([textToExport], { type: 'text/plain' });
+    element.href = URL.createObjectURL(file);
+    element.download = `script_${viewMode}_${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
+  if (!scriptText && !cleanedText) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-cinema-black">
+        <div className="text-center text-cinema-text-dim">
+          <div className="text-lg mb-2">{t('editor.noScript')}</div>
+          <div>{t('editor.uploadPrompt')}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-cinema-black">
@@ -76,69 +112,64 @@ export default function TextEditor() {
             <div className="flex gap-2 bg-cinema-gray rounded-lg p-1">
               <button
                 onClick={() => setViewMode('cleaned')}
-                className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                  viewMode === 'cleaned'
+                className={`px-3 py-1.5 rounded text-sm transition-colors ${viewMode === 'cleaned'
                     ? 'bg-cinema-accent text-cinema-black font-medium'
                     : 'text-cinema-text hover:bg-cinema-gray-light'
-                }`}
+                  }`}
               >
-                Cleaned
+                {t('editor.cleaned')}
               </button>
               <button
                 onClick={() => setViewMode('raw')}
-                className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                  viewMode === 'raw'
+                className={`px-3 py-1.5 rounded text-sm transition-colors ${viewMode === 'raw'
                     ? 'bg-cinema-accent text-cinema-black font-medium'
                     : 'text-cinema-text hover:bg-cinema-gray-light'
-                }`}
+                  }`}
               >
-                Original
+                {t('editor.original')}
               </button>
             </div>
 
+            {/* Filter Status Indicator */}
+            {blacklist?.length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 text-blue-400 rounded-lg text-sm">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+                {blacklist.length} kelime filtrelendi
+              </div>
+            )}
+
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-                isEditing
+              className={`px-4 py-2 rounded-lg text-sm transition-colors ${isEditing
                   ? 'bg-cinema-accent text-cinema-black'
                   : 'bg-cinema-gray text-cinema-text hover:bg-cinema-gray-light'
-              }`}
+                }`}
             >
-              {isEditing ? '✓ Done Editing' : '✏️ Edit'}
+              {isEditing ? '✓ ' + t('editor.doneEditing') : '✏️ ' + t('editor.edit')}
+            </button>
+            
+            {/* Kelime Filtreleme Ayarları */}
+            <button
+              onClick={() => {
+                // UnifiedSettings modal'ını aç ve Filter tabına git
+                const settingsEvent = new CustomEvent('openUnifiedSettings', {
+                  detail: { activeTab: 'filter' }
+                });
+                window.dispatchEvent(settingsEvent);
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+              title="Kelime filtreleme ayarlarını düzenle"
+            >
+              ⚙️ Kelime Filtresi
             </button>
           </div>
 
           {/* Right side - Actions */}
           <div className="flex items-center gap-3">
-            {viewMode === 'raw' && (
-              <button onClick={handleClean} className="btn-secondary text-sm">
-                🧹 Clean Text
-              </button>
-            )}
-
-            <button
-              onClick={handleGrammarCorrection}
-              disabled={isCorrectingGrammar || !isConfigured()}
-              className="btn-secondary text-sm disabled:opacity-50 flex items-center gap-2"
-              title={!isConfigured() ? 'Configure AI Provider in Settings' : ''}
-            >
-              {isCorrectingGrammar ? (
-                <>
-                  <span className="inline-block animate-spin mr-2">⏳</span>
-                  Correcting...
-                </>
-              ) : (
-                <>
-                  ✨ Fix Grammar 
-                  <span className="text-xs opacity-75">
-                    ({provider === 'openai' ? 'OpenAI' : provider === 'gemini' ? 'Gemini' : 'Local'})
-                  </span>
-                </>
-              )}
-            </button>
-
             <button onClick={handleExport} className="btn-primary text-sm">
-              💾 Export
+              💾 {t('editor.export')}
             </button>
           </div>
         </div>
@@ -149,15 +180,21 @@ export default function TextEditor() {
         <div className="max-w-4xl mx-auto">
           {isEditing ? (
             <textarea
-              value={displayText}
+              value={finalDisplayText}
               onChange={handleTextChange}
+              onContextMenu={handleContextMenu}
               className="w-full h-full min-h-[600px] p-6 bg-cinema-dark border border-cinema-gray rounded-lg text-cinema-text screenplay-text resize-none focus:outline-none focus:border-cinema-accent"
               spellCheck="false"
             />
           ) : (
-            <pre className="screenplay-text text-cinema-text whitespace-pre-wrap p-6 bg-cinema-dark border border-cinema-gray rounded-lg">
-              {displayText}
-            </pre>
+            <div 
+              className="bg-cinema-dark border border-cinema-gray rounded-lg p-6"
+              onContextMenu={handleContextMenu}
+            >
+              <pre className="screenplay-text text-cinema-text whitespace-pre-wrap">
+                {finalDisplayText}
+              </pre>
+            </div>
           )}
         </div>
       </div>
@@ -166,15 +203,31 @@ export default function TextEditor() {
       <div className="bg-cinema-dark border-t border-cinema-gray p-3 px-6">
         <div className="flex items-center justify-between text-xs text-cinema-text-dim">
           <div className="flex gap-6">
-            <span>Characters: {displayText?.length.toLocaleString()}</span>
-            <span>Words: {displayText?.split(/\s+/).length.toLocaleString()}</span>
-            <span>Lines: {displayText?.split('\n').length.toLocaleString()}</span>
+            <span>{t('editor.characters')}: {finalDisplayText?.length.toLocaleString()}</span>
+            <span>{t('editor.words')}: {finalDisplayText?.split(/\s+/).filter(w => w.length > 0).length.toLocaleString()}</span>
+            <span>{t('editor.lines')}: {finalDisplayText?.split('\n').length.toLocaleString()}</span>
           </div>
           <div>
-            {viewMode === 'cleaned' ? 'Viewing cleaned text' : 'Viewing original text'}
+            {viewMode === 'cleaned' ? t('editor.viewingCleaned') : t('editor.viewingOriginal')}
           </div>
         </div>
       </div>
+      
+      {/* Context Menu */}
+      {contextMenu.visible && (
+        <div
+          className="fixed bg-cinema-gray border border-cinema-gray-light rounded-lg shadow-lg py-2 z-50"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={handleAddToFilter}
+            className="w-full px-4 py-2 text-left text-cinema-text hover:bg-cinema-gray-light transition-colors flex items-center gap-2 text-sm"
+          >
+            🔍 "{contextMenu.selectedText}" filtreye ekle
+          </button>
+        </div>
+      )}
     </div>
   );
 }

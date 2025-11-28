@@ -1,0 +1,2005 @@
+/**
+ * AIHandler - Unified AI Gateway
+ * Supports: OpenAI, Google Gemini, Local AI (Ollama/LM Studio)
+ */
+
+import axios from 'axios';
+import { splitTextForAnalysis, getOptimalChunkSize } from './textProcessing.js';
+import { createEnhancedAnalysisEngine } from './enhancedAnalysisEngine.js';
+
+export const AI_PROVIDERS = {
+  OPENAI: 'openai',
+  GEMINI: 'gemini',
+  LOCAL: 'local',
+  MLX: 'mlx',
+};
+
+export const OPENAI_MODELS = [
+  { id: 'gpt-4o', name: 'GPT-4o', contextWindow: 128000, recommended: true },
+  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', contextWindow: 128000 },
+  { id: 'gpt-4', name: 'GPT-4', contextWindow: 8192 },
+  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', contextWindow: 16385 },
+];
+
+export const GEMINI_MODELS = [
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Latest)', contextWindow: 1000000, recommended: true, inputTokens: 2, outputTokens: 12 },
+  { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image (Image Gen)', contextWindow: 65000, fast: true, inputTokens: 2, outputTokens: 0.134 },
+  { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash Experimental', contextWindow: 1000000, fast: true },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash Fast', contextWindow: 1000000, fast: true },
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', contextWindow: 2000000 },
+];
+
+// Dedicated image generation models - ONLY REAL IMAGE GENERATION MODELS
+export const GEMINI_IMAGE_MODELS = [
+  // WORKING IMAGE GENERATION MODELS - Public API Key Supported
+  { id: 'imagen-4.0-generate-001', name: 'Imagen 4.0 Standard', recommended: true, description: 'Public API Key ile yuksek kaliteli gorsel uretim - En Iyi Secenek!', working: true },
+  { id: 'imagen-4.0-ultra-generate-001', name: 'Imagen 4.0 Ultra', description: 'Public API Key ile ultra kalite gorsel uretim', working: true },
+  { id: 'imagen-4.0-fast-generate-001', name: 'Imagen 4.0 Fast', description: 'Public API Key ile hizli gorsel uretim', working: true },
+  
+  // GEMINI 3 IMAGE GENERATION MODEL
+  { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image', description: 'Gemini 3 ile entegre gorsel uretim', working: true },
+];
+
+// OpenAI image models for comparison
+export const OPENAI_IMAGE_MODELS = [
+  { id: 'dall-e-3', name: 'DALL-E 3', recommended: true, description: 'OpenAI\'nin en gelismis gorsel modeli' },
+  { id: 'dall-e-2', name: 'DALL-E 2', description: 'Onceki nesil DALL-E modeli' },
+];
+
+// Preview models (experimental)
+export const GEMINI_PREVIEW_MODELS = [
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Preview - Jan 2025)', contextWindow: 1000000, preview: true, recommended: true },
+  { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image (Preview)', contextWindow: 65000, preview: true },
+  { id: 'learnlm-1.5-pro-experimental', name: 'LearnLM 1.5 Pro (Experimental)', contextWindow: 2000000, preview: true },
+];
+
+export const MLX_MODELS = [
+  { id: 'mlx-community/Llama-3.2-3B-Instruct-4bit', name: 'Llama 3.2 3B (4-bit) - Fast', contextWindow: 128000, recommended: true },
+  { id: 'mlx-community/Llama-3.2-1B-Instruct-4bit', name: 'Llama 3.2 1B (4-bit) - Ultra Fast', contextWindow: 128000 },
+  { id: 'mlx-community/Meta-Llama-3.1-8B-Instruct-4bit', name: 'Llama 3.1 8B (4-bit)', contextWindow: 128000 },
+  { id: 'mlx-community/Mistral-7B-Instruct-v0.3-4bit', name: 'Mistral 7B v0.3 (4-bit)', contextWindow: 32000 },
+  { id: 'mlx-community/gemma-2-2b-it-4bit', name: 'Gemma 2 2B (4-bit)', contextWindow: 8000 },
+  { id: 'mlx-community/Qwen2.5-7B-Instruct-4bit', name: 'Qwen 2.5 7B (4-bit)', contextWindow: 32000 },
+];
+
+export class AIHandler {
+  constructor(config) {
+    this.provider = config.provider || AI_PROVIDERS.OPENAI;
+    this.apiKey = config.apiKey || '';
+    this.model = config.model || '';
+    this.imageModel = config.imageModel || ''; // Dedicated image generation model
+    this.localEndpoint = config.localEndpoint || 'http://localhost:11434';
+    this.localModel = config.localModel || 'llama3';
+    this.mlxEndpoint = config.mlxEndpoint || 'http://localhost:8080';
+    this.mlxModel = config.mlxModel || 'mlx-community/Llama-3.2-3B-Instruct-4bit';
+    this.temperature = config.temperature || 0.3;
+
+    console.log('🔧 AIHandler initialized:', {
+      provider: this.provider,
+      model: this.model,
+      imageModel: this.imageModel,
+      configReceived: config
+    });
+
+    // Initialize advanced analysis engines
+    // Initialize advanced analysis engines
+    this.enhancedAnalysisEngine = createEnhancedAnalysisEngine(this);
+  }
+
+  /**
+   * Generate image using AI provider
+   * Currently supports OpenAI DALL-E and Gemini (with fallback)
+   * @param {string} prompt - Image generation prompt
+   * @param {object} options - Generation options
+   * @returns {Promise<object>} - Generation result with image URL
+   */
+  async generateImage(prompt, options = {}) {
+    const {
+      size = '1024x1024',
+      quality = 'standard',
+      style = 'vivid',
+      model = 'dall-e-3'
+    } = options;
+
+    try {
+      switch (this.provider) {
+        case AI_PROVIDERS.OPENAI:
+          return await this.generateImageOpenAI(prompt, { size, quality, style, model });
+          
+        case AI_PROVIDERS.GEMINI:
+          // Try Gemini image generation, fallback to error message
+          try {
+            return await this.generateImageGemini(prompt, options);
+          } catch (geminiError) {
+            console.warn('Gemini image generation failed, providing helpful error:', geminiError.message);
+            throw new Error('Imagen 3 API henüz public API key ile desteklenmiyor. Lütfen OpenAI provider kullanın veya Google Cloud Vertex AI projesi oluşturun.');
+          }
+          
+        case AI_PROVIDERS.LOCAL:
+        case AI_PROVIDERS.MLX:
+          throw new Error('Local AI providers do not support image generation. Please use OpenAI or Gemini provider.');
+          
+        default:
+          throw new Error("Image generation not supported for provider: " + this.provider);
+      }
+    } catch (error) {
+      console.error("Image Generation Error (" + this.provider + "):", error);
+      return {
+        success: false,
+        error: error.message,
+        provider: this.provider
+      };
+    }
+  }
+
+  /**
+   * Gemini Image Generation (Imagen 4.0 + Fallbacks)
+   * @param {string} prompt - Image prompt
+   * @param {object} options - Generation options
+   * @returns {Promise<object>} - Generation result
+   */
+  async generateImageGemini(prompt, options = {}) {
+    if (!this.apiKey) {
+      throw new Error('Google Gemini API key is required for image generation');
+    }
+
+    // Try Imagen 4.0 models first - they support public API keys!
+    const imageModel = this.imageModel || 'imagen-4.0-generate-001';
+    
+    console.log('🎨 AIHandler Image Generation Debug:', {
+      configuredImageModel: this.imageModel,
+      fallbackImageModel: 'imagen-4.0-generate-001',
+      finalSelectedModel: imageModel,
+      modelStartsWithImagen4: imageModel.startsWith('imagen-4.0'),
+      availableProperties: {
+        apiKey: !!this.apiKey,
+        provider: this.provider,
+        model: this.model,
+        imageModel: this.imageModel
+      }
+    });
+    
+    // Check if it's a Gemini 3 Pro Image model (actual image generation)
+    if (imageModel === 'gemini-3-pro-image-preview') {
+      try {
+        return await this.generateImageWithGemini3(prompt, options, imageModel);
+      } catch (error) {
+        console.log('⚠️ Gemini 3 Pro Image failed, trying Imagen 4.0 fallback:', error.message);
+        // Fall through to Imagen 4.0 fallback
+      }
+    }
+    
+    // Check if it's an Imagen 4.0 model
+    if (imageModel.startsWith('imagen-4.0')) {
+      try {
+        return await this.generateImageWithImagen4(prompt, options, imageModel);
+      } catch (error) {
+        console.log('⚠️ Imagen 4.0 failed, trying text description fallback:', error.message);
+      }
+    }
+    
+    // If all image generation models fail, return error (no more fallback to text descriptions)
+    throw new Error("No working image generation models available. Tried: " + imageModel);
+  }
+
+  /**
+   * Generate image using Gemini 3 Pro Image API
+   */
+  async generateImageWithGemini3(prompt, options = {}, modelName = 'gemini-3-pro-image-preview') {
+    try {
+      // Use generateContent endpoint for Gemini 3 Pro Image
+      const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + this.apiKey;
+      
+      console.log('🎨 Gemini 3 Pro Image Generation:', {
+        selectedModel: modelName,
+        endpoint: 'generateContent',
+        url: apiUrl.replace(this.apiKey, '***'),
+        originalPrompt: prompt.substring(0, 60) + '...'
+      });
+
+      // Configure image generation settings based on options
+      const sizeMap = {
+        '1024x1024': { aspectRatio: '1:1', imageSize: '1K' },
+        '1152x864': { aspectRatio: '4:3', imageSize: '1K' },
+        '1792x1024': { aspectRatio: '16:9', imageSize: '1K' },
+        '1024x1792': { aspectRatio: '9:16', imageSize: '1K' }
+      };
+      
+      const imageConfig = sizeMap[options.size] || { aspectRatio: '1:1', imageSize: '1K' };
+      
+      const requestBody = {
+        contents: [{
+          parts: [{
+            text: "Generate an image: " + prompt
+          }]
+        }],
+        generationConfig: {
+          responseModalities: ['IMAGE'],
+          imageConfig: imageConfig
+        },
+        safetySettings: [
+          {
+            category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            threshold: 'BLOCK_ONLY_HIGH'
+          },
+          {
+            category: 'HARM_CATEGORY_HATE_SPEECH', 
+            threshold: 'BLOCK_ONLY_HIGH'
+          },
+          {
+            category: 'HARM_CATEGORY_HARASSMENT',
+            threshold: 'BLOCK_ONLY_HIGH'
+          },
+          {
+            category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+            threshold: 'BLOCK_ONLY_HIGH'
+          }
+        ]
+      };
+
+      console.log('📝 Gemini 3 Image Request:', {
+        url: apiUrl,
+        model: modelName,
+        prompt: prompt.substring(0, 100) + '...',
+        imageConfig: imageConfig
+      });
+
+      const response = await axios.post(
+        apiUrl,
+        requestBody,
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 120000  // Longer timeout for image generation
+        }
+      );
+
+      console.log('📦 Gemini 3 Pro Image Response:', {
+        status: response.status,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : [],
+        candidatesCount: response.data?.candidates?.length || 0
+      });
+
+      // Check for generateContent response format
+      if (response.data && response.data.candidates && response.data.candidates.length > 0) {
+        const candidate = response.data.candidates[0];
+        
+        // Look for image data in the parts array
+        if (candidate.content && candidate.content.parts) {
+          const imagePart = candidate.content.parts.find(part => part.inlineData && part.inlineData.mimeType?.startsWith('image/'));
+          
+          if (imagePart && imagePart.inlineData) {
+            const imageData = imagePart.inlineData.data;
+            const mimeType = imagePart.inlineData.mimeType || 'image/png';
+            const imageUrl = "data:" + mimeType + ";base64," + imageData;
+            
+            console.log('✅ Gemini 3 Pro Image Generated Successfully!');
+            
+            return {
+              success: true,
+              imageUrl: imageUrl,
+              provider: 'gemini-3-pro-image',
+              model: modelName,
+              revisedPrompt: prompt,
+              originalPrompt: prompt,
+              generatedAt: new Date().toISOString(),
+              imageConfig: imageConfig,
+              note: 'Generated with Gemini 3 Pro Image via generateContent API'
+            };
+          }
+        }
+      }
+      
+      // Log the full response for debugging
+      console.log('🔍 Full Gemini 3 Pro Image Response for debugging:', JSON.stringify(response.data, null, 2));
+      throw new Error('No image data found in Gemini 3 Pro Image response');
+      
+    } catch (error) {
+      console.error('❌ Gemini 3 Pro Image Generation Error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data ? JSON.stringify(error.response.data, null, 2) : 'No response data'
+      });
+      
+      throw error; // Re-throw to trigger fallback in main function
+    }
+  }
+
+  /**
+   * Generate image using Imagen 4.0 API
+   */
+  async generateImageWithImagen4(prompt, options = {}, modelName = 'imagen-4.0-generate-001') {
+    try {
+      // Use generateContent endpoint (correct for Imagen 4.0)
+      const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + this.apiKey;
+      
+      console.log('🎨 Imagen 4.0 Image Generation:', {
+        selectedModel: modelName,
+        endpoint: 'generateContent',
+        apiEndpoint: "generateContent with " + modelName,
+        url: apiUrl.replace(this.apiKey, '***'),
+        originalPrompt: prompt.substring(0, 60) + '...'
+      });
+
+      // Configure image generation settings based on options
+      const sizeMap = {
+        '1024x1024': { aspectRatio: '1:1', imageSize: '1K' },
+        '1152x864': { aspectRatio: '4:3', imageSize: '1K' },
+        '1792x1024': { aspectRatio: '16:9', imageSize: '1K' },
+        '1024x1792': { aspectRatio: '9:16', imageSize: '1K' }
+      };
+      
+      const imageConfig = sizeMap[options.size] || { aspectRatio: '1:1', imageSize: '1K' };
+      
+      const requestBody = {
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }],
+        generationConfig: {
+          responseModalities: ['IMAGE'],
+          imageConfig: imageConfig
+        },
+        safetySettings: [
+          {
+            category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            threshold: 'BLOCK_ONLY_HIGH'
+          },
+          {
+            category: 'HARM_CATEGORY_HATE_SPEECH', 
+            threshold: 'BLOCK_ONLY_HIGH'
+          },
+          {
+            category: 'HARM_CATEGORY_HARASSMENT',
+            threshold: 'BLOCK_ONLY_HIGH'
+          },
+          {
+            category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+            threshold: 'BLOCK_ONLY_HIGH'
+          }
+        ]
+      };
+
+      const response = await axios.post(
+        apiUrl,
+        requestBody,
+      const response = await axios.post(
+        apiUrl,
+        requestBody,
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 120000  // Longer timeout for image generation
+        }
+      );
+
+      console.log('📦 Imagen 4.0 Response:', {
+        status: response.status,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : [],
+        candidatesCount: response.data?.candidates?.length || 0
+      });
+
+      // Check for generateContent response format
+      if (response.data && response.data.candidates && response.data.candidates.length > 0) {
+        const candidate = response.data.candidates[0];
+        
+        // Look for image data in the parts array
+        if (candidate.content && candidate.content.parts) {
+          const imagePart = candidate.content.parts.find(part => part.inlineData && part.inlineData.mimeType?.startsWith('image/'));
+          
+          if (imagePart && imagePart.inlineData) {
+            const imageData = imagePart.inlineData.data;
+            const mimeType = imagePart.inlineData.mimeType || 'image/png';
+            const imageUrl = "data:" + mimeType + ";base64," + imageData;
+            
+            console.log('✅ Imagen 4.0 Image Generated Successfully!');
+            
+            return {
+              success: true,
+              imageUrl: imageUrl,
+              provider: 'imagen-4.0',
+              model: modelName,
+              revisedPrompt: prompt,
+              originalPrompt: prompt,
+              generatedAt: new Date().toISOString(),
+              imageConfig: imageConfig,
+              note: 'Generated with Imagen 4.0 via generateContent API'
+            };
+          }
+        }
+      }
+      
+      // Log the full response for debugging
+      console.log('🔍 Full Imagen 4.0 Response for debugging:', JSON.stringify(response.data, null, 2));
+      throw new Error('No image data found in Imagen 4.0 response');
+      
+    } catch (error) {
+      console.error('❌ Imagen 4.0 Generation Error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data ? JSON.stringify(error.response.data, null, 2) : 'No response data'
+      });
+      
+      throw error; // Re-throw to trigger fallback in main function
+    }
+  }
+
+  /**
+   * Fallback: Generate visual description using Gemini text models
+   */
+  async generateVisualDescription(prompt, options = {}) {
+    try {
+      const modelName = 'gemini-2.0-flash';
+      const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + this.apiKey;
+      
+      console.log('📝 Generating Visual Description:', {
+        model: modelName,
+        fallbackMode: true
+      });
+      
+      // Enhanced image-specific system prompt for visual description generation
+      const enhancedPrompt = "You are a professional visual artist and cinematographer specializing in creating detailed image generation prompts for storyboards and concept art.\n\n" +
+        "Your expertise includes:\n" +
+        "- Camera work and cinematography (angles, framing, lighting)\n" +
+        "- Character design and positioning\n" +
+        "- Environmental storytelling and mood creation\n" +
+        "- Color theory and atmospheric effects\n" +
+        "- Artistic styles and visual composition\n\n" +
+        "Your task is to transform scene descriptions into comprehensive, detailed visual prompts that capture the cinematic essence and emotional impact of the scene.\n\n" +
+        "Scene: \"" + prompt + "\"\n\n" +
+        "Create a comprehensive visual description that captures every cinematic detail for image generation:";
+
+      const requestBody = {
+        contents: [{
+          parts: [{
+            text: enhancedPrompt
+          }]
+        }],
+        generationConfig: {
+          maxOutputTokens: 2048,
+          temperature: 0.7,
+          topP: 0.95,
+        },
+        safetySettings: [
+          {
+            category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            threshold: 'BLOCK_ONLY_HIGH'
+          },
+          {
+            category: 'HARM_CATEGORY_HATE_SPEECH',
+            threshold: 'BLOCK_ONLY_HIGH'
+          },
+          {
+            category: 'HARM_CATEGORY_HARASSMENT',
+            threshold: 'BLOCK_ONLY_HIGH'
+          },
+          {
+            category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+            threshold: 'BLOCK_ONLY_HIGH'
+          }
+        ]
+      };
+
+      const response = await axios.post(
+        apiUrl,
+        requestBody,
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 60000
+        }
+      );
+
+      if (response.data && response.data.candidates && response.data.candidates.length > 0) {
+        const candidate = response.data.candidates[0];
+        
+        if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+          const generatedDescription = candidate.content.parts[0].text;
+          
+          console.log('📝 Generated visual description:', generatedDescription.substring(0, 200) + '...');
+          
+          // Return a placeholder image with the generated description
+          const placeholderImageUrl = this.generatePlaceholderImage(generatedDescription, prompt);
+          
+          return {
+            success: true,
+            imageUrl: placeholderImageUrl,
+            provider: 'gemini-text-fallback',
+            model: modelName,
+            revisedPrompt: generatedDescription,
+            originalPrompt: prompt,
+            generatedAt: new Date().toISOString(),
+            note: 'Gemini visual description with placeholder. Use OpenAI for actual images or configure Imagen 4.0.'
+          };
+        }
+      }
+      
+      throw new Error('No visual description generated from Gemini');
+      
+    } catch (error) {
+      console.error('❌ Visual Description Error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      
+      // Final fallback to placeholder with original prompt
+      console.log('🔄 Final fallback: placeholder image with original prompt');
+      const placeholderImageUrl = this.generatePlaceholderImage(prompt, prompt);
+      
+      return {
+        success: true,
+        imageUrl: placeholderImageUrl,
+        provider: 'placeholder-fallback',
+        model: 'placeholder-generator',
+        revisedPrompt: prompt,
+        originalPrompt: prompt,
+        generatedAt: new Date().toISOString(),
+        note: 'Final fallback placeholder. Please check API key and model configuration.'
+      };
+    }
+  }
+
+  // Generate a styled placeholder image with scene description
+  generatePlaceholderImage(description, originalPrompt) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Set canvas size for storyboard frame
+    canvas.width = 512;
+    canvas.height = 384; // 4:3 aspect ratio for storyboard
+    
+    // Create cinematic gradient background
+    const gradient = ctx.createLinearGradient(0, 0, 512, 384);
+    gradient.addColorStop(0, '#0a0a0a');
+    gradient.addColorStop(0.3, '#1a1a2e');
+    gradient.addColorStop(0.7, '#16213e');
+    gradient.addColorStop(1, '#0f0f23');
+    
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 384);
+    
+    // Add film grain effect
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    for (let i = 0; i < 200; i++) {
+      const x = Math.random() * 512;
+      const y = Math.random() * 384;
+      ctx.fillRect(x, y, 1, 1);
+    }
+    
+    // Add cinematic border
+    ctx.strokeStyle = '#d4af37';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(8, 8, 496, 368);
+    
+    // Add smaller inner border
+    ctx.strokeStyle = '#8b7355';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(12, 12, 488, 360);
+    
+    // Add cinema icon
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#d4af37';
+    ctx.fillText('🎬', 256, 50);
+    
+    // Add "STORYBOARD FRAME" title
+    ctx.font = 'bold 16px Arial';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('STORYBOARD FRAME', 256, 75);
+    
+    // Add scene description (wrapped text)
+    ctx.font = '12px Arial';
+    ctx.fillStyle = '#cccccc';
+    const sceneSummary = this.extractSceneSummary(description || originalPrompt);
+    const lines = this.wrapText(ctx, sceneSummary, 460);
+    
+    let startY = 110;
+    lines.forEach((line, index) => {
+      if (index < 15 && startY < 340) { // Limit lines to fit in frame
+        ctx.fillText(line, 256, startY + (index * 16));
+      }
+    });
+    
+    // Add visual composition hints
+    ctx.font = '10px Arial';
+    ctx.fillStyle = '#888888';
+    const compositionHints = this.getCompositionHints(description || originalPrompt);
+    ctx.fillText(compositionHints, 256, 355);
+    
+    // Add footer
+    ctx.font = '10px Arial';
+    ctx.fillStyle = '#666666';
+    ctx.fillText('Generated by Gemini Visual Description - Enhanced for Storyboards', 256, 370);
+    
+    return canvas.toDataURL('image/jpeg', 0.9);
+  }
+
+  // Extract key visual elements from scene description
+  extractSceneSummary(text) {
+    const maxLength = 300;
+    if (text.length <= maxLength) return text;
+    
+    // Try to find natural break points
+    const sentences = text.split('. ');
+    let summary = '';
+    
+    for (const sentence of sentences) {
+      if ((summary + sentence).length <= maxLength) {
+        summary += (summary ? '. ' : '') + sentence;
+      } else {
+        break;
+      }
+    }
+    
+    return summary || text.substring(0, maxLength) + '...';
+  }
+
+  // Generate composition hints from scene description
+  getCompositionHints(description) {
+    const hints = [];
+    
+    if (description.toLowerCase().includes('close')) hints.push('Close-up');
+    if (description.toLowerCase().includes('wide')) hints.push('Wide shot');
+    if (description.toLowerCase().includes('dark') || description.toLowerCase().includes('shadow')) hints.push('Low light');
+    if (description.toLowerCase().includes('bright') || description.toLowerCase().includes('sun')) hints.push('Bright');
+    if (description.toLowerCase().includes('dramatic')) hints.push('Dramatic');
+    if (description.toLowerCase().includes('castle') || description.toLowerCase().includes('building')) hints.push('Architecture');
+    if (description.toLowerCase().includes('character') || description.toLowerCase().includes('person')) hints.push('Character focus');
+    
+    return hints.length > 0 ? "Visual: " + hints.join(' - ') : 'Cinematic composition';
+  }
+
+  // Helper function to wrap text
+  wrapText(ctx, text, maxWidth) {
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = words[0];
+
+    for (let i = 1; i < words.length; i++) {
+      const word = words[i];
+      const width = ctx.measureText(currentLine + ' ' + word).width;
+      if (width < maxWidth) {
+        currentLine += ' ' + word;
+      } else {
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    lines.push(currentLine);
+    return lines;
+  }
+
+  /**
+   * Map OpenAI size format to Gemini aspect ratio
+   * @param {string} size - Size in format '1024x1024'
+   * @returns {string} - Aspect ratio for Gemini
+   */
+  mapSizeToAspectRatio(size) {
+    const aspectRatioMap = {
+      '1024x1024': '1:1',
+      '1152x864': '4:3', 
+      '1792x1024': '16:9',
+      '1024x1792': '9:16'
+    };
+    
+    return aspectRatioMap[size] || '1:1';
+  }
+
+  /**
+   * OpenAI DALL-E Image Generation
+   * @param {string} prompt - Image prompt
+   * @param {object} options - Generation options
+   * @returns {Promise<object>} - Generation result
+   */
+  async generateImageOpenAI(prompt, options = {}) {
+    if (!this.apiKey) {
+      throw new Error('OpenAI API key is required for image generation');
+    }
+
+    const { size, quality, style, model } = options;
+
+    try {
+      const response = await axios.post(
+        'https://api.openai.com/v1/images/generations',
+        {
+          model: model || 'dall-e-3',
+          prompt: prompt,
+          n: 1,
+          size: size || '1024x1024',
+          quality: quality || 'standard',
+          style: style || 'vivid'
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': "Bearer " + this.apiKey,
+          },
+          timeout: 120000, // 2 minutes timeout for image generation
+        }
+      );
+
+      if (response.data && response.data.data && response.data.data[0]) {
+        return {
+          success: true,
+          imageUrl: response.data.data[0].url,
+          revisedPrompt: response.data.data[0].revised_prompt,
+          provider: AI_PROVIDERS.OPENAI,
+          model: model || 'dall-e-3',
+          generatedAt: new Date().toISOString()
+        };
+      } else {
+        throw new Error('Invalid response from OpenAI image API');
+      }
+    } catch (error) {
+      if (error.response) {
+        const status = error.response.status;
+        const errorData = error.response.data;
+        
+        if (status === 400) {
+          const message = errorData?.error?.message || 'Bad request';
+          throw new Error("OpenAI Image API Error: " + message);
+        }
+        
+        if (status === 401) {
+          throw new Error('Invalid OpenAI API key for image generation');
+        }
+        
+        if (status === 429) {
+          throw new Error('OpenAI rate limit exceeded. Please try again later.');
+        }
+        
+        throw new Error("OpenAI Image API Error (" + status + "): " + (errorData?.error?.message || error.response.statusText));
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Process a single prompt - alias for generateText with simplified interface
+   * @param {string} prompt - The prompt to process
+   * @param {object} options - Optional parameters
+   * @returns {Promise<string>} - AI response
+   */
+  async processPrompt(prompt, options = {}) {
+    return await this.generateText('', prompt, options);
+  }
+
+  /**
+   * Main method to call AI based on provider
+   */
+  async generateText(systemPrompt, userPrompt, options = {}) {
+    const temperature = options.temperature || this.temperature;
+    const maxTokens = options.maxTokens || 4000;
+
+    try {
+      switch (this.provider) {
+        case AI_PROVIDERS.OPENAI:
+          return await this.callOpenAI(systemPrompt, userPrompt, temperature, maxTokens);
+
+        case AI_PROVIDERS.GEMINI:
+          return await this.callGemini(systemPrompt, userPrompt, temperature, maxTokens);
+
+        case AI_PROVIDERS.LOCAL:
+          return await this.callLocalAI(systemPrompt, userPrompt, temperature, maxTokens);
+
+        case AI_PROVIDERS.MLX:
+          return await this.callMLX(systemPrompt, userPrompt, temperature, maxTokens);
+
+        default:
+          throw new Error("Unknown AI provider: " + this.provider);
+      }
+    } catch (error) {
+      console.error("AI Generation Error (" + this.provider + "):", error);
+      throw error;
+    }
+  }
+
+  /**
+   * OpenAI API Call
+   */
+  async callOpenAI(systemPrompt, userPrompt, temperature, maxTokens) {
+    if (!this.apiKey) {
+      throw new Error('OpenAI API key is required');
+    }
+
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: this.model || 'gpt-4o',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature,
+        max_tokens: maxTokens,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': "Bearer " + this.apiKey,
+        },
+      }
+    );
+
+    return response.data.choices[0].message.content;
+  }
+
+  /**
+   * Google Gemini API Call (Updated to v1beta API - November 2025)
+   * Using latest Gemini 2.5 models with proper system instruction support
+   */
+  async callGemini(systemPrompt, userPrompt, temperature, maxTokens) {
+    if (!this.apiKey) {
+      throw new Error('Google API key is required');
+    }
+
+    // Use the latest Gemini 3 Pro model by default
+    let model = this.model || 'gemini-3-pro-preview';
+
+    // API v1beta endpoint - More stable for Gemini 3
+    const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + this.apiKey;
+
+    // Debug logging
+    console.log('Gemini API Debug:', {
+      model,
+      apiUrl: apiUrl.replace(this.apiKey, '***'),
+      apiKeyLength: this.apiKey ? this.apiKey.length : 0
+    });
+
+    // Determine if this is a Gemini 3 model (supports reasoning)
+    const isGemini3 = model.includes('gemini-3');
+    
+    // Gemini v1beta API format
+    const requestBody = {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: systemPrompt + "\n\n" + userPrompt,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: temperature || (isGemini3 ? 1.0 : 0.7),
+        maxOutputTokens: maxTokens || 8192,
+        topP: 0.95,
+        topK: 40,
+        candidateCount: 1,
+      },
+      safetySettings: [
+        {
+          category: 'HARM_CATEGORY_HARASSMENT',
+          threshold: 'BLOCK_ONLY_HIGH',
+        },
+        {
+          category: 'HARM_CATEGORY_HATE_SPEECH',
+          threshold: 'BLOCK_ONLY_HIGH',
+        },
+        {
+          category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+          threshold: 'BLOCK_ONLY_HIGH',
+        },
+        {
+          category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+          threshold: 'BLOCK_ONLY_HIGH',
+        },
+      ],
+    };
+
+    try {
+      console.log('Making Gemini API request...');
+      const response = await axios.post(
+        apiUrl,
+        requestBody,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 180000, // 3 minutes timeout for complex analysis
+        }
+      );
+
+      console.log('Gemini API Response Status:', response.status);
+      console.log('Gemini API Response Data:', response.data);
+
+      // Handle response
+      if (response.data.candidates && response.data.candidates.length > 0) {
+        const candidate = response.data.candidates[0];
+
+        // Check if response was blocked
+        if (candidate.finishReason === 'SAFETY') {
+          throw new Error('Response blocked by Gemini safety filters. Try rephrasing your request.');
+        }
+
+        if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+          return candidate.content.parts[0].text;
+        }
+      }
+
+      // Handle empty or invalid response
+      if (response.data.promptFeedback) {
+        throw new Error("Gemini API Error: " + (response.data.promptFeedback.blockReason || 'Invalid response'));
+      }
+
+      throw new Error('No valid response from Gemini API');
+    } catch (error) {
+      console.error('Gemini API Error Details:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        model: model,
+        apiUrl: apiUrl.replace(this.apiKey, '***'),
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers
+        }
+      });
+
+      if (error.response) {
+        // API returned an error response
+        const status = error.response.status;
+        const errorData = error.response.data;
+
+        if (status === 400) {
+          if (errorData?.error?.message?.includes('model not found')) {
+            throw new Error("Gemini Model '" + model + "' not found. Please check if the model exists in your region.");
+          }
+          if (errorData?.error?.message?.includes('API key')) {
+            throw new Error('Invalid Gemini API key. Please check your API key.');
+          }
+          if (errorData?.error?.message?.includes('unsafe')) {
+            throw new Error('Request content was flagged as unsafe. Please rephrase your prompt.');
+          }
+        }
+
+        if (status === 403) {
+          throw new Error('Gemini API access denied. Please check your API key permissions and quota.');
+        }
+
+        if (status === 429) {
+          throw new Error('Gemini API rate limit exceeded. Please try again later.');
+        }
+
+        if (status === 500) {
+          throw new Error('Gemini API internal server error. Please try again later.');
+        }
+
+        const errorMessage = errorData?.error?.message || error.response.statusText;
+        throw new Error("Gemini API Error (" + status + "): " + errorMessage);
+      }
+
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        throw new Error('Network error: Cannot connect to Gemini API. Please check your internet connection.');
+      }
+
+      throw error;;
+    }
+  }
+
+  /**
+   * Local AI (Ollama/LM Studio) API Call
+   */
+  async callLocalAI(systemPrompt, userPrompt, temperature, maxTokens) {
+    const endpoint = this.localEndpoint.endsWith('/')
+      ? this.localEndpoint + "api/generate"
+      : this.localEndpoint + "/api/generate";
+
+    // Ollama format
+    const combinedPrompt = systemPrompt + "\n\n" + userPrompt;
+
+    const response = await axios.post(
+      endpoint,
+      {
+        model: this.localModel,
+        prompt: combinedPrompt,
+        stream: false,
+        options: {
+          temperature,
+          num_predict: maxTokens,
+        },
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 120000, // 2 minutes timeout for local models
+      }
+    );
+
+    return response.data.response;
+  }
+
+  /**
+   * Apple MLX API Call (mlx-lm server)
+   * Optimized for Apple Silicon (M1/M2/M3/M4)
+   */
+  async callMLX(systemPrompt, userPrompt, temperature, maxTokens) {
+    const endpoint = this.mlxEndpoint.endsWith('/')
+      ? this.mlxEndpoint + "v1/chat/completions"
+      : this.mlxEndpoint + "/v1/chat/completions";
+
+    // OpenAI-compatible format
+    const response = await axios.post(
+      endpoint,
+      {
+        model: this.mlxModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature,
+        max_tokens: maxTokens,
+        stream: false,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 120000, // 2 minutes timeout for local inference
+      }
+    );
+
+    return response.data.choices[0].message.content;
+  }
+
+  /**
+   * Test connection to AI provider
+   */
+  async testConnection() {
+    try {
+      console.log("Testing " + this.provider + " connection...");
+
+      // Simple test for different providers
+      let testPrompt, systemPrompt;
+
+      if (this.provider === AI_PROVIDERS.GEMINI) {
+        systemPrompt = 'You are a helpful assistant. Respond concisely.';
+        testPrompt = 'Say "OK" if you can read this message.';
+      } else {
+        systemPrompt = 'You are a helpful assistant.';
+        testPrompt = 'Reply with only the word "OK" if you can read this.';
+      }
+
+      const response = await this.generateText(
+        systemPrompt,
+        testPrompt,
+        { maxTokens: 20, temperature: 0 }
+      );
+
+      console.log(this.provider + " test successful:", response);
+
+      return {
+        success: true,
+        response: response.trim(),
+        provider: this.provider,
+      };
+    } catch (error) {
+      console.error(this.provider + " test failed:", error);
+
+      return {
+        success: false,
+        error: error.message,
+        provider: this.provider,
+      };
+    }
+  }
+
+  /**
+   * Get available models for current provider
+   */
+  getAvailableModels() {
+    switch (this.provider) {
+      case AI_PROVIDERS.OPENAI:
+        return OPENAI_MODELS;
+      case AI_PROVIDERS.GEMINI:
+        return GEMINI_MODELS;
+      case AI_PROVIDERS.MLX:
+        return MLX_MODELS;
+      case AI_PROVIDERS.LOCAL:
+        return [
+          { id: 'llama3', name: 'Llama 3' },
+          { id: 'mistral', name: 'Mistral' },
+          { id: 'gemma', name: 'Gemma' },
+          { id: 'codellama', name: 'Code Llama' },
+          { id: 'phi3', name: 'Phi-3' },
+        ];
+      default:
+        return [];
+    }
+  }
+
+  /**
+   * Update configuration
+   */
+  updateConfig(newConfig) {
+    Object.assign(this, newConfig);
+  }
+
+  /**
+   * Correct grammar in text with configurable levels
+   * @param {string} text - Text to correct
+   * @param {object} options - Correction options
+   * @returns {Promise<string>} - Corrected text
+   */
+  async correctGrammar(text, options = {}) {
+    const {
+      level = GRAMMAR_LEVELS.STANDARD,
+      useChunking = true,
+      maxChunkSize = 3000, // Smaller chunks for grammar correction
+      onProgress = () => { },
+    } = options;
+
+    try {
+      // For small texts or when chunking is disabled, process directly
+      if (!useChunking || text.length <= maxChunkSize) {
+        onProgress({ step: 'correcting', progress: 0, message: 'Correcting grammar...' });
+
+        const systemPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.system[level];
+        const userPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.buildUserPrompt(text, level);
+
+        const correctedText = await this.generateText(systemPrompt, userPrompt, {
+          maxTokens: Math.min(4000, Math.ceil(text.length * 1.2)), // Allow some expansion
+          temperature: 0.1, // Low temperature for consistent corrections
+        });
+
+        // Cloud LLM'lerin yorum cevaplarını temizle
+        const cleanedResult = this.cleanCloudLLMComments(correctedText.trim());
+
+        onProgress({ step: 'complete', progress: 100, message: 'Grammar correction complete' });
+        return cleanedResult;
+      }
+
+      // Split large text into chunks
+      onProgress({
+        step: 'chunking',
+        progress: 5,
+        message: 'Splitting text into chunks...'
+      });
+
+      const chunks = this.splitTextForGrammarCorrection(text, maxChunkSize);
+
+      onProgress({
+        step: 'correcting_chunks',
+        progress: 10,
+        message: "Correcting " + chunks.length + " chunks..."
+      });
+
+      const correctedChunks = [];
+      const totalChunks = chunks.length;
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+
+        onProgress({
+          step: 'correcting_chunk',
+          progress: 10 + (i / totalChunks) * 80,
+          message: "Correcting chunk " + (i + 1) + " of " + totalChunks + "...",
+          currentChunk: i + 1,
+          totalChunks: totalChunks,
+        });
+
+        try {
+          const systemPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.system[level];
+          const userPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.buildUserPrompt(chunk.text, level);
+
+          const correctedChunk = await this.generateText(systemPrompt, userPrompt, {
+            maxTokens: Math.min(4000, Math.ceil(chunk.text.length * 1.2)),
+            temperature: 0.1,
+          });
+
+          // Cloud LLM yorumlarını temizle
+          const cleanedChunk = this.cleanCloudLLMComments(correctedChunk.trim());
+
+          correctedChunks.push({
+            ...chunk,
+            correctedText: cleanedChunk,
+          });
+
+          // Rate limiting delay for API providers
+          if (i < chunks.length - 1 && this.provider !== AI_PROVIDERS.LOCAL && this.provider !== AI_PROVIDERS.MLX) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+
+        } catch (chunkError) {
+          console.warn(`Chunk ${i + 1} correction failed:`, chunkError);
+          // Keep original text if correction fails
+          correctedChunks.push({
+            ...chunk,
+            correctedText: chunk.text,
+            error: chunkError.message,
+          });
+        }
+      }
+
+      onProgress({
+        step: 'combining',
+        progress: 95,
+        message: 'Combining corrected chunks...'
+      });
+
+      // Combine corrected chunks back into full text
+      const finalText = correctedChunks
+        .map(chunk => chunk.correctedText)
+        .join(chunk => chunk.preserveSpacing ? '\n\n' : ' '); // Maintain original spacing
+
+      onProgress({
+        step: 'complete',
+        progress: 100,
+        message: 'Grammar correction complete'
+      });
+
+      return finalText;
+
+    } catch (error) {
+      console.error('Grammar correction failed:', error);
+      onProgress({
+        step: 'error',
+        progress: 0,
+        message: `Correction failed: ${error.message}`
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Cloud LLM'lerin yorum cevaplarını temizle (sadece düzeltme sonucunu al)
+   * @param {string} text - LLM'den gelen cevap
+   * @returns {string} - Temizlenmiş metin
+   */
+  cleanCloudLLMComments(text) {
+    // Cloud provider kontrolü
+    if (this.provider !== AI_PROVIDERS.OPENAI && this.provider !== AI_PROVIDERS.GEMINI) {
+      return text; // Local provider'lar için temizleme yapma
+    }
+
+    // Yaygın LLM yorum kalıplarını temizle
+    let cleaned = text;
+
+    // "Harika bir metin! Bu metni..." tarzı başlangıçları kaldır
+    cleaned = cleaned.replace(/^.*?(düzeltme|düzenleme|analiz|geliştirme).*?(yaptım|yapıyorum|sunuyorum).*?[:.!]\s*/i, '');
+
+    // "İşte geliştirilmiş versiyon:" tarzı ifadeleri kaldır
+    cleaned = cleaned.replace(/^.*?(işte|burada|aşağıda).*?(geliştirilmiş|düzeltilmiş|düzenlenmiş).*?(versiyon|metin|sonuç).*?[:.!]\s*/im, '');
+
+    // "Sizin için düzeltmeyi yaptım" tarzı ifadeleri kaldır
+    cleaned = cleaned.replace(/^.*?(sizin için|size).*?(düzeltme|düzenleme).*?(yaptım|hazırladım).*?[:.!]\s*/im, '');
+
+    // "Bu metni daha etkileyici..." tarzı açıklamaları kaldır
+    cleaned = cleaned.replace(/^.*?(bu metni|metni).*?(daha|daha etkileyici|akıcı|edebi).*?[:.!]\s*/im, '');
+
+    // Başlangıçtaki genel açıklamaları temizle
+    cleaned = cleaned.replace(/^[^.!?]*?(düzeltme|analiz|geliştirme|iyileştirme)[^.!?]*?[.!?]\s*/i, '');
+
+    return cleaned.trim();
+  }
+
+  /**
+   * Split text for grammar correction (preserves paragraph structure)
+   * @param {string} text - Text to split
+   * @param {number} maxChunkSize - Maximum chunk size in characters
+   * @returns {Array} - Array of text chunks
+   */
+  splitTextForGrammarCorrection(text, maxChunkSize) {
+    const chunks = [];
+
+    // Split by paragraphs first to preserve structure
+    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+
+    let currentChunk = '';
+    let chunkIndex = 0;
+
+    for (let i = 0; i < paragraphs.length; i++) {
+      const paragraph = paragraphs[i];
+      const combinedLength = currentChunk.length + paragraph.length + 2; // +2 for line breaks
+
+      if (combinedLength <= maxChunkSize || currentChunk.length === 0) {
+        // Add paragraph to current chunk
+        currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
+      } else {
+        // Save current chunk and start new one
+        if (currentChunk.length > 0) {
+          chunks.push({
+            index: chunkIndex++,
+            text: currentChunk.trim(),
+            preserveSpacing: true,
+          });
+        }
+
+        // Check if single paragraph is too large
+        if (paragraph.length > maxChunkSize) {
+          // Split large paragraph by sentences
+          const sentences = this.splitParagraphBySentences(paragraph, maxChunkSize);
+          for (const sentence of sentences) {
+            chunks.push({
+              index: chunkIndex++,
+              text: sentence.trim(),
+              preserveSpacing: false,
+            });
+          }
+          currentChunk = '';
+        } else {
+          currentChunk = paragraph;
+        }
+      }
+    }
+
+    // Add remaining chunk
+    if (currentChunk.length > 0) {
+      chunks.push({
+        index: chunkIndex,
+        text: currentChunk.trim(),
+        preserveSpacing: true,
+      });
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Split a large paragraph by sentences
+   * @param {string} paragraph - Paragraph to split
+   * @param {number} maxSize - Maximum size per chunk
+   * @returns {Array} - Array of sentence chunks
+   */
+  splitParagraphBySentences(paragraph, maxSize) {
+    const sentences = paragraph.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    const chunks = [];
+    let currentChunk = '';
+
+    for (const sentence of sentences) {
+      const trimmedSentence = sentence.trim();
+      const combinedLength = currentChunk.length + trimmedSentence.length + 2;
+
+      if (combinedLength <= maxSize || currentChunk.length === 0) {
+        currentChunk += (currentChunk ? '. ' : '') + trimmedSentence;
+      } else {
+        if (currentChunk.length > 0) {
+          chunks.push(currentChunk.trim() + '.');
+        }
+        currentChunk = trimmedSentence;
+      }
+    }
+
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk.trim() + '.');
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Analyze screenplay with intelligent chunking for token management
+   * @param {string} text - Full screenplay text
+   * @param {object} options - Analysis options
+   * @returns {Promise<object>} - Analysis result
+   */
+  async analyzeScreenplayWithChunking(text, options = {}) {
+    const {
+      useChunking = true,
+      onProgress = () => { },
+      forceChunking = false,
+    } = options;
+
+    try {
+      // Determine if chunking is needed
+      const shouldChunk = this.shouldUseChunking(text, forceChunking);
+
+      if (!useChunking || !shouldChunk) {
+        onProgress({ step: 'analyzing', progress: 0, message: 'Analyzing screenplay...' });
+        const result = await this.analyzeScreenplay(text);
+        onProgress({ step: 'complete', progress: 100, message: 'Analysis complete' });
+        return result;
+      }
+
+      // Get optimal chunk configuration for current provider
+      const chunkConfig = getOptimalChunkSize(this.provider, this.model);
+
+      onProgress({
+        step: 'chunking',
+        progress: 5,
+        message: 'Splitting screenplay into manageable chunks...'
+      });
+
+      // Split text into chunks
+      const chunks = splitTextForAnalysis(text, chunkConfig);
+
+      if (chunks.length === 0) {
+        throw new Error('Failed to create text chunks');
+      }
+
+      if (chunks.length === 1) {
+        // Single chunk, use regular analysis
+        onProgress({ step: 'analyzing', progress: 10, message: 'Analyzing screenplay...' });
+        const result = await this.analyzeScreenplay(chunks[0].text);
+        onProgress({ step: 'complete', progress: 100, message: 'Analysis complete' });
+        return result;
+      }
+
+      onProgress({
+        step: 'analyzing_chunks',
+        progress: 10,
+        message: `Analyzing ${chunks.length} chunks...`
+      });
+
+      // Analyze each chunk
+      const chunkResults = [];
+      const totalChunks = chunks.length;
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+
+        onProgress({
+          step: 'analyzing_chunk',
+          progress: 10 + (i / totalChunks) * 70,
+          message: `Analyzing chunk ${i + 1} of ${totalChunks}...`,
+          currentChunk: i + 1,
+          totalChunks: totalChunks,
+        });
+
+        try {
+          const chunkResult = await this.analyzeChunk(chunk, i + 1, totalChunks);
+          chunkResults.push({
+            ...chunkResult,
+            chunkIndex: i,
+            chunkInfo: {
+              type: chunk.type,
+              scenes: chunk.scenes || [],
+              wordCount: chunk.wordCount,
+              tokenEstimate: chunk.tokenEstimate,
+            },
+          });
+
+          // Rate limiting delay
+          if (i < chunks.length - 1 && this.provider !== AI_PROVIDERS.LOCAL && this.provider !== AI_PROVIDERS.MLX) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+        } catch (chunkError) {
+          console.warn(`Chunk ${i + 1} analysis failed:`, chunkError);
+          chunkResults.push({
+            error: chunkError.message,
+            chunkIndex: i,
+            chunkInfo: {
+              type: chunk.type,
+              scenes: chunk.scenes || [],
+              wordCount: chunk.wordCount,
+              tokenEstimate: chunk.tokenEstimate,
+            },
+          });
+        }
+      }
+
+      onProgress({
+        step: 'combining',
+        progress: 85,
+        message: 'Combining analysis results...'
+      });
+
+      // Combine results
+      const combinedResult = this.combineChunkAnalyses(chunkResults, text);
+
+      onProgress({
+        step: 'complete',
+        progress: 100,
+        message: 'Analysis complete'
+      });
+
+      return combinedResult;
+
+    } catch (error) {
+      console.error('Chunked analysis failed:', error);
+      onProgress({
+        step: 'error',
+        progress: 0,
+        message: `Analysis failed: ${error.message}`
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Analyze a single screenplay (without chunking)
+   * @param {string} text - Screenplay text
+   * @returns {Promise<object>} - Analysis result
+   */
+  async analyzeScreenplay(text) {
+    const systemPrompt = SCREENPLAY_PROMPTS.SCENE_ANALYSIS.system;
+    const userPrompt = SCREENPLAY_PROMPTS.SCENE_ANALYSIS.buildUserPrompt(text);
+
+    // Cloud providers can handle larger responses
+    const isCloudProvider = this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI;
+    const maxTokens = isCloudProvider ? 8000 : 4000;
+
+    console.log(`Analyzing screenplay with ${this.provider}, maxTokens: ${maxTokens}`);
+
+    const response = await this.generateText(systemPrompt, userPrompt, {
+      maxTokens,
+      temperature: 0.1,
+    });
+
+    try {
+      const cleanedResponse = response.replace(/```json\s*|\s*```/g, '').trim();
+      return JSON.parse(cleanedResponse);
+    } catch (error) {
+      console.error('Failed to parse analysis response:', error);
+      throw new Error('Failed to parse analysis data');
+    }
+  }
+
+  /**
+   * Analyze with custom prompt and chunking support
+   * @param {string} text - Text to analyze
+   * @param {object} options - Analysis options
+   * @returns {Promise<string>} - Analysis result
+   */
+  async analyzeWithCustomPrompt(text, options = {}) {
+    const {
+      systemPrompt,
+      userPrompt,
+      useChunking = false,
+      onProgress = () => { },
+      language = 'en'
+    } = options;
+
+    if (!systemPrompt || !userPrompt) {
+      throw new Error('Both systemPrompt and userPrompt are required for custom analysis');
+    }
+
+    onProgress({
+      step: 'start',
+      progress: 0,
+      message: 'Starting custom analysis...'
+    });
+
+    try {
+      // Cloud APIs (OpenAI, Gemini) have large context windows - no chunking needed
+      const isCloudProvider = this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI;
+      const shouldUseChunking = useChunking && !isCloudProvider && text.length > 6000; // Lower threshold for local AI
+
+      if (!shouldUseChunking) {
+        // Single prompt analysis - recommended for cloud providers
+        onProgress({
+          step: 'analyzing',
+          progress: 50,
+          message: 'Analyzing with custom prompt...'
+        });
+
+        const combinedUserPrompt = `${userPrompt}\n\nIMPORTANT: Provide the response in ${language} language.\n\nText to analyze:\n${text}`;
+        const maxTokens = isCloudProvider ? 8000 : 4000; // Cloud providers can handle larger responses
+
+        const result = await this.generateText(systemPrompt, combinedUserPrompt, {
+          maxTokens,
+          temperature: 0.1,
+        });
+
+        // Cloud provider'lar için yorum cevaplarını temizle
+        const cleanedResult = this.cleanCloudLLMComments(result);
+
+        onProgress({
+          step: 'complete',
+          progress: 100,
+          message: 'Custom analysis complete!'
+        });
+
+        return cleanedResult;
+      } else {
+        // Chunked analysis - only for local providers with long text
+        onProgress({
+          step: 'info',
+          progress: 5,
+          message: 'Using chunked analysis for local provider...'
+        });
+        return await this.analyzeWithCustomPromptChunked(text, systemPrompt, userPrompt, onProgress, language);
+      }
+    } catch (error) {
+      onProgress({
+        step: 'error',
+        progress: 0,
+        message: `Custom analysis failed: ${error.message}`
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Analyze with custom prompt using chunking
+   * @param {string} text - Text to analyze
+   * @param {string} systemPrompt - System prompt
+   * @param {string} userPrompt - User prompt template
+   * @param {Function} onProgress - Progress callback
+   * @returns {Promise<string>} - Combined analysis result
+   */
+  async analyzeWithCustomPromptChunked(text, systemPrompt, userPrompt, onProgress, language = 'en') {
+    const chunks = this.chunkText(text, {
+      preserveScenes: false, // For custom analysis, simple chunking is usually better
+      maxTokens: 2000 // Smaller chunks for local AI reliability
+    });
+
+    const chunkResults = [];
+    const totalChunks = chunks.length;
+
+    onProgress({
+      step: 'chunking',
+      progress: 10,
+      message: `Split into ${totalChunks} chunks. Analyzing...`
+    });
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const chunkNumber = i + 1;
+
+      onProgress({
+        step: 'chunk',
+        progress: 10 + (60 * i / totalChunks),
+        message: `Analyzing chunk ${chunkNumber}/${totalChunks}...`,
+        chunkNumber,
+        totalChunks
+      });
+
+      const combinedUserPrompt = `${userPrompt}
+
+This is chunk ${chunkNumber} of ${totalChunks} from a larger text. Please analyze this section. IMPORTANT: Provide the response in ${language} language.
+
+${chunk.text}`;
+
+      const chunkResult = await this.generateText(systemPrompt, combinedUserPrompt, {
+        maxTokens: 2000,
+        temperature: 0.1,
+      });
+
+      chunkResults.push({
+        chunkNumber,
+        content: chunkResult,
+        metadata: chunk.metadata
+      });
+
+      // Add small delay to prevent rate limiting
+      if (i < chunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    onProgress({
+      step: 'combining',
+      progress: 80,
+      message: 'Combining chunk results...'
+    });
+
+    // Combine all chunk results
+    const combinedResult = await this.combineCustomPromptResults(chunkResults, systemPrompt, language);
+
+    onProgress({
+      step: 'complete',
+      progress: 100,
+      message: 'Custom analysis complete!'
+    });
+
+    return combinedResult;
+  }
+
+  /**
+   * Combine results from custom prompt chunks
+   * @param {Array} chunkResults - Results from each chunk
+   * @param {string} systemPrompt - Original system prompt for context
+   * @param {string} language - Language for the output
+   * @returns {Promise<string>} - Combined result
+   */
+  async combineCustomPromptResults(chunkResults, systemPrompt, language = 'en') {
+    const combinerSystemPrompt = `You are an expert text analyst. Your task is to combine and synthesize analysis results from multiple chunks of text into a comprehensive final analysis.
+
+Original analysis instructions: ${systemPrompt}
+
+Please create a cohesive, comprehensive analysis by:
+1. Identifying common themes and patterns across chunks
+2. Removing redundancy while preserving important details
+3. Creating a logical flow and structure
+4. Maintaining the analytical depth and quality
+
+IMPORTANT: The final output MUST be in ${language} language.`;
+
+    const chunkSummaries = chunkResults.map(result =>
+      `Chunk ${result.chunkNumber}:\n${result.content}\n`
+    ).join('\n---\n\n');
+
+    const combinerUserPrompt = `Please combine and synthesize these analysis results into a comprehensive final analysis:
+
+${chunkSummaries}`;
+
+    return await this.generateText(combinerSystemPrompt, combinerUserPrompt, {
+      maxTokens: 4000,
+      temperature: 0.1,
+    });
+  }
+
+  /**
+   * Analyze a single chunk
+   * @param {object} chunk - Text chunk with metadata
+   * @param {number} chunkNumber - Current chunk number
+   * @param {number} totalChunks - Total number of chunks
+   * @returns {Promise<object>} - Chunk analysis result
+   */
+  async analyzeChunk(chunk, chunkNumber, totalChunks) {
+    const systemPrompt = `You are a professional screenplay analyst. You are analyzing chunk ${chunkNumber} of ${totalChunks} from a larger screenplay. Focus on this specific section but be aware it's part of a larger work.
+
+Return a valid JSON object with the following structure:
+{
+  "scenes": [
+    {
+      "number": 1,
+      "header": "INT. BEDROOM - NIGHT",
+      "intExt": "INT",
+      "location": "BEDROOM", 
+      "timeOfDay": "NIGHT",
+      "characters": ["CHARACTER1", "CHARACTER2"],
+      "estimatedDuration": 2,
+      "description": "Brief scene description",
+      "chunkRelative": true
+    }
+  ],
+  "locations": [
+    {
+      "name": "BEDROOM",
+      "type": "INT", 
+      "sceneCount": 1,
+      "estimatedShootingDays": 0.5
+    }
+  ],
+  "characters": [
+    {
+      "name": "CHARACTER NAME",
+      "sceneCount": 5,
+      "description": "Brief character description"
+    }
+  ],
+  "equipment": [
+    {
+      "item": "Camera crane",
+      "scenes": [1, 5],
+      "reason": "High angle shot mentioned" 
+    }
+  ],
+  "partialSummary": {
+    "scenesInChunk": 3,
+    "estimatedChunkRuntime": 15,
+    "newCharactersIntroduced": ["CHARACTER1"],
+    "keyEvents": ["Brief description of important events in this chunk"]
+  }
+}
+
+Return ONLY valid JSON, no additional text.`;
+
+    const userPrompt = `Analyze this screenplay chunk and provide a detailed breakdown. This is chunk ${chunkNumber} of ${totalChunks}:
+
+${chunk.text}`;
+
+    const response = await this.generateText(systemPrompt, userPrompt, {
+      maxTokens: 3000,
+      temperature: 0.1,
+    });
+
+    try {
+      const cleanedResponse = response.replace(/```json\s*|\s*```/g, '').trim();
+      return JSON.parse(cleanedResponse);
+    } catch (error) {
+      console.error('Failed to parse chunk analysis response:', error);
+      throw new Error(`Failed to parse chunk ${chunkNumber} analysis data`);
+    }
+  }
+
+  /**
+   * Determine if chunking should be used based on text size and provider capabilities
+   * @param {string} text - Text to analyze
+   * @param {boolean} forceChunking - Force chunking regardless of size
+   * @returns {boolean} - Whether to use chunking
+   */
+  shouldUseChunking(text, forceChunking = false) {
+    if (forceChunking) return true;
+
+    // Cloud providers (OpenAI, Gemini) have very large context windows
+    // No need for chunking - they handle long texts efficiently
+    if (this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI) {
+      console.log(`Skipping chunking for cloud provider: ${this.provider} (large context window)`);
+      return false;
+    }
+
+    // Only chunk for local providers with moderately long texts
+    const thresholds = {
+      [AI_PROVIDERS.LOCAL]: 8000,   // ~2000 tokens (local models benefit from smaller chunks)
+      [AI_PROVIDERS.MLX]: 8000,     // ~2000 tokens (local models benefit from smaller chunks)
+    };
+
+    const threshold = thresholds[this.provider] || 20000;
+    const shouldChunk = text.length > threshold;
+
+    if (shouldChunk) {
+      console.log(`Text length ${text.length} > threshold ${threshold}, using chunking for local provider`);
+    }
+
+    return shouldChunk;
+  }
+
+  /**
+   * Combine multiple chunk analyses into a single comprehensive result
+   * @param {Array} chunkResults - Array of chunk analysis results
+   * @param {string} originalText - Original full text for reference
+   * @returns {object} - Combined analysis result
+   */
+  combineChunkAnalyses(chunkResults, originalText) {
+    const validResults = chunkResults.filter(result => !result.error);
+
+    if (validResults.length === 0) {
+      throw new Error('No valid chunk analyses to combine');
+    }
+
+    // Combine scenes
+    const allScenes = [];
+    let sceneNumberOffset = 0;
+
+    for (const result of validResults) {
+      if (result.scenes) {
+        const adjustedScenes = result.scenes.map(scene => ({
+          ...scene,
+          number: scene.number + sceneNumberOffset,
+          chunkIndex: result.chunkIndex,
+        }));
+        allScenes.push(...adjustedScenes);
+        sceneNumberOffset = Math.max(sceneNumberOffset, ...result.scenes.map(s => s.number));
+      }
+    }
+
+    // Combine and deduplicate locations
+    const locationMap = new Map();
+    for (const result of validResults) {
+      if (result.locations) {
+        for (const location of result.locations) {
+          const key = `${location.type}-${location.name}`;
+          if (locationMap.has(key)) {
+            const existing = locationMap.get(key);
+            existing.sceneCount += location.sceneCount;
+            existing.estimatedShootingDays += location.estimatedShootingDays;
+          } else {
+            locationMap.set(key, { ...location });
+          }
+        }
+      }
+    }
+
+    // Combine and deduplicate characters
+    const characterMap = new Map();
+    for (const result of validResults) {
+      if (result.characters) {
+        for (const character of result.characters) {
+          if (characterMap.has(character.name)) {
+            const existing = characterMap.get(character.name);
+            existing.sceneCount += character.sceneCount;
+            // Keep the most detailed description
+            if (character.description && character.description.length > existing.description.length) {
+              existing.description = character.description;
+            }
+          } else {
+            characterMap.set(character.name, { ...character });
+          }
+        }
+      }
+    }
+
+    // Combine equipment
+    const allEquipment = [];
+    for (const result of validResults) {
+      if (result.equipment) {
+        allEquipment.push(...result.equipment.map(eq => ({
+          ...eq,
+          chunkIndex: result.chunkIndex,
+        })));
+      }
+    }
+
+    // Create combined summary
+    const totalScenes = allScenes.length;
+    const estimatedRuntime = validResults.reduce((sum, result) => {
+      return sum + (result.partialSummary?.estimatedChunkRuntime || 0);
+    }, 0);
+
+    // Estimate shooting days based on locations and scenes
+    const estimatedShootingDays = Array.from(locationMap.values()).reduce((sum, loc) => {
+      return sum + (loc.estimatedShootingDays || 0);
+    }, 0);
+
+    return {
+      scenes: allScenes,
+      locations: Array.from(locationMap.values()),
+      characters: Array.from(characterMap.values()),
+      equipment: allEquipment,
+      summary: {
+        totalScenes,
+        estimatedRuntime: Math.round(estimatedRuntime),
+        estimatedShootingDays: Math.round(estimatedShootingDays * 10) / 10,
+        chunksAnalyzed: validResults.length,
+        chunksWithErrors: chunkResults.length - validResults.length,
+      },
+      chunkingInfo: {
+        totalChunks: chunkResults.length,
+        successfulChunks: validResults.length,
+        failedChunks: chunkResults.length - validResults.length,
+        chunkDetails: chunkResults.map(result => ({
+          chunkIndex: result.chunkIndex,
+          success: !result.error,
+          error: result.error,
+          chunkInfo: result.chunkInfo,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Enhanced Screenplay Analysis
+   * Combines AI analysis with advanced NLP processing
+   */
+  async analyzeScreenplayEnhanced(text, scenes = [], characters = [], options = {}) {
+    return await this.enhancedAnalysisEngine.analyzeScreenplayEnhanced(
+      text,
+      scenes,
+      characters,
+      options
+    );
+  }
+}
+
+/**
+ * Grammar correction levels for different use cases
+ */
+export const GRAMMAR_LEVELS = {
+  BASIC: 'basic',
+  STANDARD: 'standard',
+  ADVANCED: 'advanced',
+  PRESERVE_STYLE: 'preserve_style',
+};
+
+/**
+ * Specialized prompts for screenplay tasks
+ */
+export const SCREENPLAY_PROMPTS = {
+  GRAMMAR_CORRECTION: {
+    system: {
+      [GRAMMAR_LEVELS.BASIC]: "Sen bir metin düzeltme asistanısın. SADECE açık yazım hatalarını düzelt, METNİN TAMAMINI AYNEN KORU.\n\nKESİN KURALLAR:\n- SADECE yanlış yazılmış kelimeleri düzelt (örn: 'teh' → 'the', 'oalcak' → 'olacak')\n- SADECE bariz dilbilgisi hatalarını düzelt\n- TÜM metni AYNEN koru - hiçbir kelime, cümle veya satır kaybetme\n- TÜM formatı AYNEN koru\n- Cümleleri yeniden YAZMA\n- YORUM YAPMA, açıklama EKLEME\n- Girdi metnin TAMAMEN aynı uzunlukta olmasını sağla\n- SADECE düzeltilmiş metni döndür\n\nYou are a text correction assistant. Fix ONLY obvious typos, KEEP ALL TEXT EXACTLY.\n\nSTRICT RULES:\n- Fix ONLY misspelled words\n- Fix ONLY obvious grammar errors\n- Keep ALL text EXACTLY - do not lose any words, sentences, or lines\n- Keep ALL formatting EXACTLY\n- Do NOT rewrite sentences\n- Do NOT add comments\n- Ensure output is EXACTLY same length as input\n- Return ONLY the corrected text",
+
+      [GRAMMAR_LEVELS.STANDARD]: "Sen profesyonel bir metin editörüsün. SADECE yazım hatalarını düzelt, METNİ TAMAMEN KORU.\n\nKESİN KURALLAR:\n- HER SATIRI AYNEN koru - hiçbir satır kaybetme\n- TÜM formatı koru (sahne başlıkları, karakter isimleri, parantezler)\n- SADECE yazım, dilbilgisi, noktalama hatalarını düzelt\n- Yazım stilini DEĞİŞTİRME\n- Sahne ekleme/çıkarma YAPMA\n- YORUM YAPMA, açıklama EKLEME\n- Girdi ile çıktı aynı uzunlukta olmalı\n- SADECE düzeltilmiş metni döndür\n\nYou are a professional text editor. Fix ONLY typos, keep text COMPLETELY intact.\n\nSTRICT RULES:\n- Keep EVERY LINE EXACTLY - do not lose any lines\n- Keep ALL formatting\n- Fix ONLY spelling, grammar, punctuation errors\n- Do NOT change style\n- Do NOT add/remove content\n- Do NOT add comments\n- Output must be same length as input\n- Return ONLY corrected text",
+
+      [GRAMMAR_LEVELS.ADVANCED]: "Sen profesyonel senaryo editörüsün. Düzelt ama TÜM içeriği AYNEN koru.\n\nKESİN KURALLAR:\n- TÜM format yapısını AYNEN koru\n- HER KELİMEYİ koru - hiçbir kelime kaybetme\n- Yazarın sesini koru\n- Tüm sahne başlıklarını, karakter isimlerini koru\n- SADECE düzeltilmiş metni döndür, yorum EKLEME\n- Girdi ve çıktı aynı uzunlukta olmalı\n\nYou are a professional screenplay editor. Fix but keep ALL content EXACTLY.\n\nSTRICT RULES:\n- Keep ALL format structure EXACTLY\n- Keep EVERY WORD - do not lose any words\n- Maintain author's voice\n- Preserve all scene headers, character names\n- Return ONLY corrected text, NO comments\n- Input and output must be same length",
+
+      [GRAMMAR_LEVELS.PRESERVE_STYLE]: "Sen nazik bir metin editörüsün. SADECE açık hataları düzelt, TÜM metni AYNEN koru.\n\nNE DÜZELT:\n- Yanlış yazılmış kelimeler ('teh' → 'the', 'oalcak' → 'olacak')\n- Temel dilbilgisi hataları\n\nNE DEĞİŞTİRME:\n- Yazım stili\n- Cümle yapısı\n- Kelime seçimleri\n- Format\n- HİÇBİR YORUMLAMA YAPMA\n- Hiçbir içerik kaybetme\n\nSADECE düzeltilmiş metni döndür, girdi uzunluğunu koru.\n\nYou are a gentle text editor. Fix ONLY clear mistakes, keep ALL text EXACTLY.\n\nReturn ONLY corrected text, preserve input length.",
+    },
+
+    buildUserPrompt: (text, level = GRAMMAR_LEVELS.STANDARD) => {
+      const prompts = {
+        [GRAMMAR_LEVELS.BASIC]: "SADECE bariz yazım hatalarını düzelt, TÜM metni AYNEN koru, YORUM YAPMA, AYNI UZUNLUKTA DÖNDÜR:\\n\\nFix ONLY obvious typos, keep ALL text EXACTLY, NO comments, RETURN SAME LENGTH:\\n\\n" + text,
+        [GRAMMAR_LEVELS.STANDARD]: "SADECE yazım hatalarını düzelt, TÜM içeriği AYNEN koru, YORUMLAMA, AYNI UZUNLUKTA:\\n\\nFix ONLY typos, keep ALL content EXACTLY, NO interpretation, SAME LENGTH:\\n\\n" + text,
+        [GRAMMAR_LEVELS.ADVANCED]: "Düzelt ama TÜM kelime ve satırları AYNEN koru, YORUM YOK, AYNI UZUNLUK:\\n\\nFix but keep ALL words and lines EXACTLY, NO comments, SAME LENGTH:\\n\\n" + text,
+        [GRAMMAR_LEVELS.PRESERVE_STYLE]: "SADECE açık hataları düzelt, geri kalanı AYNEN koru, YORUM YAPMA, AYNI UZUNLUK:\\n\\nFix ONLY clear errors, keep rest EXACTLY, NO comments, SAME LENGTH:\\n\\n" + text,
+      };
+
+      return prompts[level] || prompts[GRAMMAR_LEVELS.STANDARD];
+    },
+  },
+
+  SCENE_ANALYSIS: {
+    system: "You are an expert screenplay analyst and production coordinator. Analyze the provided screenplay and extract structured information for production planning.\\n\\nReturn a valid JSON object with the following structure:\\n{\\n  \"scenes\": [\\n    {\\n      \"number\": 1,\\n      \"header\": \"INT. BEDROOM - NIGHT\",\\n      \"intExt\": \"INT\",\\n      \"location\": \"BEDROOM\",\\n      \"timeOfDay\": \"NIGHT\",\\n      \"characters\": [\"CHARACTER1\"],\\n      \"estimatedDuration\": 2,\\n      \"description\": \"Brief scene description\"\\n    }\\n  ],\\n  \"locations\": [\\n    {\\n      \"name\": \"BEDROOM\",\\n      \"type\": \"INT\",\\n      \"sceneCount\": 1,\\n      \"estimatedShootingDays\": 0.5\\n    }\\n  ],\\n  \"characters\": [\\n    {\\n      \"name\": \"CHARACTER NAME\",\\n      \"sceneCount\": 5,\\n      \"description\": \"Brief character description\"\\n    }\\n  ],\\n  \"equipment\": [\\n    {\\n      \"item\": \"Camera crane\",\\n      \"scenes\": [1, 5],\\n      \"reason\": \"High angle shot mentioned\"\\n    }\\n  ],\\n  \"summary\": {\\n    \"totalScenes\": 10,\\n    \"estimatedRuntime\": 90,\\n    \"estimatedShootingDays\": 15\\n  }\\n}\\n\\nReturn ONLY valid JSON, no additional text or markdown.",
+
+    buildUserPrompt: (text) =>
+      "Analyze this screenplay and provide a detailed breakdown:\\n\\n" + text.substring(0, 50000),
+  },
+};
+
+export default AIHandler;
