@@ -9,6 +9,10 @@ export default function TabbedSidebar() {
   const { scripts, setCurrentView } = useScriptStore();
   const { t } = useTranslation();
 
+  const handleViewChange = (view) => {
+    setCurrentView(view);
+  };
+
   const tabs = [
     {
       id: 'scripts',

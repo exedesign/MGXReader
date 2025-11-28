@@ -3,34 +3,121 @@ import { jsPDF } from 'jspdf';
 export class PDFExportService {
   constructor() {
     this.doc = null;
-    this.currentY = 20;
-    this.pageHeight = 280;
-    this.leftMargin = 20;
-    this.rightMargin = 20;
-    this.pageWidth = 210;
-    this.contentWidth = this.pageWidth - this.leftMargin - this.rightMargin;
+    this.currentY = 25;
+    this.pageHeight = 297; // A4 yükseklik (297mm)
+    this.leftMargin = 25;
+    this.rightMargin = 25;
+    this.pageWidth = 210; // A4 genişlik (210mm)
+    this.contentWidth = this.pageWidth - this.leftMargin - this.rightMargin; // 160mm
+    this.bottomMargin = 25;
+    this.usableHeight = this.pageHeight - this.currentY - this.bottomMargin; // ~247mm
+  }
+
+  // 🔧 GLOBAL KARAKTER TEMİZLEME FONKSİYONU
+  cleanTurkishText(text) {
+    if (!text) return '';
+    
+    let cleanText = String(text);
+    
+    // Yaygın UTF-8 encoding hataları
+    cleanText = cleanText
+      .replace(/Ä±/g, 'ı')
+      .replace(/Ä°/g, 'İ')
+      .replace(/Ã§/g, 'ç')
+      .replace(/Ã‡/g, 'Ç')
+      .replace(/Ä\u009f/g, 'ğ')
+      .replace(/Ä\u009e/g, 'Ğ')
+      .replace(/Ã¶/g, 'ö')
+      .replace(/Ã–/g, 'Ö')
+      .replace(/Ã¼/g, 'ü')
+      .replace(/Ãœ/g, 'Ü')
+      .replace(/Ã\u0178/g, 'ş')
+      .replace(/Å\u009f/g, 'ş')
+      .replace(/Å\u009e/g, 'Ş')
+      
+      // Double encoding hatalarını düzelt
+      .replace(/&Ä±&/g, 'ı')
+      .replace(/&Ä&/g, 'ı')
+      .replace(/&A&/g, 'A')
+      .replace(/&n&/g, 'n')
+      .replace(/&a&/g, 'a')
+      .replace(/&l&/g, 'l')
+      .replace(/&i&/g, 'i')
+      .replace(/&z&/g, 'z')
+      
+      // Hexadecimal encoding düzeltmeleri
+      .replace(/&\u0026&\u00c4&\u00b1&/g, 'ı')
+      .replace(/&\u0026&A&\u0026&n&\u0026&a&\u0026&l&\u0026&i&\u0026&z&\u0026&i&/g, 'Analizi')
+      
+      // Eski encoding hatalarını düzelt
+      .replace(/Ã\u0096/g, 'Ö').replace(/Ã\u00b6/g, 'ö')
+      .replace(/Ã\u009e/g, 'Ş').replace(/Ã\u009f/g, 'ş')
+      .replace(/Ã\u0087/g, 'Ç').replace(/Ã\u00a7/g, 'ç')
+      .replace(/Ã\u009f/g, 'Ğ').replace(/Ä\u009f/g, 'ğ')
+      .replace(/Ã\u009c/g, 'Ü').replace(/Ã\u00bc/g, 'ü')
+      .replace(/Ä\u00b1/g, 'ı').replace(/Ä\u00b0/g, 'İ')
+      
+      // Diğer encoding hataları
+      .replace(/â\u20ac\u2122/g, "'")
+      .replace(/â\u20ac\u009d/g, '"')
+      .replace(/â\u20ac\u009c/g, '"')
+      
+      // HTML entities
+      .replace(/&quot;/g, '\u0022')
+      .replace(/&apos;/g, '\u0027')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      
+      // Unicode normalize
+      .normalize('NFC')
+      .trim();
+      
+    return cleanText;
   }
 
   createDocument() {
-    this.doc = new jsPDF('p', 'mm', 'a4');
-    this.currentY = 20;
+    // A4 format: 210x297mm
+    this.doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+      putOnlyUsedFonts: true,
+      floatPrecision: 16 // 16 digits behind decimal
+    });
     
-    // Set font to support Turkish characters
+    this.currentY = 25;
+    
+    // Gelişmiş Türkçe karakter desteği
     try {
-      this.doc.setFont('helvetica');
+      this.doc.setFont('helvetica', 'normal');
+      this.doc.setLanguage('tr-TR');
+      this.doc.setCharSpace(0);
+      
+      // PDF metadata
+      this.doc.setProperties({
+        title: 'MGX Reader - Senaryo Analiz Raporu',
+        subject: 'Senaryo Analizi',
+        author: 'MGX Reader',
+        creator: 'MGX Reader v1.0',
+        producer: 'jsPDF'
+      });
     } catch (error) {
-      console.warn('Font setting failed, using default:', error);
+      console.warn('PDF ayarları başarısız, varsayılan kullanılıyor:', error);
     }
   }
 
   addHeader(title) {
     this.doc.setFontSize(20);
     this.doc.setFont('helvetica', 'bold');
-    const cleanTitle = title ? String(title).normalize('NFC') : '';
+    
+    // Global temizleme fonksiyonu kullan
+    const cleanTitle = this.cleanTurkishText(title || 'MGX Reader - Senaryo Analiz Raporu');
+      
     this.doc.text(cleanTitle, this.leftMargin, this.currentY);
     this.currentY += 15;
     
-    // Add line under header
+    // Başlık altına çizgi
     this.doc.setLineWidth(0.5);
     this.doc.line(this.leftMargin, this.currentY, this.pageWidth - this.rightMargin, this.currentY);
     this.currentY += 10;
@@ -70,8 +157,9 @@ export class PDFExportService {
   }
 
   addText(text) {
-    // Ensure proper encoding for Turkish characters
-    const cleanText = text ? String(text).normalize('NFC') : '';
+    // Global temizleme fonksiyonu kullan
+    const cleanText = this.cleanTurkishText(text);
+      
     const lines = this.doc.splitTextToSize(cleanText, this.contentWidth);
     lines.forEach(line => {
       this.checkPageBreak(6);
@@ -84,8 +172,9 @@ export class PDFExportService {
     this.checkPageBreak(8);
     this.doc.text('•', this.leftMargin, this.currentY);
     
-    // Ensure proper encoding for Turkish characters
-    const cleanText = text ? String(text).normalize('NFC') : '';
+    // Global temizleme fonksiyonu kullan
+    const cleanText = this.cleanTurkishText(text);
+      
     const lines = this.doc.splitTextToSize(cleanText, this.contentWidth - 10);
     lines.forEach((line, index) => {
       if (index > 0) this.checkPageBreak(6);
@@ -139,9 +228,10 @@ export class PDFExportService {
   }
 
   checkPageBreak(requiredSpace) {
-    if (this.currentY + requiredSpace > this.pageHeight) {
+    // A4 boyutuna göre sayfa kontrolü (297mm yükseklik, 25mm alt margin)
+    if (this.currentY + requiredSpace > (this.pageHeight - this.bottomMargin)) {
       this.doc.addPage();
-      this.currentY = 20;
+      this.currentY = 25; // Üst margin
     }
   }
 
@@ -153,12 +243,21 @@ export class PDFExportService {
       this.doc.setFontSize(10);
       this.doc.setFont('helvetica', 'normal');
       
-      // Date
-      const date = new Date().toLocaleDateString('tr-TR');
-      this.doc.text(`Oluşturulma: ${date}`, this.leftMargin, this.pageHeight + 10);
+      // Footer pozisyonu: A4 alt kısmı (297-10 = 287mm)
+      const footerY = this.pageHeight - 10;
       
-      // Page number
-      this.doc.text(`Sayfa ${i}/${pageCount}`, this.pageWidth - this.rightMargin - 30, this.pageHeight + 10);
+      // Tarih (sol alt)
+      const date = new Date().toLocaleDateString('tr-TR', {
+        day: '2-digit',
+        month: '2-digit', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      this.doc.text(`Oluşturma Tarihi: ${date}`, this.leftMargin, footerY);
+      
+      // Sayfa numarası (sağ alt)
+      this.doc.text(`Sayfa ${i}/${pageCount}`, this.pageWidth - this.rightMargin - 30, footerY);
     }
   }
 
@@ -424,9 +523,30 @@ export class PDFExportService {
         }
       });
     
+    // Enhanced Turkish character encoding fix for PDF
+    cleaned = cleaned
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .normalize('NFC')
+      // Problematic character combinations
+      .replace(/Ø=UA&/g, 'Ö')
+      .replace(/Ã\u2013/g, 'Ö')
+      .replace(/Ã\u2020/g, 'Ğ')
+      .replace(/&R&a&p&o&r&/g, 'Rapor')
+      .replace(/&([a-zA-Z0-9]+)&/g, '$1')
+      .replace(/&([a-zA-Z]+);/g, '')
+      // Fix specific garbled patterns from screenshot
+      .replace(/Ã-UÄ&/g, 'Ö')
+      .replace(/&R&a&p&o&r&/g, 'Rapor')
+      .replace(/&B&i&l&g&i&/g, 'Bilgi')
+      .replace(/&([A-Z])&([a-z])&/g, '$1$2')
+      // Clean up remaining artifacts
+      .replace(/&{2,}/g, ' ')
+      .replace(/[&]{1}(?![a-zA-Z0-9])/g, ' ');
+    
     // Çok uzun metinleri kısalt (PDF için)
     if (cleaned.length > 2000) {
-      cleaned = cleaned.substring(0, 1950) + '...\n\n[Metin kısaltıldı]';
+      cleaned = cleaned.substring(0, 1950) + '...\n\n[Metin uzunluk sınırı nedeniyle kısaltıldı]';
     }
     
     // Çok fazla satır sonu varsa düzenle

@@ -4,7 +4,109 @@ const fs = require('fs').promises;
 const pdfParse = require('pdf-parse');
 const poppler = require('pdf-poppler');
 
+// Fix Electron cache and GPU errors
+app.commandLine.appendSwitch('--disable-gpu-sandbox');
+app.commandLine.appendSwitch('--disable-software-rasterizer');
+app.commandLine.appendSwitch('--disable-dev-shm-usage');
+app.commandLine.appendSwitch('--no-sandbox');
+// Fix cache permission issues
+app.commandLine.appendSwitch('--disk-cache-dir', path.join(__dirname, '../../cache'));
+app.commandLine.appendSwitch('--disk-cache-size', '50000000'); // 50MB
+
 let mainWindow;
+
+// Fix common PDF encoding issues
+function fixPDFEncoding(text) {
+  if (!text || typeof text !== 'string') return text;
+  
+  try {
+    // Common PDF encoding fixes
+    let fixedText = text;
+    
+    // Fix common Windows-1252 to UTF-8 issues
+    const encodingFixes = {
+      'â€™': "'",     // apostrophe
+      'â€œ': '"',     // left double quote
+      'â€\x9d': '"',  // right double quote
+      'â€"': '–',     // en dash
+      'â€"': '—',     // em dash
+      'â€¦': '…',     // ellipsis
+      'Ã¡': 'á',     // á
+      'Ã©': 'é',     // é
+      'Ã­': 'í',     // í
+      'Ã³': 'ó',     // ó
+      'Ãº': 'ú',     // ú
+      'Ã±': 'ñ',     // ñ
+      'Ã§': 'ç',     // ç
+      'Ã¼': 'ü',     // ü
+      'Ã': 'İ',      // Turkish I
+      'Ä±': 'ı',     // Turkish ı
+      'Ä°': 'İ',     // Turkish İ
+      'Ã¼': 'ü',     // ü
+      'Ã¶': 'ö',     // ö
+      'Ä\x9f': 'ğ',  // Turkish ğ
+      'Ä\x9e': 'Ğ',  // Turkish Ğ
+      'Å\x9f': 'ş',  // Turkish ş
+      'Å\x9e': 'Ş',  // Turkish Ş
+      'Ä\x83': 'ă',  // Romanian ă
+      'Ä\x82': 'Ă',  // Romanian Ă
+      '\ufffd': '',   // replacement character
+      '\x00': '',     // null bytes
+      '\x01': '',     // control characters
+      '\x02': '',
+      '\x03': '',
+      '\x04': '',
+      '\x05': '',
+      '\x06': '',
+      '\x07': '',
+      '\x08': '',
+      '\x0e': '',
+      '\x0f': '',
+      '\x10': '',
+      '\x11': '',
+      '\x12': '',
+      '\x13': '',
+      '\x14': '',
+      '\x15': '',
+      '\x16': '',
+      '\x17': '',
+      '\x18': '',
+      '\x19': '',
+      '\x1a': '',
+      '\x1b': '',
+      '\x1c': '',
+      '\x1d': '',
+      '\x1e': '',
+      '\x1f': ''
+    };
+    
+    // Apply fixes
+    Object.keys(encodingFixes).forEach(wrongChar => {
+      const fixedChar = encodingFixes[wrongChar];
+      fixedText = fixedText.replace(new RegExp(wrongChar, 'g'), fixedChar);
+    });
+    
+    // Remove or replace other problematic characters
+    fixedText = fixedText
+      // Remove invisible/zero-width characters
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      // Replace multiple spaces with single space
+      .replace(/\s{2,}/g, ' ')
+      // Fix line breaks
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      // Remove excessive line breaks
+      .replace(/\n{3,}/g, '\n\n');
+    
+    console.log('PDF encoding fix applied, character count:', text.length, '->', fixedText.length);
+    
+    return fixedText;
+    
+  } catch (error) {
+    console.warn('Error fixing PDF encoding:', error);
+    return text; // Return original if fix fails
+  }
+}
 
 async function createWindow() {
   // Get screen dimensions
@@ -45,7 +147,7 @@ async function createWindow() {
     closable: true,
     show: true, // Show immediately for debugging
     alwaysOnTop: false,
-    // icon: process.platform === 'win32' ? path.join(__dirname, '../../assets/icon.ico') : undefined,
+    icon: path.join(__dirname, '../../icon.ico'), // Use the icon.ico from root directory
   });
 
   // Force window to be visible and focused
@@ -61,8 +163,8 @@ async function createWindow() {
 
   // Development mode
   if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
-    // Directly try to connect to common development ports
-    const tryPorts = [3000, 3001, 3002, 5173, 3003, 3004, 3005];
+    // Try ports in order of Vite's preference (3000 is current active port)
+    const tryPorts = [3000, 3001, 3002, 3003, 5173, 3004, 3005];
     let connected = false;
     
     for (const port of tryPorts) {
@@ -240,6 +342,9 @@ ipcMain.handle('pdf:parse', async (event, filePath, selectedPages = null) => {
 
     let text = data.text;
     let pages = data.numpages;
+
+    // Fix common encoding issues in PDF text extraction
+    text = fixPDFEncoding(text);
 
     // If specific pages are selected, filter the text
     if (selectedPages && Array.isArray(selectedPages) && selectedPages.length > 0) {

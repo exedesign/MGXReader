@@ -87,7 +87,7 @@ export default function AISettings({ onClose, initialTab = 'prompts' }) {
         case AI_PROVIDERS.OPENAI:
           testConfig = {
             provider,
-            apiKey: localOpenAIKey,
+            openaiApiKey: localOpenAIKey,
             model: localOpenAIModel,
             temperature,
             maxTokens,
@@ -104,7 +104,7 @@ export default function AISettings({ onClose, initialTab = 'prompts' }) {
           });
           testConfig = {
             provider,
-            apiKey: localGeminiKey,
+            geminiApiKey: localGeminiKey,
             model: localGeminiModel,
             temperature,
             maxTokens,

@@ -1,8 +1,11 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { analysisStorageService } from '../utils/analysisStorageService';
 
-export const useScriptStore = create((set, get) => ({
+export const useScriptStore = create(
+  persist(
+    (set, get) => ({
   // Multi-script management
   scripts: [], // Array of script objects
   currentScriptId: null, // ID of currently active script
@@ -32,6 +35,10 @@ export const useScriptStore = create((set, get) => ({
   // Analysis state
   isAnalyzing: false,
   analysisProgress: null,
+
+  // Storyboard state  
+  isStoryboardProcessing: false,
+  storyboardProgress: null,
 
   // Analysis data (current script)
   analysisData: null,
@@ -651,7 +658,109 @@ export const useScriptStore = create((set, get) => ({
   clearAnalysisProgress: () => {
     set({ 
       isAnalyzing: false,
-      analysisProgress: null 
+      analysisProgress: null,
+      analysisAbortController: null 
     });
   },
-}));
+
+  cancelAnalysis: () => {
+    const { analysisAbortController } = get();
+    if (analysisAbortController) {
+      analysisAbortController.abort();
+      console.log('🚫 Analysis cancelled by user');
+    }
+    set({ 
+      isAnalyzing: false,
+      analysisProgress: null,
+      analysisAbortController: null 
+    });
+  },
+
+  setAnalysisAbortController: (controller) => {
+    set({ analysisAbortController: controller });
+  },
+
+  // Storyboard progress actions
+  setStoryboardProgress: (progress) => {
+    set({ 
+      isStoryboardProcessing: !!progress,
+      storyboardProgress: progress 
+    });
+  },
+
+  setIsStoryboardProcessing: (processing) => {
+    set({ isStoryboardProcessing: processing });
+  },
+
+  clearStoryboardProgress: () => {
+    set({ 
+      isStoryboardProcessing: false,
+      storyboardProgress: null,
+      storyboardAbortController: null 
+    });
+  },
+
+  cancelStoryboard: () => {
+    const { storyboardAbortController } = get();
+    if (storyboardAbortController) {
+      storyboardAbortController.abort();
+      console.log('🚫 Storyboard generation cancelled by user');
+    }
+    set({ 
+      isStoryboardProcessing: false,
+      storyboardProgress: null,
+      storyboardAbortController: null 
+    });
+  },
+
+  setStoryboardAbortController: (controller) => {
+    set({ storyboardAbortController: controller });
+  },
+    }),
+    {
+      name: 'mgx-script-store',
+      partialize: (state) => ({
+        // Persist only essential data, excluding temporary states
+        scripts: state.scripts,
+        currentScriptId: state.currentScriptId,
+        
+        // Persist analysis data for current script
+        analysisData: state.analysisData,
+        scenes: state.scenes,
+        characters: state.characters,
+        locations: state.locations,
+        equipment: state.equipment,
+        
+        // Persist script content
+        scriptText: state.scriptText,
+        cleanedText: state.cleanedText,
+        originalFileName: state.originalFileName,
+        pageCount: state.pageCount,
+        metadata: state.metadata,
+        
+        // Persist page tracking
+        pageBreaks: state.pageBreaks,
+        wordsPerPage: state.wordsPerPage,
+        originalPageRatio: state.originalPageRatio,
+        isPageTrackingEnabled: state.isPageTrackingEnabled,
+      }),
+      // Exclude temporary states from persistence
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...persistedState,
+        // Reset temporary states on load
+        isLoading: false,
+        error: null,
+        isImporting: false,
+        importProgress: null,
+        isAnalyzing: false,
+        analysisProgress: null,
+        analysisAbortController: null,
+        isStoryboardProcessing: false,
+        storyboardProgress: null,
+        storyboardAbortController: null,
+        currentView: 'editor', // Reset to default view
+      })
+    }
+  )
+);

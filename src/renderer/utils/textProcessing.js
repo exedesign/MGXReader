@@ -1,4 +1,74 @@
 /**
+ * Fix encoding issues on the renderer side
+ * @param {string} text - Text to fix
+ * @returns {string} - Fixed text
+ */
+function fixRendererEncoding(text) {
+  if (!text || typeof text !== 'string') return text;
+  
+  try {
+    // Additional renderer-side encoding fixes
+    let fixedText = text;
+    
+    // Fix additional PDF extraction artifacts
+    const additionalFixes = {
+      // Smart quotes
+      '\u201C': '"',  // left double quote
+      '\u201D': '"',  // right double quote
+      '\u2018': "'",  // left single quote
+      '\u2019': "'",  // right single quote
+      // Dashes
+      '\u2013': '-',  // en dash
+      '\u2014': '-',  // em dash
+      // Special characters that might appear garbled
+      '\u2026': '...',  // ellipsis
+      '\u20AC': 'EUR',  // euro
+      '\u00AE': '(R)',  // registered
+      '\u00A9': '(C)',  // copyright
+      '\u2122': '(TM)', // trademark
+      // Turkish characters that might be garbled
+      '\u0131': 'ı',  // ı
+      '\u0130': 'İ',  // İ
+      '\u011F': 'ğ',  // ğ
+      '\u011E': 'Ğ',  // Ğ
+      '\u015F': 'ş',  // ş
+      '\u015E': 'Ş',  // Ş
+      '\u00FC': 'ü',  // ü
+      '\u00DC': 'Ü',  // Ü
+      '\u00F6': 'ö',  // ö
+      '\u00D6': 'Ö',  // Ö
+      '\u00E7': 'ç',  // ç
+      '\u00C7': 'Ç',  // Ç
+      // Remove weird spacing artifacts
+      '\u00A0': ' ', // non-breaking space
+      '\u2000': ' ', // en quad
+      '\u2001': ' ', // em quad
+      '\u2002': ' ', // en space
+      '\u2003': ' ', // em space
+      '\u2004': ' ', // three-per-em space
+      '\u2005': ' ', // four-per-em space
+      '\u2006': ' ', // six-per-em space
+      '\u2007': ' ', // figure space
+      '\u2008': ' ', // punctuation space
+      '\u2009': ' ', // thin space
+      '\u200A': ' ', // hair space
+    };
+    
+    // Apply additional fixes
+    Object.keys(additionalFixes).forEach(wrongChar => {
+      const fixedChar = additionalFixes[wrongChar];
+      fixedText = fixedText.replace(new RegExp(wrongChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), fixedChar);
+    });
+    
+    return fixedText;
+    
+  } catch (error) {
+    console.warn('Error fixing renderer encoding:', error);
+    return text;
+  }
+}
+
+/**
  * Clean extracted PDF text by removing headers, footers, and page numbers
  * @param {string} rawText - Raw text from PDF
  * @returns {string} - Cleaned text
@@ -7,6 +77,9 @@ export function cleanScreenplayText(rawText) {
   if (!rawText) return '';
 
   let text = rawText;
+
+  // Fix additional encoding issues that might have been missed
+  text = fixRendererEncoding(text);
 
   // Remove page numbers (standalone numbers on a line)
   text = text.replace(/^\s*\d+\s*$/gm, '');
@@ -581,8 +654,9 @@ export function getOptimalChunkSize(provider, model = '') {
       default: { maxTokens: 3000, overlapTokens: 300 },
     },
     gemini: {
-      'gemini-pro': { maxTokens: 8000, overlapTokens: 600 },
-      default: { maxTokens: 4000, overlapTokens: 400 },
+      'gemini-2.5-flash': { maxTokens: 4000, overlapTokens: 400 }, // Optimized for reliability
+      'gemini-pro': { maxTokens: 6000, overlapTokens: 500 },
+      default: { maxTokens: 3000, overlapTokens: 300 }, // Conservative default
     },
     local: {
       // Conservative for local models

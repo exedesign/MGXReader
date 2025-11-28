@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAIStore } from '../store/aiStore';
 import { usePromptStore } from '../store/promptStore';
 import { useReaderStore } from '../store/readerStore';
+import { useFeatureStore } from '../store/featureStore';
 import { AI_PROVIDERS } from '../utils/aiHandler';
 import ProvidersTab from './ProvidersTab';
 import PromptsTab from './PromptsTab';
@@ -14,11 +15,12 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
   const [showPreview, setShowPreview] = useState(false);
   const [newFilterWord, setNewFilterWord] = useState('');
 
-  // Store hooks
+  // Store hooks with error handling
   const aiStore = useAIStore();
   const promptStore = usePromptStore();
   const readerStore = useReaderStore();
   const { blacklist, addToBlacklist, removeFromBlacklist, clearBlacklist } = readerStore;
+  const { features, toggleFeature } = useFeatureStore();
 
   // Local settings state
   const [localSettings, setLocalSettings] = useState({
@@ -91,7 +93,8 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
   };
 
   const resetSettings = () => {
-    if (confirm('Tüm ayarları varsayılan değerlere sıfırlayın?')) {
+    if (confirm('TÜM ayarları (AI anahtarları dahil) varsayılan değerlere sıfırlamak istediğinizden emin misiniz? Bu işlem geri alınamaz!')) {
+      // Local reader settings reset
       setLocalSettings({
         wordsPerMinute: 200,
         highlightColor: '#ffd700',
@@ -100,13 +103,63 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
         customLogo: ''
       });
       localStorage.removeItem('customLogo');
+      
+      // AI Store reset
+      if (aiStore) {
+        // Reset OpenAI settings
+        if (aiStore.setOpenAIConfig) {
+          aiStore.setOpenAIConfig('', 'gpt-4o');
+          aiStore.setOpenAIImageModel('dall-e-3');
+        }
+        
+        // Reset Gemini settings
+        if (aiStore.setGeminiConfig) {
+          aiStore.setGeminiConfig('', 'gemini-3-pro-preview');
+          aiStore.setGeminiImageModel('gemini-3-pro-image-preview');
+        }
+        
+        // Reset Local AI settings
+        if (aiStore.setLocalConfig) {
+          aiStore.setLocalConfig('http://127.0.0.1:11434', 'llama2', 0.7);
+        }
+        
+        // Reset MLX settings
+        if (aiStore.setMLXConfig) {
+          aiStore.setMLXConfig('http://127.0.0.1:8080', 'mlx-community/Llama-3.2-3B-Instruct-4bit', 0.7);
+        }
+        
+        // Reset provider to OpenAI
+        if (aiStore.setProvider) {
+          aiStore.setProvider('openai');
+        }
+      }
+      
+      // Reader store reset
+      if (readerStore) {
+        if (readerStore.clearBlacklist) {
+          readerStore.clearBlacklist();
+        }
+      }
+      
+      // Feature store reset
+      if (toggleFeature) {
+        // Reset all features to default (enabled)
+        Object.keys(features || {}).forEach(feature => {
+          if (!features[feature]) {
+            toggleFeature(feature);
+          }
+        });
+      }
+      
+      console.log('🗑️ Tüm ayarlar sıfırlandı');
+      alert('Tüm ayarlar başarıyla sıfırlandı!');
     }
   };
 
   const tabs = [
     { key: 'ai', label: 'AI Ayarları', icon: '🤖' },
+    { key: 'modules', label: 'Modüller', icon: '🧩' },
     { key: 'prompts', label: 'Prompt Yönetimi', icon: '📝' },
-    { key: 'reader', label: 'Hızlı Okuma', icon: '⚡' },
     { key: 'filter', label: 'Kelime Filtresi', icon: '🔍' },
     { key: 'general', label: 'Genel Ayarlar', icon: '⚙️' },
     { key: 'appearance', label: 'Görünüm', icon: '🎨' },
@@ -139,8 +192,8 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all ${activeTab === tab.key
-                      ? 'bg-cinema-accent text-cinema-black font-medium'
-                      : 'text-cinema-text hover:bg-cinema-gray/50'
+                    ? 'bg-cinema-accent text-cinema-black font-medium'
+                    : 'text-cinema-text hover:bg-cinema-gray/50'
                     }`}
                 >
                   <span className="text-xl">{tab.icon}</span>
@@ -168,6 +221,180 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
               </div>
             )}
 
+            {/* Modules Tab */}
+            {activeTab === 'modules' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-xl font-semibold text-cinema-text mb-4">🧩 Modül Yönetimi</h3>
+                  <p className="text-cinema-text-dim text-sm mb-6">
+                    Uygulama özelliklerini açıp kapatarak performansı artırabilir ve arayüzü sadeleştirebilirsiniz.
+                    Kapalı modüller belleğe yüklenmez ve API kullanımı yapmazlar.
+                  </p>
+
+                  {/* Module Cards */}
+                  <div className="space-y-4">
+                    {/* Storyboard Module */}
+                    <div className={`bg-cinema-black/30 rounded-lg p-6 border transition-all ${
+                      features.enable_storyboard 
+                        ? 'border-cinema-accent/50 shadow-lg shadow-cinema-accent/10' 
+                        : 'border-cinema-gray/50'
+                    }`}>
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-start gap-4 flex-1">
+                          <span className="text-3xl">🎨</span>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="text-lg font-medium text-cinema-text">Storyboard Modülü</h4>
+                              {features.enable_storyboard && (
+                                <span className="px-2 py-1 bg-green-900/30 text-green-400 text-xs rounded-full">Aktif</span>
+                              )}
+                            </div>
+                            <p className="text-cinema-text-dim text-sm mb-3">
+                              Görselleştirme ve storyboard oluşturma araçları
+                            </p>
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="text-cinema-text-dim">💾 Bellek:</span>
+                                <span className="text-cinema-accent">50-100 MB</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-cinema-text-dim">🔌 API:</span>
+                                <span className="text-orange-400">Yüksek</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={features.enable_storyboard}
+                            onChange={() => toggleFeature('enable_storyboard')}
+                          />
+                          <div className="w-11 h-6 bg-cinema-gray rounded-full peer peer-focus:ring-4 peer-focus:ring-cinema-accent/20 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cinema-accent"></div>
+                        </label>
+                      </div>
+                      {!features.enable_storyboard && (
+                        <div className="mt-4 p-3 bg-yellow-900/20 border border-yellow-900/30 rounded text-sm text-yellow-200">
+                          <span className="font-bold">⚠️ Uyarı:</span> Görsel üretim ve storyboard özellikleri kullanılamayacak.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* AI Analysis Module */}
+                    <div className={`bg-cinema-black/30 rounded-lg p-6 border transition-all ${
+                      features.enable_ai_analysis 
+                        ? 'border-cinema-accent/50 shadow-lg shadow-cinema-accent/10' 
+                        : 'border-cinema-gray/50'
+                    }`}>
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-start gap-4 flex-1">
+                          <span className="text-3xl">🤖</span>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="text-lg font-medium text-cinema-text">Analiz Modülü</h4>
+                              {features.enable_ai_analysis && (
+                                <span className="px-2 py-1 bg-green-900/30 text-green-400 text-xs rounded-full">Aktif</span>
+                              )}
+                            </div>
+                            <p className="text-cinema-text-dim text-sm mb-3">
+                              Yapay zeka destekli özellikler: Analiz, Görsel Üretimi, Metin İşleme
+                            </p>
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="text-cinema-text-dim">💾 Bellek:</span>
+                                <span className="text-cinema-accent">30-50 MB</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-cinema-text-dim">🔌 API:</span>
+                                <span className="text-yellow-400">Orta</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={features.enable_ai_analysis}
+                            onChange={() => toggleFeature('enable_ai_analysis')}
+                          />
+                          <div className="w-11 h-6 bg-cinema-gray rounded-full peer peer-focus:ring-4 peer-focus:ring-cinema-accent/20 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cinema-accent"></div>
+                        </label>
+                      </div>
+                      {!features.enable_ai_analysis && (
+                        <div className="mt-4 p-3 bg-yellow-900/20 border border-yellow-900/30 rounded text-sm text-yellow-200">
+                          <span className="font-bold">⚠️ Uyarı:</span> AI özellikleri (Analiz, Görsel Üretimi, Storyboard) kullanılamayacak.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Core Features (Always Active) */}
+                    <div className="bg-green-900/20 border border-green-900/30 rounded-lg p-6">
+                      <h4 className="text-lg font-medium text-green-200 mb-4 flex items-center gap-2">
+                        <span>✅</span>
+                        <span>Temel Özellikler (Her Zaman Aktif)</span>
+                      </h4>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 text-sm">
+                          <span className="text-2xl">⚡</span>
+                          <div className="flex-1">
+                            <div className="font-medium text-cinema-text">Hızlı Okuma</div>
+                            <div className="text-cinema-text-dim text-xs">RSVP teknolojisi ile hızlı okuma araçları</div>
+                          </div>
+                          <span className="px-2 py-1 bg-green-900/30 text-green-400 text-xs rounded-full">Sabit</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm">
+                          <span className="text-2xl">📝</span>
+                          <div className="flex-1">
+                            <div className="font-medium text-cinema-text">Editör</div>
+                            <div className="text-cinema-text-dim text-xs">Senaryo düzenleme ve metin işleme araçları</div>
+                          </div>
+                          <span className="px-2 py-1 bg-green-900/30 text-green-400 text-xs rounded-full">Sabit</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Resource Summary */}
+                    <div className="bg-blue-900/20 border border-blue-900/30 rounded-lg p-6">
+                      <h4 className="text-lg font-medium text-blue-200 mb-4 flex items-center gap-2">
+                        <span>📊</span>
+                        <span>Kaynak Kullanımı Özeti</span>
+                      </h4>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <div className="text-cinema-text-dim mb-1">Aktif Modüller</div>
+                          <div className="text-2xl font-bold text-cinema-accent">
+                            {(() => {
+                              let active = 2; // Base: Editor + Speed Reader (always active)
+                              if (features.enable_ai_analysis) active++;
+                              if (features.enable_storyboard) active++;
+                              let total = 4; // Total possible: Editor, Speed Reader, Analysis, Storyboard
+                              return `${active} / ${total}`;
+                            })()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-cinema-text-dim mb-1">Tahmini Bellek Kullanımı</div>
+                          <div className="text-2xl font-bold text-cinema-accent">
+                            {(() => {
+                              let memory = 30; // Base + Core features (Editor, Speed Reader)
+                              if (features.enable_ai_analysis) memory += 40;
+                              if (features.enable_storyboard) memory += 75;
+                              return `~${memory} MB`;
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-4 p-3 bg-blue-900/30 rounded text-xs text-blue-200">
+                        💡 <span className="font-bold">İpucu:</span> Kullanmadığınız modülleri kapatarak API kullanımını azaltabilir ve sistem kaynaklarını daha verimli kullanabilirsiniz. Editör ve Hızlı Okuma her zaman aktiftir.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Prompts Tab */}
             {activeTab === 'prompts' && (
               <div className="space-y-6">
@@ -187,75 +414,7 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
               </div>
             )}
 
-            {/* Reader Settings Tab */}
-            {activeTab === 'reader' && (
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-xl font-semibold text-cinema-text mb-4">Hızlı Okuma Ayarları</h3>
 
-                  {/* Reading Speed */}
-                  <div className="bg-cinema-black/30 rounded-lg p-6 mb-6">
-                    <h4 className="text-lg font-medium text-cinema-text mb-4">Okuma Hızı</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-cinema-text-dim text-sm mb-2">
-                          Dakikada Kelime Sayısı: {localSettings.wordsPerMinute} WPM
-                        </label>
-                        <input
-                          type="range"
-                          min="50"
-                          max="1000"
-                          step="10"
-                          value={localSettings.wordsPerMinute}
-                          onChange={(e) => setLocalSettings(prev => ({ ...prev, wordsPerMinute: parseInt(e.target.value) }))}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-cinema-text-dim mt-1">
-                          <span>50 WPM (Yavaş)</span>
-                          <span>500 WPM (Orta)</span>
-                          <span>1000 WPM (Hızlı)</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Visual Settings */}
-                  <div className="bg-cinema-black/30 rounded-lg p-6 mb-6">
-                    <h4 className="text-lg font-medium text-cinema-text mb-4">Görsel Ayarlar</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-cinema-text-dim text-sm mb-2">Vurgu Rengi</label>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="color"
-                            value={localSettings.highlightColor}
-                            onChange={(e) => setLocalSettings(prev => ({ ...prev, highlightColor: e.target.value }))}
-                            className="w-12 h-12 rounded border border-cinema-gray"
-                          />
-                          <input
-                            type="text"
-                            value={localSettings.highlightColor}
-                            onChange={(e) => setLocalSettings(prev => ({ ...prev, highlightColor: e.target.value }))}
-                            className="flex-1 bg-cinema-gray border border-cinema-gray-light rounded px-3 py-2 text-cinema-text"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-cinema-text-dim text-sm mb-2">Yazı Boyutu: {localSettings.fontSize}px</label>
-                        <input
-                          type="range"
-                          min="12"
-                          max="32"
-                          value={localSettings.fontSize}
-                          onChange={(e) => setLocalSettings(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
-                          className="w-full"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Word Filter Tab */}
             {activeTab === 'filter' && (
@@ -362,21 +521,19 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                     <div className="flex gap-3">
                       <button
                         onClick={() => changeLanguage('tr')}
-                        className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-                          i18n.language === 'tr'
+                        className={`px-6 py-3 rounded-lg font-medium transition-colors ${i18n.language === 'tr'
                             ? 'bg-cinema-accent text-cinema-black'
                             : 'bg-cinema-gray text-cinema-text hover:bg-cinema-gray-light'
-                        }`}
+                          }`}
                       >
                         🇹🇷 Türkçe
                       </button>
                       <button
                         onClick={() => changeLanguage('en')}
-                        className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-                          i18n.language === 'en'
+                        className={`px-6 py-3 rounded-lg font-medium transition-colors ${i18n.language === 'en'
                             ? 'bg-cinema-accent text-cinema-black'
                             : 'bg-cinema-gray text-cinema-text hover:bg-cinema-gray-light'
-                        }`}
+                          }`}
                       >
                         🇺🇸 English
                       </button>
@@ -398,7 +555,7 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                           className="rounded"
                         />
                       </div>
-                      
+
                       <div className="flex items-center justify-between">
                         <div>
                           <label className="text-cinema-text">Debug Modu</label>

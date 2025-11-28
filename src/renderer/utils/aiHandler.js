@@ -7,6 +7,9 @@ import axios from 'axios';
 import { splitTextForAnalysis, getOptimalChunkSize } from './textProcessing.js';
 import { createEnhancedAnalysisEngine } from './enhancedAnalysisEngine.js';
 
+// Set global axios timeout to prevent default 18s timeout
+axios.defaults.timeout = 300000; // 5 minutes
+
 export const AI_PROVIDERS = {
   OPENAI: 'openai',
   GEMINI: 'gemini',
@@ -22,394 +25,534 @@ export const OPENAI_MODELS = [
 ];
 
 export const GEMINI_MODELS = [
-  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Latest) ✨', contextWindow: 1000000, recommended: true, inputTokens: 2, outputTokens: 12 },
-  { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image (Image Gen) 🎨', contextWindow: 65000, fast: true, inputTokens: 2, outputTokens: 0.134 },
-  { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash Experimental', contextWindow: 1000000, fast: true },
-  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash ⚡ Fast', contextWindow: 1000000, fast: true },
-  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', contextWindow: 2000000 },
+  // Gemini 3 Series (Latest - November 2025)
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro 🌟', contextWindow: 1000000, recommended: true, newest: true, description: 'En akıllı model - gelişmiş akıl yürütme, bağımsız kodlama ve çok modlu görevler' },
+  
+  // Generally Available Models (Stable)
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash ⚡', contextWindow: 1000000, fast: true, description: 'En hızlı ve akıllı model, yüksek performans' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro 💎', contextWindow: 1000000, description: 'Gelişmiş akıl yürütme ve kodlama için' },
+  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite ⚡', contextWindow: 1000000, fast: true, description: 'Ultra hızlı ve verimli' },
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', contextWindow: 1000000, description: 'İkinci nesil çok modlu model' },
+  { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite', contextWindow: 1000000, fast: true, description: 'Küçük ve güçlü model' },
 ];
 
-// Preview models (experimental)
+// Dedicated image generation models - Updated for November 2025
+export const GEMINI_IMAGE_MODELS = [
+  // Gemini 3 Series Image Generation (Latest - November 2025)
+  { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image 🎨🌟', recommended: true, newest: true, description: '🟢 En gelişmiş görsel üretme - referans fotoğraflar ile (max 14 görsel)', working: true },
+  
+  // Imagen Series
+  { id: 'imagen-4.0-generate-001', name: 'Imagen 4.0 Standard ✨', description: '🟢 Yüksek kaliteli görsel üretim', working: true },
+  { id: 'imagen-4.0-ultra-generate-001', name: 'Imagen 4.0 Ultra 🌟', description: '🟢 Ultra kalite görsel üretim', working: true },
+  { id: 'imagen-4.0-fast-generate-001', name: 'Imagen 4.0 Fast ⚡', description: '🟢 Hızlı görsel üretim', working: true },
+  { id: 'gemini-2.5-flash-image', name: 'Gemini 2.5 Flash Image 🎨', description: '🟢 Conversational image editing', working: true },
+];
+
+// OpenAI image models for comparison
+export const OPENAI_IMAGE_MODELS = [
+  { id: 'dall-e-3', name: 'DALL-E 3', recommended: true, description: 'OpenAI en gelismis gorsel modeli' },
+  { id: 'dall-e-2', name: 'DALL-E 2', description: 'Onceki nesil DALL-E modeli' },
+];
+
+// Preview models (experimental) - Kasım 2025 Güncel
 export const GEMINI_PREVIEW_MODELS = [
-  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Preview - Jan 2025)', contextWindow: 1000000, preview: true, recommended: true },
-  { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image (Preview)', contextWindow: 65000, preview: true },
-  { id: 'learnlm-1.5-pro-experimental', name: 'LearnLM 1.5 Pro (Experimental)', contextWindow: 2000000, preview: true },
+  { id: 'gemini-3-pro', name: 'Gemini 3 Pro (Preview) 🌟', contextWindow: 1000000, preview: true, description: 'En gelişmiş akıl yürütme modeli' },
 ];
 
 export const MLX_MODELS = [
-  { id: 'mlx-community/Llama-3.2-3B-Instruct-4bit', name: 'Llama 3.2 3B (4-bit) - Fast', contextWindow: 128000, recommended: true },
-  { id: 'mlx-community/Llama-3.2-1B-Instruct-4bit', name: 'Llama 3.2 1B (4-bit) - Ultra Fast', contextWindow: 128000 },
-  { id: 'mlx-community/Meta-Llama-3.1-8B-Instruct-4bit', name: 'Llama 3.1 8B (4-bit)', contextWindow: 128000 },
-  { id: 'mlx-community/Mistral-7B-Instruct-v0.3-4bit', name: 'Mistral 7B v0.3 (4-bit)', contextWindow: 32000 },
-  { id: 'mlx-community/gemma-2-2b-it-4bit', name: 'Gemma 2 2B (4-bit)', contextWindow: 8000 },
-  { id: 'mlx-community/Qwen2.5-7B-Instruct-4bit', name: 'Qwen 2.5 7B (4-bit)', contextWindow: 32000 },
+  { id: 'mlx-community/Llama-3.2-3B-Instruct-4bit', name: 'Llama 3.2 3B (4-bit)', contextWindow: 8192, recommended: true },
+  { id: 'mlx-community/Llama-3.1-8B-Instruct-4bit', name: 'Llama 3.1 8B (4-bit)', contextWindow: 16384 },
+  { id: 'mlx-community/Qwen2.5-7B-Instruct-4bit', name: 'Qwen 2.5 7B (4-bit)', contextWindow: 32768 },
 ];
 
-export class AIHandler {
-  constructor(config) {
+class AIHandler {
+  constructor(config = {}) {
     this.provider = config.provider || AI_PROVIDERS.OPENAI;
-    this.apiKey = config.apiKey || '';
-    this.model = config.model || '';
+    this.openaiApiKey = config.openaiApiKey || '';
+    this.apiKey = config.geminiApiKey || '';
+    this.model = config.model || (config.provider === AI_PROVIDERS.GEMINI ? 'gemini-3-pro-preview' : 'gpt-4o');
+    this.imageModel = config.imageModel || 'dall-e-3';
     this.localEndpoint = config.localEndpoint || 'http://localhost:11434';
     this.localModel = config.localModel || 'llama3';
-    this.mlxEndpoint = config.mlxEndpoint || 'http://localhost:8080';
-    this.mlxModel = config.mlxModel || 'mlx-community/Llama-3.2-3B-Instruct-4bit';
     this.temperature = config.temperature || 0.3;
-
-    // Initialize advanced analysis engines
-    // Initialize advanced analysis engines
-    this.enhancedAnalysisEngine = createEnhancedAnalysisEngine(this);
+    this.maxTokens = config.maxTokens || 4000;
   }
 
-  /**
-   * Generate image using AI provider
-   * Currently supports OpenAI DALL-E and Gemini (with fallback)
-   * @param {string} prompt - Image generation prompt
-   * @param {object} options - Generation options
-   * @returns {Promise<object>} - Generation result with image URL
-   */
-  async generateImage(prompt, options = {}) {
-    const {
-      size = '1024x1024',
-      quality = 'standard',
-      style = 'vivid',
-      model = 'dall-e-3'
-    } = options;
+  async generateText(systemPrompt, userPrompt, options = {}) {
+    const temperature = options.temperature || this.temperature;
+    const maxTokens = options.maxTokens || this.maxTokens;
 
     try {
       switch (this.provider) {
         case AI_PROVIDERS.OPENAI:
-          return await this.generateImageOpenAI(prompt, { size, quality, style, model });
+          if (!this.openaiApiKey) {
+            throw new Error('OpenAI API key is required');
+          }
+          return await this.callOpenAI(systemPrompt, userPrompt, temperature, maxTokens);
           
         case AI_PROVIDERS.GEMINI:
-          // Try Gemini image generation, fallback to error message
-          try {
-            return await this.generateImageGemini(prompt, options);
-          } catch (geminiError) {
-            console.warn('Gemini image generation failed, providing helpful error:', geminiError.message);
-            throw new Error('Imagen 3 API henüz public API key ile desteklenmiyor. Lütfen OpenAI provider kullanın veya Google Cloud Vertex AI projesi oluşturun.');
+          if (!this.apiKey) {
+            throw new Error('Gemini API key is required');
           }
+          return await this.callGemini(systemPrompt, userPrompt, temperature, maxTokens);
           
         case AI_PROVIDERS.LOCAL:
-        case AI_PROVIDERS.MLX:
-          throw new Error('Local AI providers do not support image generation. Please use OpenAI or Gemini provider.');
+          return await this.callLocalAI(systemPrompt, userPrompt, temperature, maxTokens);
           
         default:
-          throw new Error(`Image generation not supported for provider: ${this.provider}`);
+          throw new Error('Unsupported AI provider: ' + this.provider);
       }
     } catch (error) {
-      console.error(`Image Generation Error (${this.provider}):`, error);
-      return {
-        success: false,
-        error: error.message,
-        provider: this.provider
-      };
+      console.error('AI Generation Error:', error);
+      throw error;
     }
   }
 
-  /**
-   * Gemini Image Generation (Imagen 3)
-   * @param {string} prompt - Image prompt
-   * @param {object} options - Generation options
-   * @returns {Promise<object>} - Generation result
-   */
-  async generateImageGemini(prompt, options = {}) {
-    if (!this.apiKey) {
-      throw new Error('Google Gemini API key is required for image generation');
+  async generateImage(prompt, options = {}) {
+    // Validate prompt parameter
+    if (!prompt || typeof prompt !== 'string') {
+      throw new Error('Prompt must be a valid string for image generation');
     }
-
-    const { size = '1024x1024' } = options;
+    
+    console.log('Image generation request:', { provider: this.provider, prompt: prompt.substring(0, 50) });
     
     try {
-      // Imagen 3 uses the generateImage endpoint (not predict)
-      // Format: https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:generateImage
-      const modelName = options.model || 'imagen-3.0-generate-001';
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateImage?key=${this.apiKey}`;
+      // Handle character-specific image generation
+      if (options.character) {
+        console.log('🎭 Character image generation for:', options.character);
+      }
+
+      // Handle reference image for "similar character" approach
+      let enhancedPrompt = prompt;
+      if (options.referenceImage) {
+        console.log('🖼️ Reference image provided for character generation');
+        enhancedPrompt = prompt + ', use reference image as style guide';
+      }
       
-      console.log('Gemini Image Generation Request:', {
-        url: apiUrl.replace(this.apiKey, '***'),
-        prompt: prompt.substring(0, 60) + '...',
-        size: size
+      switch (this.provider) {
+        case AI_PROVIDERS.OPENAI:
+          const { size = '1024x1024', quality = 'standard', style = 'natural', model = 'dall-e-3' } = options;
+          return await this.generateImageOpenAI(enhancedPrompt, { size, quality, style, model });
+
+        case AI_PROVIDERS.GEMINI:
+          try {
+            return await this.generateImageGemini(enhancedPrompt, options);
+          } catch (error) {
+            console.error('Gemini image generation failed:', error);
+            throw error;
+          }
+
+        default:
+          throw new Error('Image generation not supported for provider: ' + this.provider);
+      }
+    } catch (error) {
+      console.error('Image Generation Error:', error);
+      throw error;
+    }
+  }
+
+  async generateImageGemini(prompt, options = {}) {
+    console.log('Gemini Image Generation:', {
+      prompt: prompt.substring(0, 100) + '...',
+      hasGeminiKey: !!this.apiKey,
+      model: options.model || this.geminiImageModel || 'imagen-4.0-generate-001'
+    });
+
+    if (!this.apiKey) {
+      throw new Error('Gemini API key gerekli. Lutfen ayarlardan API key ekleyin.');
+    }
+
+    const model = options.model || this.geminiImageModel || 'imagen-4.0-generate-001';
+    const apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':predict';
+
+    // Imagen API request format
+    const requestBody = {
+      instances: [
+        {
+          prompt: prompt
+        }
+      ],
+      parameters: {
+        sampleCount: options.numberOfImages || 1,
+        aspectRatio: options.aspectRatio || '1:1',
+        safetySetting: 'block_low_and_above',
+        personGeneration: 'allow_adult',
+        includeRaiReason: true,
+        outputOptions: {
+          mimeType: 'image/jpeg'
+        }
+      }
+    };
+
+    try {
+      console.log('Imagen API Call:', {
+        url: apiUrl,
+        model: model,
+        prompt: (typeof prompt === 'string' ? prompt.substring(0, 100) : String(prompt).substring(0, 100)) + '...',
+        parameters: requestBody.parameters
+      });
+      
+      const response = await axios.post(apiUrl, requestBody, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': this.apiKey
+        },
+        timeout: 180000 // 3 dakika - storyboard için daha uzun timeout
       });
 
-      const response = await axios.post(
-        apiUrl,
-        {
-          prompt: {
-            text: prompt
-          },
-          sizeConfig: {
-            aspectRatio: this.mapSizeToAspectRatio(size)
-          },
-          safetySettings: [
-            {
-              category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-              threshold: 'BLOCK_ONLY_HIGH'
-            },
-            {
-              category: 'HARM_CATEGORY_HATE_SPEECH',
-              threshold: 'BLOCK_ONLY_HIGH'
-            },
-            {
-              category: 'HARM_CATEGORY_HARASSMENT',
-              threshold: 'BLOCK_ONLY_HIGH'
-            },
-            {
-              category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-              threshold: 'BLOCK_ONLY_HIGH'
-            }
-          ]
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          timeout: 120000 // 2 minutes timeout for image generation
-        }
-      );
+      console.log('Imagen API Response Status:', response.status);
+      console.log('Imagen API Response Data Keys:', Object.keys(response.data || {}));
 
-      console.log('Gemini Image Generation Response:', response.status);
-
-      // Handle generateImage endpoint response format
-      if (response.data && response.data.generatedImages && response.data.generatedImages.length > 0) {
-        const imageData = response.data.generatedImages[0];
-        let imageUrl;
+      if (response.data.predictions && response.data.predictions.length > 0) {
+        const prediction = response.data.predictions[0];
         
-        // Extract image URL or base64
-        if (imageData.bytesBase64Uri) {
-          imageUrl = imageData.bytesBase64Uri;
-        } else if (imageData.bytesBase64Encoded) {
-          imageUrl = `data:image/jpeg;base64,${imageData.bytesBase64Encoded}`;
-        } else if (imageData.bytesBase64) {
-          imageUrl = `data:image/jpeg;base64,${imageData.bytesBase64}`;
-        } else if (imageData.gcsUri) {
-          // For GCS URIs, we might need to handle them differently
-          imageUrl = imageData.gcsUri;
-        } else {
-          throw new Error('No image data in response');
+        // Extract image from prediction response
+        if (prediction.bytesBase64Encoded) {
+          return {
+            success: true,
+            imageData: prediction.bytesBase64Encoded,
+            mimeType: prediction.mimeType || 'image/png',
+            provider: 'gemini',
+            model: model,
+            originalPrompt: prompt,
+            generatedAt: new Date().toISOString()
+          };
         }
-        
-        return {
-          success: true,
-          imageUrl: imageUrl,
-          provider: 'gemini',
-          model: modelName,
-          revisedPrompt: prompt,
-          generatedAt: new Date().toISOString()
-        };
-      } else {
-        throw new Error('No image generated from Gemini response');
+
+        // Alternative response structure check
+        if (prediction.images && prediction.images.length > 0) {
+          return {
+            success: true,
+            imageData: prediction.images[0].bytesBase64Encoded,
+            mimeType: prediction.images[0].mimeType || 'image/png',
+            provider: 'gemini',
+            model: model,
+            originalPrompt: prompt,
+            generatedAt: new Date().toISOString()
+          };
+        }
       }
+
+      throw new Error('Gemini API\'den gecersiz gorsel yaniti');
     } catch (error) {
       console.error('Gemini Image Generation Error:', {
         message: error.message,
         status: error.response?.status,
         statusText: error.response?.statusText,
-        data: error.response?.data
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers ? Object.keys(error.config.headers) : undefined
+        }
       });
       
-      if (error.response) {
-        const errorData = error.response.data;
-        let errorMessage;
-        
-        if (errorData.error) {
-          errorMessage = errorData.error.message || errorData.error.code || 'Unknown API error';
-        } else if (errorData.message) {
-          errorMessage = errorData.message;
-        } else {
-          errorMessage = `HTTP ${error.response.status}: ${error.response.statusText}`;
-        }
-        
-        throw new Error(`Gemini API Error: ${errorMessage}`);
-      } else if (error.code === 'ECONNABORTED') {
-        throw new Error('Gemini API timeout - image generation took too long');
+      // Check for specific error types
+      if (error.response?.status === 404) {
+        throw new Error('Imagen modeli bulunamadi. Model adini kontrol edin: ' + model);
+      } else if (error.response?.status === 403 || error.response?.status === 401) {
+        throw new Error('Gemini API key gecersiz veya yetki yok. API anahtarinizi kontrol edin.');
+      } else if (error.response?.status === 400) {
+        throw new Error('Gemini API istegi gecersiz: ' + (error.response?.data?.error?.message || error.message));
       }
       
-      throw new Error(`Gemini request failed: ${error.message}`);
+      // Fallback to OpenAI if available
+      if (this.openaiApiKey) {
+        console.log('OpenAI DALL-E fallback aktif...');
+        try {
+          const result = await this.generateImageOpenAI(prompt, {
+            model: 'dall-e-3',
+            size: options.size || '1024x1024',
+            quality: options.quality || 'standard',
+            style: options.style || 'natural'
+          });
+          
+          return {
+            ...result,
+            provider: 'openai-fallback',
+            note: 'Gemini gorsel uretimi basarisiz, OpenAI DALL-E kullanildi'
+          };
+        } catch (openaiError) {
+          throw new Error('Gorsel uretimi basarisiz: ' + openaiError.message);
+        }
+      }
+      
+      throw new Error('Gemini Image API hatasi: ' + error.message);
     }
   }
 
-  /**
-   * Map OpenAI size format to Gemini aspect ratio
-   * @param {string} size - Size in format '1024x1024'
-   * @returns {string} - Aspect ratio for Gemini
-   */
-  mapSizeToAspectRatio(size) {
-    const aspectRatioMap = {
-      '1024x1024': '1:1',
-      '1152x864': '4:3', 
-      '1792x1024': '16:9',
-      '1024x1792': '9:16'
-    };
-    
-    return aspectRatioMap[size] || '1:1';
-  }
-
-  /**
-   * OpenAI DALL-E Image Generation
-   * @param {string} prompt - Image prompt
-   * @param {object} options - Generation options
-   * @returns {Promise<object>} - Generation result
-   */
   async generateImageOpenAI(prompt, options = {}) {
-    if (!this.apiKey) {
+    if (!this.openaiApiKey) {
       throw new Error('OpenAI API key is required for image generation');
     }
 
-    const { size, quality, style, model } = options;
+    const { model = 'dall-e-3', size = '1024x1024', quality = 'standard', style = 'natural' } = options;
+    
+    console.log(`🎨 OpenAI Image Generation with ${model}:`, {
+      prompt: prompt.substring(0, 100) + '...',
+      size, quality, style
+    });
 
-    try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/images/generations',
-        {
-          model: model || 'dall-e-3',
-          prompt: prompt,
-          n: 1,
-          size: size || '1024x1024',
-          quality: quality || 'standard',
-          style: style || 'vivid'
-        },
-        {
+    const maxRetries = 3;
+    const baseDelay = 3000; // 3 saniye başlangıç bekleme süresi (image generation için daha uzun)
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 OpenAI Image ${model} - Deneme ${attempt}/${maxRetries}`);
+        
+        const response = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
           headers: {
+            'Authorization': 'Bearer ' + this.openaiApiKey,
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.apiKey}`,
           },
-          timeout: 120000, // 2 minutes timeout for image generation
-        }
-      );
+          body: JSON.stringify({
+            model: model,
+            prompt: prompt,
+            size: size,
+            quality: quality,
+            style: style,
+            n: 1,
+          }),
+          signal: AbortSignal.timeout(180000) // 3 dakika timeout
+        });
 
-      if (response.data && response.data.data && response.data.data[0]) {
-        return {
-          success: true,
-          imageUrl: response.data.data[0].url,
-          revisedPrompt: response.data.data[0].revised_prompt,
-          provider: AI_PROVIDERS.OPENAI,
-          model: model || 'dall-e-3',
-          generatedAt: new Date().toISOString()
-        };
-      } else {
-        throw new Error('Invalid response from OpenAI image API');
+        if (!response.ok) {
+          const errorData = await response.text();
+          const statusCode = response.status;
+          
+          if (statusCode === 429) {
+            console.log(`⚠️ OpenAI Image API Rate limit (429) - deneme ${attempt}/${maxRetries}`);
+            
+            // Son deneme ise hata fırlat
+            if (attempt === maxRetries) {
+              throw new Error(`OpenAI Image API rate limit aşıldı. Birkaç dakika bekleyip tekrar deneyin. Status: ${statusCode}`);
+            }
+            
+            // Exponential backoff ile bekleme
+            const delay = baseDelay * Math.pow(2, attempt - 1);
+            console.log(`⏳ OpenAI Image rate limit için ${delay}ms bekleniyor...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          } else {
+            // Rate limit değilse direkt hata fırlat
+            throw new Error(`OpenAI Image API Error: HTTP ${statusCode}: ${errorData}`);
+          }
+        }
+
+        const data = await response.json();
+        console.log(`✅ OpenAI Image ${model} başarılı!`);
+        
+        if (data && data.data && data.data.length > 0) {
+          const imageData = data.data[0];
+          return {
+            success: true,
+            imageUrl: imageData.url,
+            provider: 'openai',
+            model: model,
+            revisedPrompt: imageData.revised_prompt || prompt,
+            originalPrompt: prompt,
+            generatedAt: new Date().toISOString(),
+          };
+        }
+
+        throw new Error('No image data received from OpenAI');
+        
+      } catch (error) {
+        console.log(`❌ OpenAI Image ${model} deneme ${attempt} başarısız:`, error.message);
+        
+        // Network error veya 429/rate limit hatasını kontrol et
+        const isRateLimit = error.message.includes('429') || 
+                           error.message.includes('Too Many Requests') || 
+                           error.message.includes('rate limit') ||
+                           (error.name === 'TypeError' && error.message.includes('fetch'));
+        
+        if (!isRateLimit) {
+          // Rate limit değilse hemen fırlat
+          throw error;
+        }
+
+        // Son deneme ise hata fırlat
+        if (attempt === maxRetries) {
+          throw new Error(`OpenAI Image API: Maksimum deneme sayısına ulaşıldı. ${error.message}`);
+        }
+        
+        // Exponential backoff ile bekleme
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        console.log(`⏳ OpenAI Image retry için ${delay}ms bekleniyor...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-    } catch (error) {
-      if (error.response) {
-        const status = error.response.status;
-        const errorData = error.response.data;
-        
-        if (status === 400) {
-          const message = errorData?.error?.message || 'Bad request';
-          throw new Error(`OpenAI Image API Error: ${message}`);
-        }
-        
-        if (status === 401) {
-          throw new Error('Invalid OpenAI API key for image generation');
-        }
-        
-        if (status === 429) {
-          throw new Error('OpenAI rate limit exceeded. Please try again later.');
-        }
-        
-        throw new Error(`OpenAI Image API Error (${status}): ${errorData?.error?.message || error.response.statusText}`);
-      }
-      
-      throw error;
     }
   }
 
-  /**
-   * Process a single prompt - alias for generateText with simplified interface
-   * @param {string} prompt - The prompt to process
-   * @param {object} options - Optional parameters
-   * @returns {Promise<string>} - AI response
-   */
-  async processPrompt(prompt, options = {}) {
-    return await this.generateText('', prompt, options);
-  }
-
-  /**
-   * Main method to call AI based on provider
-   */
-  async generateText(systemPrompt, userPrompt, options = {}) {
-    const temperature = options.temperature || this.temperature;
-    const maxTokens = options.maxTokens || 4000;
-
-    try {
-      switch (this.provider) {
-        case AI_PROVIDERS.OPENAI:
-          return await this.callOpenAI(systemPrompt, userPrompt, temperature, maxTokens);
-
-        case AI_PROVIDERS.GEMINI:
-          return await this.callGemini(systemPrompt, userPrompt, temperature, maxTokens);
-
-        case AI_PROVIDERS.LOCAL:
-          return await this.callLocalAI(systemPrompt, userPrompt, temperature, maxTokens);
-
-        case AI_PROVIDERS.MLX:
-          return await this.callMLX(systemPrompt, userPrompt, temperature, maxTokens);
-
-        default:
-          throw new Error(`Unknown AI provider: ${this.provider}`);
-      }
-    } catch (error) {
-      console.error(`AI Generation Error (${this.provider}):`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * OpenAI API Call
-   */
   async callOpenAI(systemPrompt, userPrompt, temperature, maxTokens) {
-    if (!this.apiKey) {
+    if (!this.openaiApiKey) {
       throw new Error('OpenAI API key is required');
     }
 
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: this.model || 'gpt-4o',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature,
-        max_tokens: maxTokens,
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-      }
-    );
+    // API key debug bilgisi
+    const keyPrefix = this.openaiApiKey.substring(0, 10);
+    const keySuffix = this.openaiApiKey.substring(this.openaiApiKey.length - 5);
+    console.log(`🔑 Using OpenAI API key: ${keyPrefix}...${keySuffix} (length: ${this.openaiApiKey.length})`);
+    console.log(`🎯 Using OpenAI model: ${this.model}`);
 
-    return response.data.choices[0].message.content;
+    const maxRetries = 3;
+    const baseDelay = 2000; // 2 saniye başlangıç bekleme süresi
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 OpenAI ${this.model} - Deneme ${attempt}/${maxRetries}`);
+        
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + this.openaiApiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: temperature,
+            max_tokens: maxTokens,
+          }),
+          signal: AbortSignal.timeout(300000) // 5 dakika timeout
+        });
+
+        if (!response.ok) {
+          const errorData = await response.text();
+          const statusCode = response.status;
+          
+          if (statusCode === 429) {
+            console.log(`⚠️ OpenAI Rate limit (429) - deneme ${attempt}/${maxRetries}`);
+            
+            // Son deneme ise hata fırlat
+            if (attempt === maxRetries) {
+              throw new Error(`OpenAI API rate limit aşıldı. Birkaç dakika bekleyip tekrar deneyin. Status: ${statusCode}`);
+            }
+            
+            // Exponential backoff ile bekleme
+            const delay = baseDelay * Math.pow(2, attempt - 1);
+            console.log(`⏳ OpenAI rate limit için ${delay}ms bekleniyor...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue; // Bir sonraki deneme için loop'a devam et
+          } else {
+            // Rate limit değilse direkt hata fırlat
+            throw new Error(`OpenAI API Error: HTTP ${statusCode}: ${errorData}`);
+          }
+        }
+
+        const data = await response.json();
+        console.log(`✅ OpenAI ${this.model} başarılı!`);
+        return data.choices[0].message.content;
+        
+      } catch (error) {
+        console.log(`❌ OpenAI ${this.model} deneme ${attempt} başarısız:`, error.message);
+        
+        // Network error veya 429/rate limit hatasını kontrol et
+        const isRateLimit = error.message.includes('429') || 
+                           error.message.includes('Too Many Requests') || 
+                           error.message.includes('rate limit') ||
+                           (error.name === 'TypeError' && error.message.includes('fetch'));
+        
+        if (!isRateLimit) {
+          // Rate limit değilse hemen fırlat
+          throw error;
+        }
+
+        // Son deneme ise hata fırlat
+        if (attempt === maxRetries) {
+          throw new Error(`OpenAI API: Maksimum deneme sayısına ulaşıldı. ${error.message}`);
+        }
+        
+        // Exponential backoff ile bekleme
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        console.log(`⏳ OpenAI retry için ${delay}ms bekleniyor...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
 
-  /**
-   * Google Gemini API Call (Updated to v1beta API - November 2025)
-   * Using latest Gemini 2.5 models with proper system instruction support
-   */
   async callGemini(systemPrompt, userPrompt, temperature, maxTokens) {
     if (!this.apiKey) {
       throw new Error('Google API key is required');
     }
 
-    // Use the latest Gemini 3 Pro model by default
-    let model = this.model || 'gemini-3-pro-preview';
+    // API key debug bilgisi
+    const keyPrefix = this.apiKey.substring(0, 10);
+    const keySuffix = this.apiKey.substring(this.apiKey.length - 5);
+    console.log(`🔑 Using Gemini API key: ${keyPrefix}...${keySuffix} (length: ${this.apiKey.length})`);
 
-    // API v1beta endpoint - More stable for Gemini 3
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
-
-    // Debug logging
-    console.log('Gemini API Debug:', {
-      model,
-      apiUrl: apiUrl.replace(this.apiKey, '***'),
-      apiKeyLength: this.apiKey ? this.apiKey.length : 0
-    });
-
-    // Determine if this is a Gemini 3 model (supports reasoning)
-    const isGemini3 = model.includes('gemini-3');
+    // Sadece seçili modeli kullan - fallback yok
+    const selectedModel = this.model;
+    console.log(`🎯 Using selected model: ${selectedModel}`);
     
+    try {
+      // API v1beta endpoint - More stable for Gemini models
+      const apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + selectedModel + ':generateContent?key=' + this.apiKey;
+
+      // Debug logging
+      console.log('Gemini API Debug:', {
+        model: selectedModel,
+        apiUrl: apiUrl.replace(this.apiKey, '***'),
+        systemPromptLength: systemPrompt ? systemPrompt.length : 0,
+        userPromptLength: userPrompt ? userPrompt.length : 0
+      });
+
+      const result = await this.makeGeminiRequestWithRetry(apiUrl, systemPrompt, userPrompt, temperature, maxTokens, selectedModel);
+      console.log(`✅ ${selectedModel} başarılı!`);
+      return result;
+      
+    } catch (error) {
+      console.log(`❌ ${selectedModel} başarısız:`, error.message);
+      throw error;
+    }
+  }
+
+  async makeGeminiRequestWithRetry(apiUrl, systemPrompt, userPrompt, temperature, maxTokens, modelName) {
+    const maxRetries = 5;
+    const baseDelay = 3000; // 3 saniye başlangıç bekleme süresi
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 ${modelName} - Deneme ${attempt}/${maxRetries}`);
+        return await this.makeGeminiRequest(apiUrl, systemPrompt, userPrompt, temperature, maxTokens);
+      } catch (error) {
+        console.log(`❌ ${modelName} deneme ${attempt} başarısız:`, error.message);
+        
+        // Quota veya rate limit hatalarını tespit et
+        const isQuotaError = error.message?.includes('quota') || 
+                           error.message?.includes('429') || 
+                           error.message?.includes('508') ||
+                           error.message?.includes('Too Many Requests');
+        
+        // Son deneme ise hata fırlat
+        if (attempt === maxRetries) {
+          if (isQuotaError) {
+            throw new Error(`🚫 Gemini API quota limitine ulaşıldı. Lütfen birkaç dakika bekleyin veya başka bir API anahtarı kullanın.\n\nDetay: ${error.message}`);
+          }
+          throw error;
+        }
+        
+        // Quota hatalarında daha uzun bekleme
+        let delay;
+        if (isQuotaError) {
+          delay = baseDelay * (2 + attempt) * 2; // 6s, 12s, 18s, 24s
+          console.log(`⚠️ Quota/Rate limit hatası - ${Math.round(delay/1000)}s bekleniyor...`);
+        } else {
+          // Normal exponential backoff
+          delay = baseDelay * Math.pow(1.8, attempt - 1);
+          console.log(`⏳ ${modelName} için ${Math.round(delay/1000)}s bekleniyor...`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  async makeGeminiRequest(apiUrl, systemPrompt, userPrompt, temperature, maxTokens) {
     // Gemini v1beta API format
     const requestBody = {
       contents: [
@@ -417,140 +560,125 @@ export class AIHandler {
           role: 'user',
           parts: [
             {
-              text: `${systemPrompt}\n\n${userPrompt}`,
-            },
-          ],
-        },
+              text: systemPrompt ? `${systemPrompt}\n\n${userPrompt}` : userPrompt
+            }
+          ]
+        }
       ],
       generationConfig: {
-        temperature: temperature || (isGemini3 ? 1.0 : 0.7),
+        temperature: temperature || 0.7,
         maxOutputTokens: maxTokens || 8192,
         topP: 0.95,
         topK: 40,
-        candidateCount: 1,
       },
       safetySettings: [
         {
-          category: 'HARM_CATEGORY_HARASSMENT',
-          threshold: 'BLOCK_ONLY_HIGH',
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_LOW_AND_ABOVE"
         },
         {
-          category: 'HARM_CATEGORY_HATE_SPEECH',
-          threshold: 'BLOCK_ONLY_HIGH',
+          category: "HARM_CATEGORY_HATE_SPEECH", 
+          threshold: "BLOCK_LOW_AND_ABOVE"
         },
         {
-          category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-          threshold: 'BLOCK_ONLY_HIGH',
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "BLOCK_LOW_AND_ABOVE"
         },
         {
-          category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-          threshold: 'BLOCK_ONLY_HIGH',
-        },
-      ],
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "BLOCK_LOW_AND_ABOVE"
+        }
+      ]
     };
 
+    // Direct API call using fetch for better browser compatibility
     try {
-      console.log('Making Gemini API request...');
-      const response = await axios.post(
-        apiUrl,
-        requestBody,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 60000, // 60 seconds timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 dakika timeout
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        
+        // Özel hata mesajları
+        let errorMessage = `HTTP ${response.status}: ${errorData.error?.message || response.statusText}`;
+        
+        if (response.status === 429) {
+          errorMessage = `🚫 Rate limit aşıldı - Çok fazla istek gönderildi. Lütfen bekleyin.`;
+        } else if (response.status === 508) {
+          errorMessage = `🚫 Gemini API kullanım limitine ulaşıldı. Lütfen daha sonra tekrar deneyin.`;
+        } else if (errorData.error?.message?.includes('quota')) {
+          errorMessage = `🚫 API quota limitine ulaşıldı. Lütfen bekleyin veya başka API anahtarı kullanın.`;
         }
-      );
+        
+        throw new Error(errorMessage);
+      }
 
-      console.log('Gemini API Response Status:', response.status);
-      console.log('Gemini API Response Data:', response.data);
-
-      // Handle response
-      if (response.data.candidates && response.data.candidates.length > 0) {
-        const candidate = response.data.candidates[0];
+      const data = await response.json();
+      if (data.candidates && data.candidates.length > 0) {
+        const candidate = data.candidates[0];
 
         // Check if response was blocked
         if (candidate.finishReason === 'SAFETY') {
-          throw new Error('Response blocked by Gemini safety filters. Try rephrasing your request.');
+          throw new Error('Yanıt Gemini güvenlik filtreleri tarafından engellendi. Lütfen isteğinizi yeniden ifade edin.');
         }
 
         if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+          console.log(`✅ Gemini 3 Pro başarılı!`);
           return candidate.content.parts[0].text;
         }
       }
 
-      // Handle empty or invalid response
-      if (response.data.promptFeedback) {
-        throw new Error(`Gemini API Error: ${response.data.promptFeedback.blockReason || 'Invalid response'}`);
-      }
-
-      throw new Error('No valid response from Gemini API');
+      throw new Error('Gemini 3 Pro API\'den geçerli yanıt alınamadı');
     } catch (error) {
-      console.error('Gemini API Error Details:', {
+      console.error(`❌ Gemini 3 Pro API Error:`, {
         message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        model: model,
-        apiUrl: apiUrl.replace(this.apiKey, '***'),
-        config: {
-          url: error.config?.url,
-          method: error.config?.method,
-          headers: error.config?.headers
-        }
+        name: error.name
       });
-
-      if (error.response) {
-        // API returned an error response
-        const status = error.response.status;
-        const errorData = error.response.data;
-
-        if (status === 400) {
-          if (errorData?.error?.message?.includes('model not found')) {
-            throw new Error(`Gemini Model '${model}' not found. Please check if the model exists in your region.`);
-          }
-          if (errorData?.error?.message?.includes('API key')) {
-            throw new Error('Invalid Gemini API key. Please check your API key.');
-          }
-          if (errorData?.error?.message?.includes('unsafe')) {
-            throw new Error('Request content was flagged as unsafe. Please rephrase your prompt.');
-          }
-        }
-
-        if (status === 403) {
-          throw new Error('Gemini API access denied. Please check your API key permissions and quota.');
-        }
-
-        if (status === 429) {
-          throw new Error('Gemini API rate limit exceeded. Please try again later.');
-        }
-
-        if (status === 500) {
-          throw new Error('Gemini API internal server error. Please try again later.');
-        }
-
-        const errorMessage = errorData?.error?.message || error.response.statusText;
-        throw new Error(`Gemini API Error (${status}): ${errorMessage}`);
+      
+      // HTTP hata kodlarını kontrol et
+      if (error.message.includes('HTTP 429') || error.message.includes('quota')) {
+        throw new Error(`Gemini API kullanım limitine ulaşıldı. Lütfen birkaç dakika bekleyip tekrar deneyin veya API anahtarınızı kontrol edin.`);
       }
-
-      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-        throw new Error('Network error: Cannot connect to Gemini API. Please check your internet connection.');
+      
+      if (error.message.includes('HTTP 401')) {
+        throw new Error(`Gemini API anahtarı geçersiz. Lütfen API anahtarınızı kontrol edin.`);
       }
-
-      throw error;;
+      
+      if (error.message.includes('HTTP 403')) {
+        throw new Error(`Gemini API erişim izni yok. API anahtarı yetkilerini kontrol edin.`);
+      }
+      
+      // Timeout/Abort hatalarını özel olarak işle
+      if (error.name === 'AbortError') {
+        throw new Error(`Gemini 3 Pro API zaman aşımı: İstek çok uzun sürdü (5+ dakika). Lütfen daha kısa bir metin deneyin veya tekrar deneyin.`);
+      }
+      
+      // Network hatalarını işle
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        throw new Error(`Gemini 3 Pro API'ye bağlanılamıyor: ${error.message}`);
+      }
+      
+      throw new Error(`Gemini 3 Pro API Hatası: ${error.message || 'Bilinmeyen hata'}`);
     }
   }
 
-  /**
-   * Local AI (Ollama/LM Studio) API Call
-   */
   async callLocalAI(systemPrompt, userPrompt, temperature, maxTokens) {
-    const endpoint = this.localEndpoint.endsWith('/')
-      ? `${this.localEndpoint}api/generate`
-      : `${this.localEndpoint}/api/generate`;
+    const endpoint = this.localEndpoint.endsWith('/') 
+      ? this.localEndpoint + "api/generate"
+      : this.localEndpoint + "/api/generate";
 
-    // Ollama format
-    const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`;
+    const combinedPrompt = systemPrompt + "\n\n" + userPrompt;
 
     const response = await axios.post(
       endpoint,
@@ -559,15 +687,15 @@ export class AIHandler {
         prompt: combinedPrompt,
         stream: false,
         options: {
-          temperature,
+          temperature: temperature,
           num_predict: maxTokens,
-        },
+        }
       },
       {
         headers: {
           'Content-Type': 'application/json',
         },
-        timeout: 120000, // 2 minutes timeout for local models
+        timeout: 300000, // 5 dakika - uzun analizler için
       }
     );
 
@@ -575,1109 +703,448 @@ export class AIHandler {
   }
 
   /**
-   * Apple MLX API Call (mlx-lm server)
-   * Optimized for Apple Silicon (M1/M2/M3/M4)
-   */
-  async callMLX(systemPrompt, userPrompt, temperature, maxTokens) {
-    const endpoint = this.mlxEndpoint.endsWith('/')
-      ? `${this.mlxEndpoint}v1/chat/completions`
-      : `${this.mlxEndpoint}/v1/chat/completions`;
-
-    // OpenAI-compatible format
-    const response = await axios.post(
-      endpoint,
-      {
-        model: this.mlxModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature,
-        max_tokens: maxTokens,
-        stream: false,
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 120000, // 2 minutes timeout for local inference
-      }
-    );
-
-    return response.data.choices[0].message.content;
-  }
-
-  /**
-   * Test connection to AI provider
-   */
-  async testConnection() {
-    try {
-      console.log(`Testing ${this.provider} connection...`);
-
-      // Simple test for different providers
-      let testPrompt, systemPrompt;
-
-      if (this.provider === AI_PROVIDERS.GEMINI) {
-        systemPrompt = 'You are a helpful assistant. Respond concisely.';
-        testPrompt = 'Say "OK" if you can read this message.';
-      } else {
-        systemPrompt = 'You are a helpful assistant.';
-        testPrompt = 'Reply with only the word "OK" if you can read this.';
-      }
-
-      const response = await this.generateText(
-        systemPrompt,
-        testPrompt,
-        { maxTokens: 20, temperature: 0 }
-      );
-
-      console.log(`${this.provider} test successful:`, response);
-
-      return {
-        success: true,
-        response: response.trim(),
-        provider: this.provider,
-      };
-    } catch (error) {
-      console.error(`${this.provider} test failed:`, error);
-
-      return {
-        success: false,
-        error: error.message,
-        provider: this.provider,
-      };
-    }
-  }
-
-  /**
-   * Get available models for current provider
-   */
-  getAvailableModels() {
-    switch (this.provider) {
-      case AI_PROVIDERS.OPENAI:
-        return OPENAI_MODELS;
-      case AI_PROVIDERS.GEMINI:
-        return GEMINI_MODELS;
-      case AI_PROVIDERS.MLX:
-        return MLX_MODELS;
-      case AI_PROVIDERS.LOCAL:
-        return [
-          { id: 'llama3', name: 'Llama 3' },
-          { id: 'mistral', name: 'Mistral' },
-          { id: 'gemma', name: 'Gemma' },
-          { id: 'codellama', name: 'Code Llama' },
-          { id: 'phi3', name: 'Phi-3' },
-        ];
-      default:
-        return [];
-    }
-  }
-
-  /**
-   * Update configuration
-   */
-  updateConfig(newConfig) {
-    Object.assign(this, newConfig);
-  }
-
-  /**
-   * Correct grammar in text with configurable levels
-   * @param {string} text - Text to correct
-   * @param {object} options - Correction options
-   * @returns {Promise<string>} - Corrected text
-   */
-  async correctGrammar(text, options = {}) {
-    const {
-      level = GRAMMAR_LEVELS.STANDARD,
-      useChunking = true,
-      maxChunkSize = 3000, // Smaller chunks for grammar correction
-      onProgress = () => { },
-    } = options;
-
-    try {
-      // For small texts or when chunking is disabled, process directly
-      if (!useChunking || text.length <= maxChunkSize) {
-        onProgress({ step: 'correcting', progress: 0, message: 'Correcting grammar...' });
-
-        const systemPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.system[level];
-        const userPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.buildUserPrompt(text, level);
-
-        const correctedText = await this.generateText(systemPrompt, userPrompt, {
-          maxTokens: Math.min(4000, Math.ceil(text.length * 1.2)), // Allow some expansion
-          temperature: 0.1, // Low temperature for consistent corrections
-        });
-
-        // Cloud LLM'lerin yorum cevaplarını temizle
-        const cleanedResult = this.cleanCloudLLMComments(correctedText.trim());
-
-        onProgress({ step: 'complete', progress: 100, message: 'Grammar correction complete' });
-        return cleanedResult;
-      }
-
-      // Split large text into chunks
-      onProgress({
-        step: 'chunking',
-        progress: 5,
-        message: 'Splitting text into chunks...'
-      });
-
-      const chunks = this.splitTextForGrammarCorrection(text, maxChunkSize);
-
-      onProgress({
-        step: 'correcting_chunks',
-        progress: 10,
-        message: `Correcting ${chunks.length} chunks...`
-      });
-
-      const correctedChunks = [];
-      const totalChunks = chunks.length;
-
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-
-        onProgress({
-          step: 'correcting_chunk',
-          progress: 10 + (i / totalChunks) * 80,
-          message: `Correcting chunk ${i + 1} of ${totalChunks}...`,
-          currentChunk: i + 1,
-          totalChunks: totalChunks,
-        });
-
-        try {
-          const systemPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.system[level];
-          const userPrompt = SCREENPLAY_PROMPTS.GRAMMAR_CORRECTION.buildUserPrompt(chunk.text, level);
-
-          const correctedChunk = await this.generateText(systemPrompt, userPrompt, {
-            maxTokens: Math.min(4000, Math.ceil(chunk.text.length * 1.2)),
-            temperature: 0.1,
-          });
-
-          // Cloud LLM yorumlarını temizle
-          const cleanedChunk = this.cleanCloudLLMComments(correctedChunk.trim());
-
-          correctedChunks.push({
-            ...chunk,
-            correctedText: cleanedChunk,
-          });
-
-          // Rate limiting delay for API providers
-          if (i < chunks.length - 1 && this.provider !== AI_PROVIDERS.LOCAL && this.provider !== AI_PROVIDERS.MLX) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-
-        } catch (chunkError) {
-          console.warn(`Chunk ${i + 1} correction failed:`, chunkError);
-          // Keep original text if correction fails
-          correctedChunks.push({
-            ...chunk,
-            correctedText: chunk.text,
-            error: chunkError.message,
-          });
-        }
-      }
-
-      onProgress({
-        step: 'combining',
-        progress: 95,
-        message: 'Combining corrected chunks...'
-      });
-
-      // Combine corrected chunks back into full text
-      const finalText = correctedChunks
-        .map(chunk => chunk.correctedText)
-        .join(chunk => chunk.preserveSpacing ? '\n\n' : ' '); // Maintain original spacing
-
-      onProgress({
-        step: 'complete',
-        progress: 100,
-        message: 'Grammar correction complete'
-      });
-
-      return finalText;
-
-    } catch (error) {
-      console.error('Grammar correction failed:', error);
-      onProgress({
-        step: 'error',
-        progress: 0,
-        message: `Correction failed: ${error.message}`
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Cloud LLM'lerin yorum cevaplarını temizle (sadece düzeltme sonucunu al)
-   * @param {string} text - LLM'den gelen cevap
-   * @returns {string} - Temizlenmiş metin
-   */
-  cleanCloudLLMComments(text) {
-    // Cloud provider kontrolü
-    if (this.provider !== AI_PROVIDERS.OPENAI && this.provider !== AI_PROVIDERS.GEMINI) {
-      return text; // Local provider'lar için temizleme yapma
-    }
-
-    // Yaygın LLM yorum kalıplarını temizle
-    let cleaned = text;
-
-    // "Harika bir metin! Bu metni..." tarzı başlangıçları kaldır
-    cleaned = cleaned.replace(/^.*?(düzeltme|düzenleme|analiz|geliştirme).*?(yaptım|yapıyorum|sunuyorum).*?[:.!]\s*/i, '');
-
-    // "İşte geliştirilmiş versiyon:" tarzı ifadeleri kaldır
-    cleaned = cleaned.replace(/^.*?(işte|burada|aşağıda).*?(geliştirilmiş|düzeltilmiş|düzenlenmiş).*?(versiyon|metin|sonuç).*?[:.!]\s*/im, '');
-
-    // "Sizin için düzeltmeyi yaptım" tarzı ifadeleri kaldır
-    cleaned = cleaned.replace(/^.*?(sizin için|size).*?(düzeltme|düzenleme).*?(yaptım|hazırladım).*?[:.!]\s*/im, '');
-
-    // "Bu metni daha etkileyici..." tarzı açıklamaları kaldır
-    cleaned = cleaned.replace(/^.*?(bu metni|metni).*?(daha|daha etkileyici|akıcı|edebi).*?[:.!]\s*/im, '');
-
-    // Başlangıçtaki genel açıklamaları temizle
-    cleaned = cleaned.replace(/^[^.!?]*?(düzeltme|analiz|geliştirme|iyileştirme)[^.!?]*?[.!?]\s*/i, '');
-
-    return cleaned.trim();
-  }
-
-  /**
-   * Split text for grammar correction (preserves paragraph structure)
-   * @param {string} text - Text to split
-   * @param {number} maxChunkSize - Maximum chunk size in characters
-   * @returns {Array} - Array of text chunks
-   */
-  splitTextForGrammarCorrection(text, maxChunkSize) {
-    const chunks = [];
-
-    // Split by paragraphs first to preserve structure
-    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-
-    let currentChunk = '';
-    let chunkIndex = 0;
-
-    for (let i = 0; i < paragraphs.length; i++) {
-      const paragraph = paragraphs[i];
-      const combinedLength = currentChunk.length + paragraph.length + 2; // +2 for line breaks
-
-      if (combinedLength <= maxChunkSize || currentChunk.length === 0) {
-        // Add paragraph to current chunk
-        currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
-      } else {
-        // Save current chunk and start new one
-        if (currentChunk.length > 0) {
-          chunks.push({
-            index: chunkIndex++,
-            text: currentChunk.trim(),
-            preserveSpacing: true,
-          });
-        }
-
-        // Check if single paragraph is too large
-        if (paragraph.length > maxChunkSize) {
-          // Split large paragraph by sentences
-          const sentences = this.splitParagraphBySentences(paragraph, maxChunkSize);
-          for (const sentence of sentences) {
-            chunks.push({
-              index: chunkIndex++,
-              text: sentence.trim(),
-              preserveSpacing: false,
-            });
-          }
-          currentChunk = '';
-        } else {
-          currentChunk = paragraph;
-        }
-      }
-    }
-
-    // Add remaining chunk
-    if (currentChunk.length > 0) {
-      chunks.push({
-        index: chunkIndex,
-        text: currentChunk.trim(),
-        preserveSpacing: true,
-      });
-    }
-
-    return chunks;
-  }
-
-  /**
-   * Split a large paragraph by sentences
-   * @param {string} paragraph - Paragraph to split
-   * @param {number} maxSize - Maximum size per chunk
-   * @returns {Array} - Array of sentence chunks
-   */
-  splitParagraphBySentences(paragraph, maxSize) {
-    const sentences = paragraph.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    const chunks = [];
-    let currentChunk = '';
-
-    for (const sentence of sentences) {
-      const trimmedSentence = sentence.trim();
-      const combinedLength = currentChunk.length + trimmedSentence.length + 2;
-
-      if (combinedLength <= maxSize || currentChunk.length === 0) {
-        currentChunk += (currentChunk ? '. ' : '') + trimmedSentence;
-      } else {
-        if (currentChunk.length > 0) {
-          chunks.push(currentChunk.trim() + '.');
-        }
-        currentChunk = trimmedSentence;
-      }
-    }
-
-    if (currentChunk.length > 0) {
-      chunks.push(currentChunk.trim() + '.');
-    }
-
-    return chunks;
-  }
-
-  /**
-   * Analyze screenplay with intelligent chunking for token management
-   * @param {string} text - Full screenplay text
+   * Analyze text with custom prompts
+   * Used by AnalysisPanel for multi-analysis workflow
+   * @param {string} text - The text to analyze
    * @param {object} options - Analysis options
-   * @returns {Promise<object>} - Analysis result
-   */
-  async analyzeScreenplayWithChunking(text, options = {}) {
-    const {
-      useChunking = true,
-      onProgress = () => { },
-      forceChunking = false,
-    } = options;
-
-    try {
-      // Determine if chunking is needed
-      const shouldChunk = this.shouldUseChunking(text, forceChunking);
-
-      if (!useChunking || !shouldChunk) {
-        onProgress({ step: 'analyzing', progress: 0, message: 'Analyzing screenplay...' });
-        const result = await this.analyzeScreenplay(text);
-        onProgress({ step: 'complete', progress: 100, message: 'Analysis complete' });
-        return result;
-      }
-
-      // Get optimal chunk configuration for current provider
-      const chunkConfig = getOptimalChunkSize(this.provider, this.model);
-
-      onProgress({
-        step: 'chunking',
-        progress: 5,
-        message: 'Splitting screenplay into manageable chunks...'
-      });
-
-      // Split text into chunks
-      const chunks = splitTextForAnalysis(text, chunkConfig);
-
-      if (chunks.length === 0) {
-        throw new Error('Failed to create text chunks');
-      }
-
-      if (chunks.length === 1) {
-        // Single chunk, use regular analysis
-        onProgress({ step: 'analyzing', progress: 10, message: 'Analyzing screenplay...' });
-        const result = await this.analyzeScreenplay(chunks[0].text);
-        onProgress({ step: 'complete', progress: 100, message: 'Analysis complete' });
-        return result;
-      }
-
-      onProgress({
-        step: 'analyzing_chunks',
-        progress: 10,
-        message: `Analyzing ${chunks.length} chunks...`
-      });
-
-      // Analyze each chunk
-      const chunkResults = [];
-      const totalChunks = chunks.length;
-
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-
-        onProgress({
-          step: 'analyzing_chunk',
-          progress: 10 + (i / totalChunks) * 70,
-          message: `Analyzing chunk ${i + 1} of ${totalChunks}...`,
-          currentChunk: i + 1,
-          totalChunks: totalChunks,
-        });
-
-        try {
-          const chunkResult = await this.analyzeChunk(chunk, i + 1, totalChunks);
-          chunkResults.push({
-            ...chunkResult,
-            chunkIndex: i,
-            chunkInfo: {
-              type: chunk.type,
-              scenes: chunk.scenes || [],
-              wordCount: chunk.wordCount,
-              tokenEstimate: chunk.tokenEstimate,
-            },
-          });
-
-          // Rate limiting delay
-          if (i < chunks.length - 1 && this.provider !== AI_PROVIDERS.LOCAL && this.provider !== AI_PROVIDERS.MLX) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-
-        } catch (chunkError) {
-          console.warn(`Chunk ${i + 1} analysis failed:`, chunkError);
-          chunkResults.push({
-            error: chunkError.message,
-            chunkIndex: i,
-            chunkInfo: {
-              type: chunk.type,
-              scenes: chunk.scenes || [],
-              wordCount: chunk.wordCount,
-              tokenEstimate: chunk.tokenEstimate,
-            },
-          });
-        }
-      }
-
-      onProgress({
-        step: 'combining',
-        progress: 85,
-        message: 'Combining analysis results...'
-      });
-
-      // Combine results
-      const combinedResult = this.combineChunkAnalyses(chunkResults, text);
-
-      onProgress({
-        step: 'complete',
-        progress: 100,
-        message: 'Analysis complete'
-      });
-
-      return combinedResult;
-
-    } catch (error) {
-      console.error('Chunked analysis failed:', error);
-      onProgress({
-        step: 'error',
-        progress: 0,
-        message: `Analysis failed: ${error.message}`
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Analyze a single screenplay (without chunking)
-   * @param {string} text - Screenplay text
-   * @returns {Promise<object>} - Analysis result
-   */
-  async analyzeScreenplay(text) {
-    const systemPrompt = SCREENPLAY_PROMPTS.SCENE_ANALYSIS.system;
-    const userPrompt = SCREENPLAY_PROMPTS.SCENE_ANALYSIS.buildUserPrompt(text);
-
-    // Cloud providers can handle larger responses
-    const isCloudProvider = this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI;
-    const maxTokens = isCloudProvider ? 8000 : 4000;
-
-    console.log(`Analyzing screenplay with ${this.provider}, maxTokens: ${maxTokens}`);
-
-    const response = await this.generateText(systemPrompt, userPrompt, {
-      maxTokens,
-      temperature: 0.1,
-    });
-
-    try {
-      const cleanedResponse = response.replace(/```json\s*|\s*```/g, '').trim();
-      return JSON.parse(cleanedResponse);
-    } catch (error) {
-      console.error('Failed to parse analysis response:', error);
-      throw new Error('Failed to parse analysis data');
-    }
-  }
-
-  /**
-   * Analyze with custom prompt and chunking support
-   * @param {string} text - Text to analyze
-   * @param {object} options - Analysis options
-   * @returns {Promise<string>} - Analysis result
    */
   async analyzeWithCustomPrompt(text, options = {}) {
+    console.log('✅ analyzeWithCustomPrompt called!', { textLength: text?.length, options });
+    
     const {
-      systemPrompt,
-      userPrompt,
+      systemPrompt = 'Sen bir senaryo analiz uzmanısın.',
+      userPrompt = '',
       useChunking = false,
-      onProgress = () => { },
-      language = 'en'
+      onProgress = null
     } = options;
 
-    if (!systemPrompt || !userPrompt) {
-      throw new Error('Both systemPrompt and userPrompt are required for custom analysis');
-    }
-
-    onProgress({
-      step: 'start',
-      progress: 0,
-      message: 'Starting custom analysis...'
-    });
-
-    try {
-      // Cloud APIs (OpenAI, Gemini) have large context windows - no chunking needed
-      const isCloudProvider = this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI;
-      const shouldUseChunking = useChunking && !isCloudProvider && text.length > 6000; // Lower threshold for local AI
-
-      if (!shouldUseChunking) {
-        // Single prompt analysis - recommended for cloud providers
-        onProgress({
-          step: 'analyzing',
-          progress: 50,
-          message: 'Analyzing with custom prompt...'
-        });
-
-        const combinedUserPrompt = `${userPrompt}\n\nIMPORTANT: Provide the response in ${language} language.\n\nText to analyze:\n${text}`;
-        const maxTokens = isCloudProvider ? 8000 : 4000; // Cloud providers can handle larger responses
-
-        const result = await this.generateText(systemPrompt, combinedUserPrompt, {
-          maxTokens,
-          temperature: 0.1,
-        });
-
-        // Cloud provider'lar için yorum cevaplarını temizle
-        const cleanedResult = this.cleanCloudLLMComments(result);
-
-        onProgress({
-          step: 'complete',
-          progress: 100,
-          message: 'Custom analysis complete!'
-        });
-
-        return cleanedResult;
-      } else {
-        // Chunked analysis - only for local providers with long text
-        onProgress({
-          step: 'info',
-          progress: 5,
-          message: 'Using chunked analysis for local provider...'
-        });
-        return await this.analyzeWithCustomPromptChunked(text, systemPrompt, userPrompt, onProgress, language);
+    // Enable chunking for moderately long texts (>15000 chars) to analyze complete scripts
+    if (!useChunking && text.length < 15000) {
+      // Direct analysis for shorter texts
+      const fullPrompt = userPrompt.replace(/\{\{text\}\}/g, text);
+      
+      if (onProgress) {
+        onProgress({ message: 'Analiz yapılıyor...', progress: 50 });
       }
-    } catch (error) {
-      onProgress({
-        step: 'error',
-        progress: 0,
-        message: `Custom analysis failed: ${error.message}`
-      });
-      throw error;
+      
+      const result = await this.generateText(systemPrompt, fullPrompt);
+      
+      if (onProgress) {
+        onProgress({ message: 'Tamamlandı', progress: 100 });
+      }
+      
+      return result;
     }
-  }
 
-  /**
-   * Analyze with custom prompt using chunking
-   * @param {string} text - Text to analyze
-   * @param {string} systemPrompt - System prompt
-   * @param {string} userPrompt - User prompt template
-   * @param {Function} onProgress - Progress callback
-   * @returns {Promise<string>} - Combined analysis result
-   */
-  async analyzeWithCustomPromptChunked(text, systemPrompt, userPrompt, onProgress, language = 'en') {
-    const chunks = this.chunkText(text, {
-      preserveScenes: false, // For custom analysis, simple chunking is usually better
-      maxTokens: 2000 // Smaller chunks for local AI reliability
+    // Use chunking for long texts or when explicitly requested
+    console.log(`📝 Script length: ${text.length} characters - Using chunking for complete analysis`);
+    
+    // Get optimal chunk size for Gemini 3 Pro
+    const chunkOptions = getOptimalChunkSize('gemini', 'gemini-1.5-flash');
+    const chunks = splitTextForAnalysis(text, {
+      ...chunkOptions,
+      maxTokens: 6000,  // Larger chunks for better context
+      overlapTokens: 600, // Proportional overlap
+      preserveScenes: true // Maintain screenplay structure
     });
-
-    const chunkResults = [];
+    
     const totalChunks = chunks.length;
+    console.log(`🔄 Script split into ${totalChunks} chunks for complete analysis`);
 
-    onProgress({
-      step: 'chunking',
-      progress: 10,
-      message: `Split into ${totalChunks} chunks. Analyzing...`
-    });
+    let chunkResults = [];
 
-    for (let i = 0; i < chunks.length; i++) {
+    // Analyze each chunk with scene context
+    for (let i = 0; i < totalChunks; i++) {
       const chunk = chunks[i];
       const chunkNumber = i + 1;
 
-      onProgress({
-        step: 'chunk',
-        progress: 10 + (60 * i / totalChunks),
-        message: `Analyzing chunk ${chunkNumber}/${totalChunks}...`,
-        chunkNumber,
-        totalChunks
-      });
+      if (onProgress) {
+        onProgress({
+          message: `Bölüm ${chunkNumber}/${totalChunks} analiz ediliyor... (${chunk.scenes?.length || 0} sahne)`,
+          progress: (i / totalChunks) * 80, // Leave 20% for final synthesis
+          chunkNumber,
+          totalChunks,
+          currentChunk: {
+            scenes: chunk.scenes?.length || 0,
+            wordCount: chunk.wordCount,
+            type: chunk.type
+          }
+        });
+      }
 
-      const combinedUserPrompt = `${userPrompt}
+      console.log(`🔍 Analyzing chunk ${chunkNumber}/${totalChunks}: ${chunk.wordCount} words, ${chunk.scenes?.length || 0} scenes`);
 
-This is chunk ${chunkNumber} of ${totalChunks} from a larger text. Please analyze this section. IMPORTANT: Provide the response in ${language} language.
-
-${chunk.text}`;
-
-      const chunkResult = await this.generateText(systemPrompt, combinedUserPrompt, {
-        maxTokens: 2000,
-        temperature: 0.1,
-      });
-
-      chunkResults.push({
-        chunkNumber,
-        content: chunkResult,
-        metadata: chunk.metadata
-      });
-
-      // Add small delay to prevent rate limiting
-      if (i < chunks.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+      // Create chunk-specific prompt with context
+      const chunkContext = chunk.scenes?.length > 0 ? 
+        `\n\nBU BÖLÜM HAKKİNDA:\n- Bölüm ${chunkNumber}/${totalChunks}\n- ${chunk.scenes.length} sahne içeriyor\n- ${chunk.type === 'scene-based' ? 'Sahne sınırları korundu' : 'Paragraf bazlı bölümleme'}\n` :
+        `\n\nBU BÖLÜM HAKKİNDA:\n- Bölüm ${chunkNumber}/${totalChunks}\n- ${chunk.wordCount} kelime\n`;
+      
+      const chunkPrompt = userPrompt.replace(/\{\{text\}\}/g, chunk.text) + chunkContext;
+      
+      try {
+        console.log(`⏳ Starting analysis for chunk ${chunkNumber} (${chunk.tokenEstimate} tokens estimated)`);
+        
+        const chunkResult = await this.generateText(systemPrompt, chunkPrompt);
+        
+        chunkResults.push({
+          chunkIndex: i,
+          chunkNumber,
+          result: chunkResult,
+          scenes: chunk.scenes || [],
+          wordCount: chunk.wordCount,
+          tokenEstimate: chunk.tokenEstimate,
+          type: chunk.type
+        });
+        
+        console.log(`✅ Chunk ${chunkNumber} completed: ${chunkResult.length} characters`);
+      } catch (error) {
+        console.error(`❌ Error analyzing chunk ${chunkNumber}:`, error);
+        
+        // Daha detaylı hata tanımları
+        const isTimeoutError = error.message?.includes('timeout') || error.code === 'ECONNABORTED';
+        const isQuotaError = error.message?.includes('quota') || error.message?.includes('429') || error.message?.includes('508');
+        const isRateLimit = error.message?.includes('Too Many Requests');
+        const isAPIError = error.response?.status >= 400;
+        
+        let errorMessage = `Bölüm ${chunkNumber} analiz hatası`;
+        
+        if (isQuotaError) {
+          errorMessage += ' (API quota limiti aşıldı - birkaç dakika bekleyin)';
+        } else if (isRateLimit) {
+          errorMessage += ' (Çok fazla istek - 30 saniye bekleyin)';
+        } else if (isTimeoutError) {
+          errorMessage += ' (Zaman aşımı - bölüm çok büyük olabilir)';
+        } else if (isAPIError) {
+          errorMessage += ` (API Hatası: ${error.response?.status})`;
+        } else {
+          errorMessage += `: ${error.message}`;
+        }
+        
+        chunkResults.push({
+          chunkIndex: i,
+          chunkNumber,
+          result: errorMessage,
+          error: true,
+          errorType: isQuotaError ? 'quota' : (isRateLimit ? 'rate_limit' : (isTimeoutError ? 'timeout' : (isAPIError ? 'api' : 'unknown'))),
+          scenes: chunk.scenes || [],
+          wordCount: chunk.wordCount
+        });
       }
     }
 
-    onProgress({
-      step: 'combining',
-      progress: 80,
-      message: 'Combining chunk results...'
-    });
-
-    // Combine all chunk results
-    const combinedResult = await this.combineCustomPromptResults(chunkResults, systemPrompt, language);
-
-    onProgress({
-      step: 'complete',
-      progress: 100,
-      message: 'Custom analysis complete!'
-    });
-
-    return combinedResult;
-  }
-
-  /**
-   * Combine results from custom prompt chunks
-   * @param {Array} chunkResults - Results from each chunk
-   * @param {string} systemPrompt - Original system prompt for context
-   * @param {string} language - Language for the output
-   * @returns {Promise<string>} - Combined result
-   */
-  async combineCustomPromptResults(chunkResults, systemPrompt, language = 'en') {
-    const combinerSystemPrompt = `You are an expert text analyst. Your task is to combine and synthesize analysis results from multiple chunks of text into a comprehensive final analysis.
-
-Original analysis instructions: ${systemPrompt}
-
-Please create a cohesive, comprehensive analysis by:
-1. Identifying common themes and patterns across chunks
-2. Removing redundancy while preserving important details
-3. Creating a logical flow and structure
-4. Maintaining the analytical depth and quality
-
-IMPORTANT: The final output MUST be in ${language} language.`;
-
-    const chunkSummaries = chunkResults.map(result =>
-      `Chunk ${result.chunkNumber}:\n${result.content}\n`
-    ).join('\n---\n\n');
-
-    const combinerUserPrompt = `Please combine and synthesize these analysis results into a comprehensive final analysis:
-
-${chunkSummaries}`;
-
-    return await this.generateText(combinerSystemPrompt, combinerUserPrompt, {
-      maxTokens: 4000,
-      temperature: 0.1,
-    });
-  }
-
-  /**
-   * Analyze a single chunk
-   * @param {object} chunk - Text chunk with metadata
-   * @param {number} chunkNumber - Current chunk number
-   * @param {number} totalChunks - Total number of chunks
-   * @returns {Promise<object>} - Chunk analysis result
-   */
-  async analyzeChunk(chunk, chunkNumber, totalChunks) {
-    const systemPrompt = `You are a professional screenplay analyst. You are analyzing chunk ${chunkNumber} of ${totalChunks} from a larger screenplay. Focus on this specific section but be aware it's part of a larger work.
-
-Return a valid JSON object with the following structure:
-{
-  "scenes": [
-    {
-      "number": 1,
-      "header": "INT. BEDROOM - NIGHT",
-      "intExt": "INT",
-      "location": "BEDROOM", 
-      "timeOfDay": "NIGHT",
-      "characters": ["CHARACTER1", "CHARACTER2"],
-      "estimatedDuration": 2,
-      "description": "Brief scene description",
-      "chunkRelative": true
+    // Final synthesis step - combine all chunk analyses
+    if (onProgress) {
+      onProgress({
+        message: 'Tüm bölümler analiz edildi, sentez yapılıyor...',
+        progress: 85,
+        phase: 'synthesis'
+      });
     }
-  ],
-  "locations": [
-    {
-      "name": "BEDROOM",
-      "type": "INT", 
-      "sceneCount": 1,
-      "estimatedShootingDays": 0.5
-    }
-  ],
-  "characters": [
-    {
-      "name": "CHARACTER NAME",
-      "sceneCount": 5,
-      "description": "Brief character description"
-    }
-  ],
-  "equipment": [
-    {
-      "item": "Camera crane",
-      "scenes": [1, 5],
-      "reason": "High angle shot mentioned" 
-    }
-  ],
-  "partialSummary": {
-    "scenesInChunk": 3,
-    "estimatedChunkRuntime": 15,
-    "newCharactersIntroduced": ["CHARACTER1"],
-    "keyEvents": ["Brief description of important events in this chunk"]
-  }
-}
 
-Return ONLY valid JSON, no additional text.`;
-
-    const userPrompt = `Analyze this screenplay chunk and provide a detailed breakdown. This is chunk ${chunkNumber} of ${totalChunks}:
-
-${chunk.text}`;
-
-    const response = await this.generateText(systemPrompt, userPrompt, {
-      maxTokens: 3000,
-      temperature: 0.1,
+    console.log(`🎯 Synthesizing ${chunkResults.length} chunk analyses into final result`);
+    
+    // Filter out invalid chunks and check for meaningful content
+    const successfulChunks = chunkResults.filter(cr => {
+      if (cr.error) return false;
+      
+      // Skip chunks with only synthesis prompts or template text
+      const result = cr.result.toLowerCase();
+      if (result.includes('bölüm analiz sonuçları') || 
+          result.includes('***') ||
+          result.includes('lütfen yukarıdaki') ||
+          result.length < 50) {
+        console.warn(`Skipping invalid chunk ${cr.chunkNumber}: contains template text`);
+        return false;
+      }
+      return true;
     });
+    
+    const errorCount = chunkResults.length - successfulChunks.length;
+    
+    // If no valid chunks, return fallback
+    if (successfulChunks.length === 0) {
+      console.warn('No valid chunks found, returning error message');
+      return 'Analiz sırasında teknik bir sorun oluştu. Lütfen daha kısa bir metin ile tekrar deneyin.';
+    }
+    
+    const synthesisPrompt = `Bu senaryonun ${successfulChunks.length} farklı parçada yapılan analizlerini tek kapsamlı analiz haline getir:
+
+${successfulChunks.map((chunk, idx) => 
+  `${idx + 1}. PARÇA ANALİZİ:\n${chunk.result.substring(0, 1000)}${chunk.result.length > 1000 ? '...' : ''}\n`
+).join('\n')}\n\nYukarıdaki parça analizlerini birleştirerek tek final analiz oluştur:`;
+
+    // Additional safety check for synthesis prompt length
+    if (synthesisPrompt.length > 20000) {
+      console.warn('Synthesis prompt too long, using fallback concatenation');
+      const fallbackResult = successfulChunks.map(chunk => chunk.result).join('\n\n---\n\n');
+      
+      if (onProgress) {
+        onProgress({
+          message: 'Analiz tamamlandı (parça birleştirme)',
+          progress: 100,
+          phase: 'completed-fallback'
+        });
+      }
+      
+      return `KAPSAMLI ANALİZ (${successfulChunks.length}/${totalChunks} parça):\n\n` + fallbackResult;
+    }
 
     try {
-      const cleanedResponse = response.replace(/```json\s*|\s*```/g, '').trim();
-      return JSON.parse(cleanedResponse);
-    } catch (error) {
-      console.error('Failed to parse chunk analysis response:', error);
-      throw new Error(`Failed to parse chunk ${chunkNumber} analysis data`);
+      const finalResult = await this.generateText(
+        'Sen uzman bir analiz editörüsün. Parça analizlerini tek tutarlı analiz haline getirirsin.',
+        synthesisPrompt
+      );
+      
+      // Check if result contains synthesis prompt artifacts
+      const resultLower = finalResult.toLowerCase();
+      if (resultLower.includes('parça analizi') || 
+          resultLower.includes('yukarıdaki') ||
+          resultLower.includes('birleştir')) {
+        console.warn('Synthesis result contains prompt artifacts, using fallback');
+        throw new Error('Synthesis returned prompt text');
+      }
+      
+      if (onProgress) {
+        onProgress({
+          message: 'Kapsamlı analiz tamamlandı!',
+          progress: 100,
+          phase: 'completed',
+          chunksAnalyzed: successfulChunks.length,
+          totalChunks: totalChunks,
+          errors: errorCount
+        });
+      }
+      
+      console.log(`✅ Complete script analysis finished: ${successfulChunks.length}/${totalChunks} chunks successful`);
+      
+      return finalResult;
+      
+    } catch (synthesisError) {
+      console.error('❌ Synthesis error:', synthesisError);
+      
+      // Fallback: return concatenated results
+      const fallbackResult = successfulChunks.map(chunk => chunk.result).join('\n\n---\n\n');
+      
+      if (onProgress) {
+        onProgress({
+          message: 'Analiz tamamlandı (sentez hatası, ham sonuçlar döndürüldü)',
+          progress: 100,
+          phase: 'completed-fallback'
+        });
+      }
+      
+      return `KAPSAMLI ANALİZ (${successfulChunks.length}/${totalChunks} bölüm):\n\n` + fallbackResult;
     }
   }
 
   /**
-   * Determine if chunking should be used based on text size and provider capabilities
-   * @param {string} text - Text to analyze
-   * @param {boolean} forceChunking - Force chunking regardless of size
-   * @returns {boolean} - Whether to use chunking
+   * Generate images using Gemini 3 Pro Image Preview
+   * Supports reference images (up to 14 images)
+   * Updated to match official Gemini 3 Pro Image Preview API format (November 2025)
    */
-  shouldUseChunking(text, forceChunking = false) {
-    if (forceChunking) return true;
-
-    // Cloud providers (OpenAI, Gemini) have very large context windows
-    // No need for chunking - they handle long texts efficiently
-    if (this.provider === AI_PROVIDERS.OPENAI || this.provider === AI_PROVIDERS.GEMINI) {
-      console.log(`Skipping chunking for cloud provider: ${this.provider} (large context window)`);
-      return false;
+  async generateImage(prompt, options = {}) {
+    // Only support Gemini for image generation currently
+    if (this.provider !== AI_PROVIDERS.GEMINI) {
+      throw new Error('Görsel üretme sadece Gemini provider ile desteklenmektedir');
     }
 
-    // Only chunk for local providers with moderately long texts
-    const thresholds = {
-      [AI_PROVIDERS.LOCAL]: 8000,   // ~2000 tokens (local models benefit from smaller chunks)
-      [AI_PROVIDERS.MLX]: 8000,     // ~2000 tokens (local models benefit from smaller chunks)
-    };
-
-    const threshold = thresholds[this.provider] || 20000;
-    const shouldChunk = text.length > threshold;
-
-    if (shouldChunk) {
-      console.log(`Text length ${text.length} > threshold ${threshold}, using chunking for local provider`);
+    if (!this.apiKey) {
+      throw new Error('Gemini API anahtarı gerekli');
     }
 
-    return shouldChunk;
-  }
-
-  /**
-   * Combine multiple chunk analyses into a single comprehensive result
-   * @param {Array} chunkResults - Array of chunk analysis results
-   * @param {string} originalText - Original full text for reference
-   * @returns {object} - Combined analysis result
-   */
-  combineChunkAnalyses(chunkResults, originalText) {
-    const validResults = chunkResults.filter(result => !result.error);
-
-    if (validResults.length === 0) {
-      throw new Error('No valid chunk analyses to combine');
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      throw new Error('Görsel açıklaması (prompt) gerekli');
     }
 
-    // Combine scenes
-    const allScenes = [];
-    let sceneNumberOffset = 0;
-
-    for (const result of validResults) {
-      if (result.scenes) {
-        const adjustedScenes = result.scenes.map(scene => ({
-          ...scene,
-          number: scene.number + sceneNumberOffset,
-          chunkIndex: result.chunkIndex,
-        }));
-        allScenes.push(...adjustedScenes);
-        sceneNumberOffset = Math.max(sceneNumberOffset, ...result.scenes.map(s => s.number));
-      }
-    }
-
-    // Combine and deduplicate locations
-    const locationMap = new Map();
-    for (const result of validResults) {
-      if (result.locations) {
-        for (const location of result.locations) {
-          const key = `${location.type}-${location.name}`;
-          if (locationMap.has(key)) {
-            const existing = locationMap.get(key);
-            existing.sceneCount += location.sceneCount;
-            existing.estimatedShootingDays += location.estimatedShootingDays;
-          } else {
-            locationMap.set(key, { ...location });
-          }
-        }
-      }
-    }
-
-    // Combine and deduplicate characters
-    const characterMap = new Map();
-    for (const result of validResults) {
-      if (result.characters) {
-        for (const character of result.characters) {
-          if (characterMap.has(character.name)) {
-            const existing = characterMap.get(character.name);
-            existing.sceneCount += character.sceneCount;
-            // Keep the most detailed description
-            if (character.description && character.description.length > existing.description.length) {
-              existing.description = character.description;
-            }
-          } else {
-            characterMap.set(character.name, { ...character });
-          }
-        }
-      }
-    }
-
-    // Combine equipment
-    const allEquipment = [];
-    for (const result of validResults) {
-      if (result.equipment) {
-        allEquipment.push(...result.equipment.map(eq => ({
-          ...eq,
-          chunkIndex: result.chunkIndex,
-        })));
-      }
-    }
-
-    // Create combined summary
-    const totalScenes = allScenes.length;
-    const estimatedRuntime = validResults.reduce((sum, result) => {
-      return sum + (result.partialSummary?.estimatedChunkRuntime || 0);
-    }, 0);
-
-    // Estimate shooting days based on locations and scenes
-    const estimatedShootingDays = Array.from(locationMap.values()).reduce((sum, loc) => {
-      return sum + (loc.estimatedShootingDays || 0);
-    }, 0);
-
-    return {
-      scenes: allScenes,
-      locations: Array.from(locationMap.values()),
-      characters: Array.from(characterMap.values()),
-      equipment: allEquipment,
-      summary: {
-        totalScenes,
-        estimatedRuntime: Math.round(estimatedRuntime),
-        estimatedShootingDays: Math.round(estimatedShootingDays * 10) / 10,
-        chunksAnalyzed: validResults.length,
-        chunksWithErrors: chunkResults.length - validResults.length,
-      },
-      chunkingInfo: {
-        totalChunks: chunkResults.length,
-        successfulChunks: validResults.length,
-        failedChunks: chunkResults.length - validResults.length,
-        chunkDetails: chunkResults.map(result => ({
-          chunkIndex: result.chunkIndex,
-          success: !result.error,
-          error: result.error,
-          chunkInfo: result.chunkInfo,
-        })),
-      },
-    };
-  }
-
-  /**
-   * Enhanced Screenplay Analysis
-   * Combines AI analysis with advanced NLP processing
-   */
-  async analyzeScreenplayEnhanced(text, scenes = [], characters = [], options = {}) {
-    return await this.enhancedAnalysisEngine.analyzeScreenplayEnhanced(
-      text,
-      scenes,
-      characters,
-      options
-    );
-  }
-}
-
-/**
- * Grammar correction levels for different use cases
- */
-export const GRAMMAR_LEVELS = {
-  BASIC: 'basic',
-  STANDARD: 'standard',
-  ADVANCED: 'advanced',
-  PRESERVE_STYLE: 'preserve_style',
-};
-
-/**
- * Specialized prompts for screenplay tasks
- */
-export const SCREENPLAY_PROMPTS = {
-  GRAMMAR_CORRECTION: {
-    system: {
-      [GRAMMAR_LEVELS.BASIC]: `Sen bir metin düzeltme asistanısın. SADECE açık yazım hatalarını düzelt, METNİN TAMAMINI AYNEN KORU.
-
-KESİN KURALLAR:
-- SADECE yanlış yazılmış kelimeleri düzelt (örn: "teh" → "the", "oalcak" → "olacak")
-- SADECE bariz dilbilgisi hatalarını düzelt
-- TÜM metni AYNEN koru - hiçbir kelime, cümle veya satır kaybetme
-- TÜM formatı AYNEN koru
-- Cümleleri yeniden YAZMA
-- YORUM YAPMA, açıklama EKLEME
-- Girdi metnin TAMAMEN aynı uzunlukta olmasını sağla
-- SADECE düzeltilmiş metni döndür
-
-You are a text correction assistant. Fix ONLY obvious typos, KEEP ALL TEXT EXACTLY.
-
-STRICT RULES:
-- Fix ONLY misspelled words
-- Fix ONLY obvious grammar errors
-- Keep ALL text EXACTLY - do not lose any words, sentences, or lines
-- Keep ALL formatting EXACTLY
-- Do NOT rewrite sentences
-- Do NOT add comments
-- Ensure output is EXACTLY same length as input
-- Return ONLY the corrected text`,
-
-      [GRAMMAR_LEVELS.STANDARD]: `Sen profesyonel bir metin editörüsün. SADECE yazım hatalarını düzelt, METNİ TAMAMEN KORU.
-
-KESİN KURALLAR:
-- HER SATIRI AYNEN koru - hiçbir satır kaybetme
-- TÜM formatı koru (sahne başlıkları, karakter isimleri, parantezler)
-- SADECE yazım, dilbilgisi, noktalama hatalarını düzelt
-- Yazım stilini DEĞİŞTİRME
-- Sahne ekleme/çıkarma YAPMA
-- YORUM YAPMA, açıklama EKLEME
-- Girdi ile çıktı aynı uzunlukta olmalı
-- SADECE düzeltilmiş metni döndür
-
-You are a professional text editor. Fix ONLY typos, keep text COMPLETELY intact.
-
-STRICT RULES:
-- Keep EVERY LINE EXACTLY - do not lose any lines
-- Keep ALL formatting
-- Fix ONLY spelling, grammar, punctuation errors
-- Do NOT change style
-- Do NOT add/remove content
-- Do NOT add comments
-- Output must be same length as input
-- Return ONLY corrected text`,
-
-      [GRAMMAR_LEVELS.ADVANCED]: `Sen profesyonel senaryo editörüsün. Düzelt ama TÜM içeriği AYNEN koru.
-
-KESİN KURALLAR:
-- TÜM format yapısını AYNEN koru
-- HER KELİMEYİ koru - hiçbir kelime kaybetme
-- Yazarın sesini koru
-- Tüm sahne başlıklarını, karakter isimlerini koru
-- SADECE düzeltilmiş metni döndür, yorum EKLEME
-- Girdi ve çıktı aynı uzunlukta olmalı
-
-You are a professional screenplay editor. Fix but keep ALL content EXACTLY.
-
-STRICT RULES:
-- Keep ALL format structure EXACTLY
-- Keep EVERY WORD - do not lose any words
-- Maintain author's voice
-- Preserve all scene headers, character names
-- Return ONLY corrected text, NO comments
-- Input and output must be same length`,
-
-      [GRAMMAR_LEVELS.PRESERVE_STYLE]: `Sen nazik bir metin editörüsün. SADECE açık hataları düzelt, TÜM metni AYNEN koru.
-
-NE DÜZELT:
-- Yanlış yazılmış kelimeler ("teh" → "the", "oalcak" → "olacak")
-- Temel dilbilgisi hataları
-
-NE DEĞİŞTİRME:
-- Yazım stili
-- Cümle yapısı
-- Kelime seçimleri
-- Format
-- HİÇBİR YORUMLAMA YAPMA
-- Hiçbir içerik kaybetme
-
-SADECE düzeltilmiş metni döndür, girdi uzunluğunu koru.
-
-You are a gentle text editor. Fix ONLY clear mistakes, keep ALL text EXACTLY.
-
-Return ONLY corrected text, preserve input length.`,
-    },
-
-    buildUserPrompt: (text, level = GRAMMAR_LEVELS.STANDARD) => {
-      const prompts = {
-        [GRAMMAR_LEVELS.BASIC]: `SADECE bariz yazım hatalarını düzelt, TÜM metni AYNEN koru, YORUM YAPMA, AYNI UZUNLUKTA DÖNDÜR:\n\nFix ONLY obvious typos, keep ALL text EXACTLY, NO comments, RETURN SAME LENGTH:\n\n${text}`,
-        [GRAMMAR_LEVELS.STANDARD]: `SADECE yazım hatalarını düzelt, TÜM içeriği AYNEN koru, YORUMLAMA, AYNI UZUNLUKTA:\n\nFix ONLY typos, keep ALL content EXACTLY, NO interpretation, SAME LENGTH:\n\n${text}`,
-        [GRAMMAR_LEVELS.ADVANCED]: `Düzelt ama TÜM kelime ve satırları AYNEN koru, YORUM YOK, AYNI UZUNLUK:\n\nFix but keep ALL words and lines EXACTLY, NO comments, SAME LENGTH:\n\n${text}`,
-        [GRAMMAR_LEVELS.PRESERVE_STYLE]: `SADECE açık hataları düzelt, geri kalanı AYNEN koru, YORUM YAPMA, AYNI UZUNLUK:\n\nFix ONLY clear errors, keep rest EXACTLY, NO comments, SAME LENGTH:\n\n${text}`,
+    try {
+      console.log('🎨 Generating image with Gemini 3 Pro Image Preview...');
+      
+      // Use the exact model name from Google documentation
+      const imageModel = 'gemini-3-pro-image-preview';
+      
+      // Prepare request body for Gemini 3 Pro Image Preview API
+      // Based on official Google documentation format
+      const requestBody = {
+        contents: [{
+          parts: []
+        }],
+        generationConfig: {
+          temperature: options.temperature || 0.7,
+          topP: 0.8,
+          topK: 40,
+          maxOutputTokens: 8192,
+          // Response modalities MUST be at this level for Gemini 3 Pro Image
+          response_modalities: ['TEXT', 'IMAGE']
+        },
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' }
+        ]
       };
 
-      return prompts[level] || prompts[GRAMMAR_LEVELS.STANDARD];
-    },
-  },
+      // Add image configuration if specified (CORRECT PLACEMENT in generationConfig)
+      if (options.aspectRatio || options.imageSize) {
+        requestBody.generationConfig.image_config = {};
+        
+        if (options.aspectRatio) {
+          // Valid values: "1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"
+          requestBody.generationConfig.image_config.aspect_ratio = options.aspectRatio;
+        }
+        
+        if (options.imageSize) {
+          // Valid values: "1K", "2K", "4K" (note: capital K required)
+          requestBody.generationConfig.image_config.image_size = options.imageSize;
+        }
+      }
 
-  SCENE_ANALYSIS: {
-    system: `You are an expert screenplay analyst and production coordinator. Analyze the provided screenplay and extract structured information for production planning.
+      // Add text prompt first
+      requestBody.contents[0].parts.push({
+        text: prompt.trim()
+      });
 
-Return a valid JSON object with the following structure:
-{
-  "scenes": [
-    {
-      "number": 1,
-      "header": "INT. BEDROOM - NIGHT",
-      "intExt": "INT",
-      "location": "BEDROOM",
-      "timeOfDay": "NIGHT",
-      "characters": ["CHARACTER1"],
-      "estimatedDuration": 2,
-      "description": "Brief scene description"
+      // Add reference images if provided (up to 14 images as per Gemini 3 Pro spec)
+      if (options.referenceImages && Array.isArray(options.referenceImages)) {
+        const maxImages = Math.min(options.referenceImages.length, 14);
+        
+        for (let i = 0; i < maxImages; i++) {
+          const refImage = options.referenceImages[i];
+          if (refImage && refImage.data && refImage.mimeType) {
+            let base64Data = refImage.data;
+            
+            // Remove data URL prefix if present (data:image/png;base64,)
+            if (base64Data.includes(',')) {
+              base64Data = base64Data.split(',')[1];
+            }
+            
+            requestBody.contents[0].parts.push({
+              inline_data: {
+                mime_type: refImage.mimeType,
+                data: base64Data
+              }
+            });
+          }
+        }
+        
+        console.log(`📸 Added ${maxImages} reference image(s) to Gemini 3 Pro Image request`);
+      }
+
+      // Use the correct API endpoint format for Gemini 3 Pro Image Preview
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent`;
+
+      console.log('🌐 Calling Gemini 3 Pro Image API...', {
+        model: imageModel,
+        endpoint: url,
+        hasReferenceImages: !!(options.referenceImages?.length),
+        aspectRatio: options.aspectRatio,
+        imageSize: options.imageSize
+      });
+
+      const response = await axios.post(url, requestBody, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': this.apiKey
+        },
+        timeout: 180000 // 3 minutes timeout for image generation
+      });
+
+      console.log('📡 Gemini 3 Pro Image API Response Status:', response.status);
+
+      if (response.status !== 200) {
+        throw new Error(`Gemini API returned status ${response.status}: ${response.statusText}`);
+      }
+
+      const data = response.data;
+      console.log('📦 API Response structure:', {
+        hasCandidates: !!(data.candidates),
+        candidatesLength: data.candidates?.length || 0,
+        firstCandidateKeys: data.candidates?.[0] ? Object.keys(data.candidates[0]) : [],
+        finishReason: data.candidates?.[0]?.finishReason
+      });
+
+      if (data.candidates && data.candidates.length > 0) {
+        const candidate = data.candidates[0];
+
+        // Check if response was blocked
+        if (candidate.finishReason === 'SAFETY') {
+          throw new Error('Görsel üretimi Gemini güvenlik filtreleri tarafından engellendi. Lütfen açıklamayı değiştirin.');
+        }
+
+        if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+          // Look for image data in parts
+          for (const part of candidate.content.parts) {
+            // Check for inline_data (correct format)
+            if (part.inline_data && part.inline_data.data && part.inline_data.mime_type) {
+              console.log('✅ Image generated successfully!');
+              return {
+                success: true,
+                imageData: part.inline_data.data,
+                mimeType: part.inline_data.mime_type,
+                provider: 'gemini-3-pro-image',
+                model: imageModel,
+                prompt: prompt,
+                timestamp: new Date().toISOString()
+              };
+            }
+            
+            // Also check for thought_signature which might contain image data
+            if (part.thought_signature) {
+              console.log('🤔 Found thought signature (thinking process)');
+              // This might be part of the thinking process, continue checking
+            }
+          }
+          
+          // Log all parts for debugging
+          console.log('🔍 Response parts analysis:');
+          candidate.content.parts.forEach((part, index) => {
+            console.log(`Part ${index}:`, {
+              hasText: !!part.text,
+              hasInlineData: !!part.inline_data,
+              hasThoughtSignature: !!part.thought_signature,
+              isThought: !!part.thought,
+              keys: Object.keys(part)
+            });
+          });
+        }
+      }
+
+      // Enhanced error message with response structure
+      const responseStructure = JSON.stringify(data, null, 2).substring(0, 500);
+      throw new Error(`Gemini 3 Pro Image API'den geçerli görsel verisi alınamadı. Response: ${responseStructure}...`);
+    } catch (error) {
+      console.error('❌ Gemini Image Generation Error:', {
+        message: error.message,
+        name: error.name,
+        prompt: prompt.substring(0, 100) + '...',
+        responseStatus: error.response?.status,
+        responseData: error.response?.data
+      });
+
+      // Provide more specific error messages
+      if (error.response) {
+        const status = error.response.status;
+        const errorData = error.response.data;
+        
+        if (status === 400) {
+          const errorMsg = errorData?.error?.message || 'API isteği hatalı';
+          throw new Error(`🚫 Geçersiz istek (400): ${errorMsg}`);
+        } else if (status === 401) {
+          throw new Error('🔑 Gemini API anahtarı geçersiz veya eksik');
+        } else if (status === 403) {
+          throw new Error('🚫 Gemini API erişimi reddedildi. Kotanızı veya izinlerinizi kontrol edin.');
+        } else if (status === 404) {
+          throw new Error(`🔍 Model bulunamadı: ${imageModel}. Model adını kontrol edin.`);
+        } else if (status === 429) {
+          throw new Error('⏳ Gemini API rate limit aşıldı. Lütfen biraz bekleyin.');
+        } else {
+          throw new Error(`🌐 Gemini API hatası (${status}): ${errorData?.error?.message || error.message}`);
+        }
+      }
+
+      throw error;
     }
-  ],
-  "locations": [
-    {
-      "name": "BEDROOM",
-      "type": "INT",
-      "sceneCount": 1,
-      "estimatedShootingDays": 0.5
-    }
-  ],
-  "characters": [
-    {
-      "name": "CHARACTER NAME",
-      "sceneCount": 5,
-      "description": "Brief character description"
-    }
-  ],
-  "equipment": [
-    {
-      "item": "Camera crane",
-      "scenes": [1, 5],
-      "reason": "High angle shot mentioned"
-    }
-  ],
-  "summary": {
-    "totalScenes": 10,
-    "estimatedRuntime": 90,
-    "estimatedShootingDays": 15
   }
 }
-
-Return ONLY valid JSON, no additional text or markdown.`,
-
-    buildUserPrompt: (text) =>
-      `Analyze this screenplay and provide a detailed breakdown:\n\n${text.substring(0, 50000)}`,
-  },
-};
 
 export default AIHandler;

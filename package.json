@@ -58,6 +58,7 @@
       "icon": "assets/icon.icns"
     },
     "win": {
+      "icon": "icon.ico",
       "target": [
         {
           "target": "nsis",

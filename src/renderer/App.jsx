@@ -1,26 +1,53 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useScriptStore } from './store/scriptStore';
 import { useReaderStore } from './store/readerStore';
+import { useFeatureStore } from './store/featureStore';
+import { useAIStore } from './store/aiStore';
 import TabbedSidebar from './components/TabbedSidebar';
 import MultiScriptImporter from './components/MultiScriptImporter';
 import TextEditor from './components/TextEditor';
 import AnalysisPanel from './components/AnalysisPanel';
-import SpeedReader from './components/SpeedReader';
-import AIStoryboard from './components/SimpleStoryboard';
 import Header from './components/Header';
 
+// Lazy load heavy components
+const SpeedReader = React.lazy(() => import('./components/SpeedReader'));
+const AIStoryboard = React.lazy(() => import('./components/SimpleStoryboard'));
+const ProfessionalStoryboard = React.lazy(() => import('./components/ProfessionalStoryboard'));
+
 function App() {
-  const { currentView, scripts, currentScriptId, isAnalyzing, analysisProgress, getCurrentScript } = useScriptStore();
+  const { currentView, scripts, currentScriptId, isAnalyzing, analysisProgress, isStoryboardProcessing, storyboardProgress, getCurrentScript } = useScriptStore();
   const { isFullscreen } = useReaderStore();
+  const { features } = useFeatureStore();
+  const { getConfig, setGeminiModel } = useAIStore();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
 
   const currentScript = getCurrentScript();
+
+  // Global fix for deprecated Gemini models
+  useEffect(() => {
+    const config = getConfig();
+    const currentGeminiModel = config?.gemini?.model;
+    
+    if (currentGeminiModel === 'gemini-1.5-flash-latest' || 
+        currentGeminiModel === 'gemini-1.5-flash' || 
+        currentGeminiModel === 'gemini-1.5-pro') {
+      console.log('🚨 Global fix: Deprecated Gemini model detected:', currentGeminiModel);
+      console.log('🔄 Auto-correcting to: gemini-3-pro-preview');
+      setGeminiModel('gemini-3-pro-preview');
+      
+      // Clear localStorage cache
+      localStorage.removeItem('scriptmaster-ai-settings');
+      localStorage.removeItem('ai-store');
+    }
+  }, []);
 
   // In fullscreen mode, hide everything except the reader
   if (isFullscreen && currentView === 'reader') {
     return (
       <div className="h-screen w-screen bg-cinema-black">
-        <SpeedReader />
+        <Suspense fallback={<div className="h-screen flex items-center justify-center text-cinema-text">Yükleniyor...</div>}>
+          <SpeedReader />
+        </Suspense>
       </div>
     );
   }
@@ -30,26 +57,7 @@ function App() {
       {/* Header */}
       <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
-      {/* Global Analysis Progress Bar */}
-      {isAnalyzing && analysisProgress && (
-        <div className="bg-cinema-dark border-b border-cinema-gray px-4 py-3 z-10">
-          <div className="flex items-center justify-between text-sm text-cinema-text-dim mb-2">
-            <span className="font-medium">🎬 {analysisProgress.message}</span>
-            {analysisProgress.currentChunk && analysisProgress.totalChunks && (
-              <span className="text-xs">
-                Chunk {analysisProgress.currentChunk} / {analysisProgress.totalChunks}
-              </span>
-            )}
-            <span className="font-bold text-cinema-accent">{Math.round(analysisProgress.progress || 0)}%</span>
-          </div>
-          <div className="w-full bg-cinema-gray-light rounded-full h-2.5">
-            <div
-              className="bg-gradient-to-r from-cinema-accent to-cinema-accent/70 h-2.5 rounded-full transition-all duration-300 shadow-lg"
-              style={{ width: `${analysisProgress.progress || 0}%` }}
-            />
-          </div>
-        </div>
-      )}
+      {/* No global progress bar */}
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
@@ -72,8 +80,39 @@ function App() {
             <>
               {currentView === 'editor' && <TextEditor />}
               {currentView === 'analysis' && <AnalysisPanel />}
-              {currentView === 'reader' && <SpeedReader />}
-              {currentView === 'scenes' && <AIStoryboard />}
+              
+              {/* Speed Reader - Always available */}
+              {currentView === 'reader' && (
+                <Suspense fallback={<div className="flex items-center justify-center h-full text-cinema-text">Hızlı okuma yükleniyor...</div>}>
+                  <SpeedReader />
+                </Suspense>
+              )}
+              
+              {/* Storyboard - Unified professional workflow */}
+              {currentView === 'storyboard' && features.enable_storyboard && (
+                <Suspense fallback={<div className="flex items-center justify-center h-full text-cinema-text">Storyboard yükleniyor...</div>}>
+                  <ProfessionalStoryboard />
+                </Suspense>
+              )}
+              
+              {/* Show message if trying to access disabled storyboard module */}
+              {currentView === 'storyboard' && !features.enable_storyboard && (
+                <div className="flex flex-col items-center justify-center h-full text-cinema-text p-8">
+                  <span className="text-6xl mb-4">🎨</span>
+                  <h3 className="text-2xl font-bold mb-2">Storyboard Modülü Kapalı</h3>
+                  <p className="text-cinema-text-dim text-center mb-4">
+                    Bu özelliği kullanmak için Ayarlar &gt; Modüler Özellikler bölümünden etkinleştirin.
+                  </p>
+                  <button
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('openUnifiedSettings', { detail: { activeTab: 'modules' } }));
+                    }}
+                    className="px-6 py-3 bg-cinema-accent text-cinema-black rounded-lg font-medium hover:bg-cinema-accent/90 transition-colors"
+                  >
+                    Ayarları Aç
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>

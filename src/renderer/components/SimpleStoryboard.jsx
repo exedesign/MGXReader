@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useScriptStore } from '../store/scriptStore';
 import { useAIStore } from '../store/aiStore';
 import AIHandler, { AI_PROVIDERS } from '../utils/aiHandler';
+import { analysisStorageService } from '../utils/analysisStorageService';
 
 export default function SimpleStoryboard() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -12,19 +13,105 @@ export default function SimpleStoryboard() {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [editingIndex, setEditingIndex] = useState(null);
   const [editPrompt, setEditPrompt] = useState('');
+  const [hasStoredStoryboard, setHasStoredStoryboard] = useState(false);
+  const [isLoadingStored, setIsLoadingStored] = useState(true);
   
   const { getCurrentScript, currentScriptId } = useScriptStore();
-  const { geminiApiKey } = useAIStore();
+  const { geminiApiKey, getAIHandler, provider, geminiImageModel } = useAIStore();
+  
+  // Debug: Store'dan gelen image model değerini kontrol et
+  console.log('🏪 Store geminiImageModel değeri:', geminiImageModel);
   const { t } = useTranslation();
   
   const currentScript = getCurrentScript();
   
-  // Load existing storyboards
+  // Auto-load stored storyboard when script changes
   useEffect(() => {
-    if (currentScript?.simpleStoryboard) {
-      setStoryboards(currentScript.simpleStoryboard || []);
-    }
-  }, [currentScript]);
+    const loadStoredStoryboard = async () => {
+      if (!currentScript) {
+        setScenes([]);
+        setStoryboards([]);
+        setHasStoredStoryboard(false);
+        setIsLoadingStored(false);
+        return;
+      }
+
+      setIsLoadingStored(true);
+      const scriptText = currentScript?.scriptText || currentScript?.cleanedText;
+      const fileName = currentScript?.fileName || currentScript?.name || 'untitled';
+
+      try {
+        console.log('🔍 Loading storyboard for script:', fileName);
+        
+        // Priority 1: Check script store for existing storyboard and scenes
+        if (currentScript?.simpleStoryboard?.length > 0 || currentScript?.storyboardScenes?.length > 0) {
+          if (currentScript?.simpleStoryboard?.length > 0) {
+            setStoryboards(currentScript.simpleStoryboard);
+            setHasStoredStoryboard(true);
+            console.log('📋 Loaded storyboard from script store:', currentScript.simpleStoryboard.length, 'items');
+          }
+          
+          if (currentScript?.storyboardScenes?.length > 0) {
+            setScenes(currentScript.storyboardScenes);
+            console.log('📋 Loaded scenes from script store:', currentScript.storyboardScenes.length, 'scenes');
+          }
+          
+          setIsLoadingStored(false);
+          return;
+        }
+
+        // Priority 2: Check persistent storage with multiple keys
+        if (scriptText && fileName) {
+          const possibleKeys = [
+            `storyboard_${fileName}`,
+            `storyboard_${fileName.replace(/\.[^/.]+$/, "")}`, // without extension
+            fileName,
+            fileName.replace(/\.[^/.]+$/, "")
+          ];
+          
+          for (const storyboardKey of possibleKeys) {
+            try {
+              const storedStoryboard = await analysisStorageService.loadAnalysisByKey(storyboardKey);
+              
+              if (storedStoryboard?.storyboardData || storedStoryboard?.analysisData) {
+                const storyboardData = storedStoryboard.storyboardData || storedStoryboard.analysisData?.storyboardData;
+                const scenesData = storedStoryboard.scenes || storedStoryboard.analysisData?.scenes;
+                
+                if (storyboardData?.length > 0) {
+                  setStoryboards(storyboardData);
+                  setHasStoredStoryboard(true);
+                  console.log('🎬 Loaded storyboard from persistent storage with key:', storyboardKey);
+                }
+                
+                if (scenesData?.length > 0) {
+                  setScenes(scenesData);
+                  console.log('🎬 Loaded scenes from persistent storage:', scenesData.length, 'scenes');
+                }
+                
+                // Update script store with loaded data
+                const { updateScript } = useScriptStore.getState();
+                updateScript(currentScript.id, {
+                  simpleStoryboard: storyboardData || [],
+                  storyboardScenes: scenesData || [],
+                  updatedAt: new Date().toISOString()
+                });
+                
+                break; // Exit loop on successful load
+              }
+            } catch (keyError) {
+              console.warn(`Failed to load with key ${storyboardKey}:`, keyError.message);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load stored storyboard:', error);
+      } finally {
+        setIsLoadingStored(false);
+      }
+    };
+
+    loadStoredStoryboard();
+  }, [currentScript?.id, currentScript?.fileName]); // Depend on script ID and filename
   
   // Analyze script and extract scenes
   const analyzeScript = async () => {
@@ -33,13 +120,45 @@ export default function SimpleStoryboard() {
       alert('Senaryo metni veya Google Gemini API key bulunamadı!');
       return;
     }
+
+    // Check if storyboard already exists and warn user
+    if (hasStoredStoryboard && storyboards.length > 0) {
+      const shouldOverwrite = confirm(
+        '🎬 Bu senaryo için storyboard zaten mevcut.\n\n' +
+        'Yeni analiz yapmak mevcut storyboard\'u yeniden oluşturacak. Devam etmek istiyor musunuz?'
+      );
+      if (!shouldOverwrite) return;
+    }
+    
+    // Çok uzun senaryolar için uyarı ver ve optimize et
+    // API key kontrolü - kullanıcı dostu hata mesajı
+    if (!geminiApiKey || geminiApiKey.trim() === '') {
+      alert(
+        '⚠️ Gemini API Key Bulunamadı\n\n' +
+        'Lütfen önce Ayarlar > AI Sağlayıcıları bölümünden Gemini API key ekleyin.\n\n' +
+        'API key almak için: https://aistudio.google.com/app/apikey'
+      );
+      return;
+    }
+    
+    let optimizedText = scriptText;
+    if (scriptText.length > 50000) {
+      const confirmed = confirm(
+        'Senaryo çok uzun (50.000+ karakter). Bu analiz uzun sürebilir.\n\n' +
+        'Devam etmek istiyor musunuz? (İptal için "Cancel")'
+      );
+      if (!confirmed) return;
+      
+      // Sadece ilk 50.000 karakteri al
+      optimizedText = scriptText.substring(0, 50000) + '\n\n[... senaryo devamı kesildi]';
+    }
     
     setIsAnalyzing(true);
     
     try {
       const aiHandler = new AIHandler({
         provider: AI_PROVIDERS.GEMINI,
-        apiKey: geminiApiKey,
+        geminiApiKey: geminiApiKey,
         model: 'gemini-3-pro-preview',
         temperature: 1.0
       });
@@ -47,7 +166,7 @@ export default function SimpleStoryboard() {
       const analysisPrompt = `Bu senaryoyu analiz et ve storyboard için uygun sahneleri çıkar. Her sahne için şu bilgileri ver:
 
 SENARYO:
-${scriptText}
+${optimizedText}
 
 Lütfen şu formatta cevap ver (JSON array):
 [
@@ -62,7 +181,11 @@ Lütfen şu formatta cevap ver (JSON array):
 
 Sadece ana sahneleri seç, çok detaya girme. En fazla 10-15 sahne çıkar.`;
 
-      const result = await aiHandler.processPrompt(analysisPrompt);
+      const result = await aiHandler.generateText(
+        'Sen profesyonel bir senaryo analizcisisin. Senaryo metinlerini analiz edip sahnelere ayırırsın.',
+        analysisPrompt,
+        { temperature: 0.7, maxTokens: 4096 }
+      );
       
       // Parse the JSON response
       const jsonMatch = result.match(/\[[\s\S]*\]/);
@@ -76,11 +199,37 @@ Sadece ana sahneleri seç, çok detaya girme. En fazla 10-15 sahne çıkar.`;
           prompt: '',
           isGenerating: false
         })));
+        
+        // Save scenes and initial storyboard structure to script store
+        const { updateScript } = useScriptStore.getState();
+        updateScript(currentScriptId, {
+          storyboardScenes: extractedScenes,
+          simpleStoryboard: extractedScenes.map(() => ({
+            imageUrl: null,
+            prompt: '',
+            isGenerating: false
+          })),
+          updatedAt: new Date().toISOString()
+        });
+        
+        // Save to persistent storage with scenes data
+        const initialStoryboard = extractedScenes.map(() => ({
+          imageUrl: null,
+          prompt: '',
+          isGenerating: false
+        }));
+        saveStoryboardToStorage(initialStoryboard, extractedScenes);
       }
       
     } catch (error) {
       console.error('Script analysis failed:', error);
-      alert(`Senaryo analizi başarısız: ${error.message}`);
+      
+      let errorMessage = error.message;
+      if (error.message.includes('timeout') || error.code === 'ECONNABORTED') {
+        errorMessage = 'Analiz süresi çok uzun sürdü. Daha kısa bir senaryo parçası deneyin veya internet bağlantınızı kontrol edin.';
+      }
+      
+      alert(`Senaryo analizi başarısız: ${errorMessage}`);
     }
     
     setIsAnalyzing(false);
@@ -135,31 +284,88 @@ Sadece ana sahneleri seç, çok detaya girme. En fazla 10-15 sahne çıkar.`;
       }
     }
     
-    // Save to script
+    // Save to script store with both scenes and storyboards
     const { updateScript } = useScriptStore.getState();
     updateScript(currentScriptId, {
+      storyboardScenes: scenes, // Preserve scenes data
       simpleStoryboard: newStoryboards,
       updatedAt: new Date().toISOString()
     });
     
+    // Also save to persistent storage
+    saveStoryboardToStorage(newStoryboards, scenes);
+    
     setIsGenerating(false);
     setProgress({ current: 0, total: 0 });
+  };
+
+  // Auto-save storyboard to persistent storage
+  const saveStoryboardToStorage = async (storyboardData, scenesData = null) => {
+    const scriptText = currentScript?.scriptText || currentScript?.cleanedText;
+    const fileName = currentScript?.fileName || 'untitled';
+    
+    if (!scriptText || !fileName || !storyboardData?.length) return;
+
+    try {
+      const storyboardKey = `storyboard_${fileName}`;
+      await analysisStorageService.saveAnalysis(
+        scriptText,
+        storyboardKey,
+        { 
+          storyboardData,
+          scenes: scenesData || scenes // Include scenes data for complete restoration
+        },
+        {
+          fileType: 'storyboard',
+          provider: 'gemini',
+          analysisType: 'storyboard',
+          sceneCount: storyboardData.length,
+          timestamp: new Date().toISOString()
+        }
+      );
+      setHasStoredStoryboard(true);
+      console.log('💾 Storyboard automatically saved to storage');
+    } catch (error) {
+      console.error('Failed to save storyboard:', error);
+    }
   };
   
   // Generate single image
   const generateImage = async (prompt) => {
-    if (!geminiApiKey) {
-      throw new Error('Google Gemini API key bulunamadı');
+    if (!geminiApiKey || geminiApiKey.trim() === '') {
+      alert(
+        '⚠️ Gemini API Key Bulunamadı\n\n' +
+        'Görsel oluşturmak için Ayarlar > AI Sağlayıcıları bölümünden Gemini API key ekleyin.\n\n' +
+        'API key almak için: https://aistudio.google.com/app/apikey'
+      );
+      throw new Error('Gemini API key is required');
     }
     
     try {
-      const aiHandler = new AIHandler({
-        provider: AI_PROVIDERS.GEMINI,
-        apiKey: geminiApiKey,
-        model: 'gemini-2.0-flash'
+      // Use configured AI handler from store (includes image model)
+      const aiHandler = getAIHandler();
+      
+      // Set the API key but preserve imageModel configuration
+      aiHandler.apiKey = geminiApiKey;
+      
+      // Ensure imageModel is set to the current store configuration
+      if (provider === 'gemini' && geminiImageModel) {
+        aiHandler.imageModel = geminiImageModel;
+      }
+      
+      console.log('🎨 Storyboard Image Generation:', {
+        provider: aiHandler.provider,
+        configuredImageModel: geminiImageModel,
+        handlerImageModel: aiHandler.imageModel,
+        textModel: aiHandler.model,
+        apiKeyPresent: !!geminiApiKey,
+        finalImageModel: aiHandler.imageModel
       });
       
-      const result = await aiHandler.generateImage(prompt, { size: '1024x1024' });
+      const result = await aiHandler.generateImage(prompt, { 
+        size: '1024x1024'
+        // imageModel already set in handler configuration
+      });
       return result;
       
     } catch (error) {
@@ -260,6 +466,16 @@ Sadece ana sahneleri seç, çok detaya girme. En fazla 10-15 sahne çıkar.`;
             <span className="bg-green-600 text-white text-sm px-3 py-1 rounded-full">
               Google Gemini
             </span>
+            {isLoadingStored && (
+              <span className="text-xs text-cinema-text-dim flex items-center gap-1">
+                <span className="animate-pulse">🔍</span> Loading stored...
+              </span>
+            )}
+            {hasStoredStoryboard && !isLoadingStored && (
+              <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">
+                💾 Auto-saved
+              </span>
+            )}
           </div>
           
           <div className="flex items-center gap-3">

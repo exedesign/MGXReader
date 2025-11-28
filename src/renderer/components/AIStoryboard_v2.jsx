@@ -46,24 +46,71 @@ export default function AIStoryboard() {
 
   // Load existing storyboard data
   useEffect(() => {
-    if (currentScript?.storyboard) {
-      setGeneratedImages(currentScript.storyboard || {});
-    }
-    // Load manual scenes from storage
-    const stored = localStorage.getItem(`manual-scenes-${currentScriptId}`);
-    if (stored) {
-      try {
-        setManualScenes(JSON.parse(stored));
-      } catch (e) {
-        console.warn('Failed to load manual scenes:', e);
+    const loadStoryboardData = async () => {
+      if (!currentScript) {
+        setGeneratedImages({});
+        setManualScenes([]);
+        return;
       }
-    }
-    // Load storyboard prompt
-    const mainPrompt = getPrompt('storyboard', 'main_storyboard');
-    if (mainPrompt) {
-      setStoryboardPrompt(mainPrompt.user || '');
-    }
-  }, [currentScript, currentScriptId, getPrompt]);
+
+      console.log('🔍 Loading storyboard data for script:', currentScript.id);
+
+      try {
+        // Priority 1: Load from current script store
+        if (currentScript?.storyboard && Object.keys(currentScript.storyboard).length > 0) {
+          setGeneratedImages(currentScript.storyboard);
+          console.log('📋 Loaded storyboard images from script store');
+        }
+
+        // Priority 2: Load manual scenes from localStorage
+        const stored = localStorage.getItem(`manual-scenes-${currentScriptId}`);
+        if (stored) {
+          try {
+            const parsedScenes = JSON.parse(stored);
+            setManualScenes(parsedScenes);
+            console.log('📋 Loaded manual scenes from localStorage:', parsedScenes.length);
+          } catch (e) {
+            console.warn('Failed to parse manual scenes:', e);
+            setManualScenes([]);
+          }
+        }
+
+        // Priority 3: Try to load storyboard from persistent storage
+        const scriptText = currentScript?.scriptText || currentScript?.cleanedText;
+        const fileName = currentScript?.fileName || currentScript?.name;
+        
+        if (scriptText && fileName && (!currentScript?.storyboard || Object.keys(currentScript.storyboard).length === 0)) {
+          const storyboardKey = `storyboard_v2_${fileName}`;
+          const storedStoryboard = await analysisStorageService.loadAnalysisByKey(storyboardKey);
+          
+          if (storedStoryboard?.storyboardData) {
+            const storyboardImages = storedStoryboard.storyboardData.generatedImages || {};
+            setGeneratedImages(storyboardImages);
+            console.log('💾 Loaded storyboard from persistent storage');
+            
+            // Update script store with loaded data
+            const { updateScript } = useScriptStore.getState();
+            updateScript(currentScript.id, {
+              storyboard: storyboardImages,
+              updatedAt: new Date().toISOString()
+            });
+          }
+        }
+
+        // Load storyboard prompt
+        const mainPrompt = getPrompt('storyboard', 'main_storyboard');
+        if (mainPrompt) {
+          setStoryboardPrompt(mainPrompt.user || '');
+          console.log('📋 Loaded storyboard prompt');
+        }
+
+      } catch (error) {
+        console.error('Failed to load storyboard data:', error);
+      }
+    };
+
+    loadStoryboardData();
+  }, [currentScript?.id, currentScriptId, getPrompt]); // Track script and ID changes
 
   // Save manual scenes to localStorage
   const saveManualScenes = (scenes) => {

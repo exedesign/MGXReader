@@ -24,11 +24,23 @@ export default function PromptsTab({
 
   const categories = {
     analysis: { name: 'Senaryo Analizi', icon: '🎬', desc: 'Karakter, hikaye, LED Volume analizi' },
-    speed_reading: { name: 'Hızlı Okuma', icon: '⚡', desc: 'Özet ve anahtar kelimeler' }
+    storyboard: { name: 'Storyboard Üretimi', icon: '🎯', desc: 'Profesyonel storyboard ve görsel analiz' }
   };
 
-  // Provider'a göre prompt'ları sırala - Llama optimize olanları önce göster
+  // Provider'a göre prompt'ları sırala - Gemini 3 optimize olanları önce göster
   const sortPromptsByProvider = (promptTypes) => {
+    if (provider === 'gemini') {
+      // Gemini provider için Gemini 3 optimize promptları önce göster
+      return promptTypes.sort((a, b) => {
+        const aOptimized = a.key.includes('gemini3') || a.key.includes('g3');
+        const bOptimized = b.key.includes('gemini3') || b.key.includes('g3');
+        
+        if (aOptimized && !bOptimized) return -1;
+        if (!aOptimized && bOptimized) return 1;
+        return 0;
+      });
+    }
+    
     if (provider === 'local' || provider === 'mlx') {
       // Local provider'lar için Llama optimize promptları önce göster
       return promptTypes.sort((a, b) => {
@@ -94,15 +106,15 @@ export default function PromptsTab({
         <h3 className="text-lg font-semibold text-cinema-accent mb-2">🎯 AI Analiz Ayarları</h3>
         <p className="text-sm text-cinema-text-dim">
           Yapay zeka analiz komutlarını düzenleyin, yeni analiz türleri ekleyin veya mevcut analizleri özelleştirin. 
-          Markdown formatında veya sade metinle AI'a talimatlar verebilirsiniz.
+          Google Gemini 3.0 için optimize edilmiş promptlar ile gelişmiş analiz yetenekleri.
         </p>
         <div className="mt-2 text-xs text-cinema-text-dim bg-cinema-black/30 p-2 rounded">
-          💡 <strong>İpucu:</strong> LED Virtual Production, karakter analizi, hikaye yapısı gibi tüm analiz türleri burada yönetilir.
+          💡 <strong>İpucu:</strong> Gemini 3.0 ile LED Virtual Production, profesyonel storyboard, karakter analizi ve hikaye yapısı analizleri. 🟣 Gemini 3 optimize promptları önceliklidir.
         </div>
       </div>
 
       {/* Categories */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         {Object.entries(categories).map(([key, cat]) => (
           <button
             key={key}
@@ -163,6 +175,11 @@ export default function PromptsTab({
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-cinema-text">{name}</span>
+                      {(key.includes('gemini3') || key.includes('g3')) && provider === 'gemini' && (
+                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">
+                          🟣 Gemini 3
+                        </span>
+                      )}
                       {key.includes('llama') && (provider === 'local' || provider === 'mlx') && (
                         <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs">
                           🦙 Optimize

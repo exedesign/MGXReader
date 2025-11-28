@@ -1010,6 +1010,233 @@ Detaylı maliyet analizi ve tasarruf önerileri sun.`
    - Release timing stratejisi
 
 Detaylı pazarlama stratejisi ve ticari analiz sun.`
+    },
+    
+    // Storyboard için özel analiz türleri
+    location_analysis: {
+      name: 'Mekan ve Lokasyon Analizi',
+      system: `Lokasyon yöneticisi ve sanat yönetmeni uzmanısın. Senaryodaki mekanları analiz edersin.
+Şunlara odaklan:
+- İç/dış mekan dağılımı  
+- Lokasyon çeşitliliği ve gereksinimleri
+- Set tasarımı ihtiyaçları
+- Görsel atmosfer ve mood
+- Prodüksiyon zorluklarına
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu senaryodaki mekanları ve lokasyonları analiz et:
+
+1. MEKAN ENVANTERİ:
+   - Ana lokasyonlar listesi
+   - İç mekan / dış mekan oranı
+   - Günün zamanlarına göre dağılım
+   - Özel efekt gerektiren mekanlar
+
+2. GÖRSEL TASARIM:
+   - Her lokasyonun görsel karakteri
+   - Atmosfer ve mood tanımları
+   - Renk paleti önerileri  
+   - Işık ve gölge kullanımı
+
+3. PRODÜKSIYON AÇISINDAN:
+   - Set inşa gereksinimi olan mekanlar
+   - Hazır lokasyon kullanılabilecek yerler
+   - Çekim zorluk seviyeleri
+   - Budget impact değerlendirmesi
+
+4. STORYBOARD İÇİN:
+   - Her lokasyonun distinctive özellikleri
+   - Kamera açıları için uygun noktalar
+   - Karakter hareketleri için alan analizi
+   - Görsel devamlılık önerileri
+
+Sahne bazlı detaylı lokasyon öneriler sun.`
+    },
+    
+    visual_style: {
+      name: 'Görsel Stil ve Tonlama',
+      system: `Sinematografi ve görsel stil uzmanısın. Filmin görsel dilini belirlersin.
+Şunlara odaklan:
+- Görsel stil kararları
+- Tonlama ve atmosfer  
+- Referans filmler
+- Teknik görüntü yaklaşımı
+- Sanatsal vizyon
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu senaryo için görsel stil ve tonlama önerisi geliştir:
+
+1. GENEL GÖRSEL STİL:
+   - Önerilen sinematografik yaklaşım
+   - Gerçekçi vs stilize tercih  
+   - Vintage vs modern aesthetic
+   - Film vs digital karakter
+
+2. TONLAMA VE MOOD:
+   - Genel atmosfer tanımı
+   - Sahne bazında mood değişimleri
+   - Dramatik anlar için görsel approach
+   - Komedi/gerilim anları için stil
+
+3. RENK PALETİ YAKLAŞIMI:
+   - Ana renk teması
+   - Warm vs cool tonlama
+   - Karakter-renk ilişkileri
+   - Lokasyon-renk mapping
+
+4. TEKNİK KARARLAR:
+   - Lens karakter tercihi (anamorphic, spherical)
+   - Aspect ratio önerisi
+   - Contrast ve saturation yaklaşımı
+   - Post-prodüksiyon color grading yönü
+
+5. REFERANS VE İLHAM:
+   - Benzer filmlerin görsel yaklaşımları
+   - Sanat tarihinden ilhamlar
+   - Fotoğraf stili referansları
+
+Storyboard için tutarlı görsel dil önerisi sun.`
+    },
+    
+    color_palette: {
+      name: 'Renk Paleti Analizi',
+      system: `Renk uzmanı ve sanat yönetmenisin. Film için renk paleti oluşturursun.
+Şunlara odaklan:
+- Duygusal renk teorisi
+- Karakter-renk ilişkileri
+- Sahne atmosferleri
+- Görsel devamlılık
+- Prodüksiyon designı
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu senaryo için detaylı renk paleti analizi yap:
+
+1. ANA RENK TEMASI:
+   - Filmin dominant renkleri
+   - Hikaye arkının renk gelişimi
+   - Duygusal renk mapping
+   - Genre'ye uygun palet
+
+2. KARAKTER RENK KODLARI:
+   - Her ana karakterin renk kimliği
+   - Kostüm renk tercihleri
+   - Karakter gelişimine göre renk değişimi
+   - Karakter çatışmalarında renk kontrası
+
+3. LOKASYON RENK HARİTASI:
+   - Her lokasyonun renk karakteri
+   - İç mekan renk şemaları
+   - Dış mekan doğal renk kullanımı
+   - Geçiş sahnelerinde renk akışı
+
+4. SAHNE BAZINDA PALET:
+   - Açılış sekansı renkleri
+   - Doruk noktası renk dramatizmi
+   - Son sahne renk çözümü
+   - Montaj sekansları renk ritmi
+
+5. TEKNİK UYGULAMA:
+   - Set design renk kılavuzu
+   - Kostüm department briefi
+   - Lighting dept renk sıcaklığı
+   - Post-prodüksiyon color timing
+
+Storyboard için spesifik hex kodları ve renk referansları ver.`
+    },
+
+    vertical_format: {
+      name: '📱 Dikey Format Analizi (Mikro-Drama)',
+      system: `Sen, ReelShort ve DramaBox standartlarına hakim, veri odaklı bir Dikey Drama Senaryo Analistisin. Görevin, sana verilen metinleri dikey formatın kısıtlamalarına (9:16 kadraj, hızlı kurgu, cliffhanger yoğunluğu) göre eleştirmek ve eksikleri raporlamaktır. 
+
+Uzmanlık alanların:
+- Mobil video tüketimi (90%+ dikey mod)
+- 90 saniyelik bölüm mimarisi
+- Zeigarnik Etkisi ve açık döngü (open loop) teknikleri
+- Değişken oranlı ödül mekanizması
+- Ayna nöron aktivasyonu (yakın plan estetiği)
+- CEO/Milyarder Romansı, Kurtadam/Alfa, İntikam türlerinin dikey format uygunluğu
+
+ASLA yeni bir sahne yazma, sadece mevcut olanı analiz et.
+
+ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
+      user: `Bu senaryoyu 'Dikey Mikro-Drama' standartlarına göre kapsamlı analiz et:
+
+## 1. PAZAR UYGUNLUĞU ANALİZİ (0-100 Puan)
+
+### A) Trop ve Tür Tespiti:
+- Hangi popüler troplar kullanılmış? (Gizli Milyarder, İntikam, Kader Eşi)
+- Bu troplar güncel trendlere (ReelShort Top 10) uygun mu?
+- Hedef kitle: 'Duygusal tatmin' (wish fulfillment) sağlıyor mu?
+
+### B) Format Riski Analizi:
+- Hikayede dikey ekrana uymayacak sahneler var mı? (Geniş ölçekli savaş, çok kalabalık sahneler)
+- 9:16 kadraj için kompozisyon uygunluğu
+- Yakın plan ve yüz odaklı anlatım potansiyeli
+
+## 2. BÖLÜM MİMARİSİ DEĞERLENDİRMESİ
+
+### A) Altın 3 Saniye Kuralı (The Hook):
+- Açılış sahnesi yavaş mı? Şehir manzarası/uyanma ile mi başlıyor?
+- In Media Res (olayın ortasından) başlıyor mu?
+- İlk 3 saniye izleyiciyi tutmak için yeterli mi?
+
+### B) Tempo ve Beat Analizi:
+- Her 40 saniyede bir olay örgüsü değişiyor mu?
+- Ölü zaman tespiti: Diyalogların sadece bilgi verdiği 'soğuk' satırları işaretle
+- Duygusal Isı Haritası: Sahnenin duygusal yoğunluğunu (1-10) çıkar
+
+### C) Cliffhanger ve İzleme Dürtüsü:
+- Kullanılan cliffhanger türü: (Ani Tehlike/Kimlik İfşası/Bilgi Asimetrisi/Duygusal Şok/Kesilen Eylem)
+- Zeigarnik Etkisi: Bölüm bittiğinde kafada net soru işareti oluşuyor mu?
+- Kanca gücü: İzleyiciyi sonraki bölüme geçirme ihtimali (1-10)
+
+## 3. GÖRSEL DİL ve KURGU UYGUNLUĞU
+
+### A) Kadrajlama:
+- İstifleme: Karakterler yan yana mı, yoksa derinlemesine (ön-arka) mi?
+- Baş boşluğu: Önemli görsel bilgiler üst 2/3'te mi?
+- Yakın plan oranı: Ekranı dolduran yüzler yeterli mi?
+
+### B) Kurgu Hızı (Pacing):
+- Ortalama plan süresi 1-2 saniye arası mı?
+- Uzun planlar var mı? (Dikkat dağıtıcı)
+- Hızlı kesim uygunluğu
+
+## 4. NEUROMARKETİNG DEĞERLENDİRMESİ
+
+### A) Dopamin Döngüsü:
+- Tetikleyici (0-10sn): Yüksek çatışma/tehdit var mı?
+- Eylem (10-60sn): Gerilim tırmanışı yeterli mi?
+- Ödül/Bükülme (60-80sn): Beklenmedik tokat/ifşa var mı?
+- Yoksunluk (80-90sn): Sahne kesimi beyin uyarıcı talep ediyor mu?
+
+### B) Ayna Nöron Aktivasyonu:
+- Karakterlerin mahrem alanına (intimate zone) giriş var mı?
+- Aşırı yakın planlar (Extreme Close-Up) kullanımı
+- Duygusal ifade yoğunluğu
+
+## 5. FİNAL PUANLAMA ve ÖNERİLER
+
+### PUAN KARTI (Her kategori 0-100):
+- Pazar Uygunluğu: __/100
+- Hook Gücü (İlk 3 saniye): __/100  
+- Tempo ve Beat: __/100
+- Cliffhanger Etkisi: __/100
+- Görsel Uygunluk: __/100
+
+### GENEL PUAN: __/100
+
+### KRİTİK EKSİKLİKLER:
+- Hangi bölümler 'riskli bölge' (duygusal yoğunluk 30sn boyunca 5'in altı)?
+- Dikey format için uyarlanması gereken sahneler?
+- En zayıf cliffhanger hangi bölümde?
+
+### AKSİYON PLANI:
+- Acil düzeltilmesi gereken 3 ana sorun
+- Dikey format optimizasyonu için öneriler
+- Hedef kitle çekimi artıracak değişiklikler
+
+Bu analiz ReelShort/DramaBox/FlexTV kalitesinde, pazar odaklı bir değerlendirmedir.`
     }
   },
 

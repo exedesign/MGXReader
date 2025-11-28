@@ -16,6 +16,18 @@ export default defineConfig({
     }),
   ],
   base: './',
+  esbuild: {
+    logLevel: 'error',
+    charset: 'ascii'
+  },
+  // Optimize dependencies and suppress CJS warnings
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'tesseract.js'],
+    exclude: ['src/renderer/utils/aiHandler.js'],
+    esbuildOptions: {
+      target: 'es2020'
+    }
+  },
   server: {
     port: 3000,
     host: 'localhost',
@@ -50,8 +62,5 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
-  },
-  optimizeDeps: {
-    include: ['tesseract.js']
   }
 });

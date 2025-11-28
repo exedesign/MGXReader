@@ -436,25 +436,24 @@ export default function PDFUploader() {
       <div className="max-w-2xl w-full">
         {/* OCR Progress Indicator */}
         {ocrProgress && (
-          <div className="mb-6 p-4 bg-cinema-dark rounded-lg border border-cinema-accent">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="animate-spin rounded-full h-5 w-5 border-2 border-cinema-accent border-t-transparent"></div>
-              <span className="text-sm font-medium text-cinema-text">{ocrProgress.message}</span>
-            </div>
-            <div className="w-full bg-cinema-gray rounded-full h-2">
-              <div 
-                className="bg-cinema-accent rounded-full h-2 transition-all duration-300"
-                style={{ width: `${ocrProgress.progress}%` }}
-              ></div>
-            </div>
-            {ocrProgress.totalPages && (
-              <p className="text-xs text-cinema-text-dim mt-2">
-                {t('uploader.ocrPageProgress', 'Page {{current}} of {{total}}', { 
-                  current: ocrProgress.page || 0, 
-                  total: ocrProgress.totalPages 
-                })}
+          <div className="fixed inset-0 bg-cinema-black/95 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="text-center p-8 bg-cinema-dark rounded-xl border border-cinema-accent">
+              <div className="text-6xl mb-6 animate-spin">🔍</div>
+              <h3 className="text-2xl font-bold text-cinema-accent mb-4">
+                🔄 OCR İşlemi Devam Ediyor
+              </h3>
+              <p className="text-cinema-text-dim text-lg mb-4">
+                {ocrProgress.message}
               </p>
-            )}
+              {ocrProgress.totalPages && (
+                <p className="text-cinema-text-dim mb-6 text-lg">
+                  {t('uploader.ocrPageProgress', 'Page {{current}} of {{total}}', { 
+                    current: ocrProgress.page || 0, 
+                    total: ocrProgress.totalPages 
+                  })}
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -1046,25 +1045,24 @@ export default function PDFUploader() {
 
                   {/* OCR Progress */}
                   {ocrProgress && (
-                    <div className="bg-cinema-gray/50 border border-cinema-gray-light rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-cinema-text">{ocrProgress.message}</span>
-                        <span className="text-sm font-medium text-cinema-accent">{ocrProgress.progress}%</span>
-                      </div>
-                      <div className="w-full bg-cinema-gray rounded-full h-2">
-                        <div
-                          className="bg-cinema-accent h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${ocrProgress.progress}%` }}
-                        />
-                      </div>
-                      {ocrProgress.page && ocrProgress.totalPages && (
-                        <p className="text-xs text-cinema-text-dim mt-2">
-                          {t('uploader.ocrPageProgress', 'Sayfa {{current}} / {{total}}', {
-                            current: ocrProgress.page,
-                            total: ocrProgress.totalPages
-                          })}
+                    <div className="fixed inset-0 bg-cinema-black/95 backdrop-blur-sm z-50 flex items-center justify-center">
+                      <div className="text-center p-8 bg-cinema-dark rounded-xl border border-cinema-accent">
+                        <div className="text-6xl mb-6 animate-spin">🔍</div>
+                        <h3 className="text-2xl font-bold text-cinema-accent mb-4">
+                          🔄 OCR İşlemi Devam Ediyor
+                        </h3>
+                        <p className="text-cinema-text-dim text-lg mb-4">
+                          {ocrProgress.message}
                         </p>
-                      )}
+                        {ocrProgress.page && ocrProgress.totalPages && (
+                          <p className="text-cinema-text-dim mb-6 text-lg">
+                            {t('uploader.ocrPageProgress', 'Sayfa {{current}} / {{total}}', {
+                              current: ocrProgress.page,
+                              total: ocrProgress.totalPages
+                            })}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
 

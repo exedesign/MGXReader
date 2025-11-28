@@ -640,33 +640,30 @@ export default function MultiScriptImporter() {
 
         {/* Import Progress */}
         {isImporting && importProgress && (
-          <div className="mb-6 p-4 bg-cinema-dark rounded-lg border border-cinema-accent">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="animate-spin rounded-full h-5 w-5 border-2 border-cinema-accent border-t-transparent"></div>
-              <span className="text-sm font-medium text-cinema-text">
+          <div className="fixed inset-0 bg-cinema-black/95 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="text-center p-8 bg-cinema-dark rounded-xl border border-cinema-accent">
+              <div className="text-6xl mb-6 animate-spin">📄</div>
+              <h3 className="text-2xl font-bold text-cinema-accent mb-4">
+                🔄 Dosyalar İçe Aktarılıyor
+              </h3>
+              <p className="text-cinema-text-dim text-lg mb-4">
                 {importProgress.current || t('multiImporter.processing', 'İşleniyor...')}
-              </span>
+              </p>
+              <p className="text-cinema-text-dim mb-6 text-lg">
+                {importProgress.completed} / {importProgress.total} dosya tamamlandı
+              </p>
+              
+              {importProgress.errors.length > 0 && (
+                <div className="mt-4 p-3 bg-red-900/20 border border-red-500/50 rounded">
+                  <p className="text-sm font-medium text-red-400 mb-2">Hatalar:</p>
+                  {importProgress.errors.map((error, index) => (
+                    <p key={index} className="text-sm text-red-400">
+                      {error.fileName}: {error.error}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="w-full bg-cinema-gray rounded-full h-2">
-              <div 
-                className="bg-cinema-accent rounded-full h-2 transition-all duration-300"
-                style={{ width: `${(importProgress.completed / importProgress.total) * 100}%` }}
-              ></div>
-            </div>
-            <p className="text-xs text-cinema-text-dim mt-2">
-              {importProgress.completed} / {importProgress.total} dosya tamamlandı
-            </p>
-            
-            {importProgress.errors.length > 0 && (
-              <div className="mt-3 p-2 bg-red-900/20 border border-red-500/50 rounded">
-                <p className="text-xs font-medium text-red-400 mb-1">Hatalar:</p>
-                {importProgress.errors.map((error, index) => (
-                  <p key={index} className="text-xs text-red-400">
-                    {error.fileName}: {error.error}
-                  </p>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
