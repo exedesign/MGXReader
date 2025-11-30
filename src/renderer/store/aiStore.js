@@ -269,6 +269,7 @@ export const useAIStore = create(
                 provider: AI_PROVIDERS.GEMINI,
                 apiKey: state.geminiApiKey,
                 model: state.geminiModel,
+                imageModel: state.geminiImageModel, // Add image model
                 temperature: state.temperature,
                 maxTokens: state.maxTokens
               })

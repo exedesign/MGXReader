@@ -8,11 +8,12 @@ import MultiScriptImporter from './components/MultiScriptImporter';
 import TextEditor from './components/TextEditor';
 import AnalysisPanel from './components/AnalysisPanel';
 import Header from './components/Header';
+import ErrorBoundary from './components/ErrorBoundary';
+import ProfessionalStoryboard from './components/ProfessionalStoryboard';
 
 // Lazy load heavy components
 const SpeedReader = React.lazy(() => import('./components/SpeedReader'));
 const AIStoryboard = React.lazy(() => import('./components/SimpleStoryboard'));
-const ProfessionalStoryboard = React.lazy(() => import('./components/ProfessionalStoryboard'));
 
 function App() {
   const { currentView, scripts, currentScriptId, isAnalyzing, analysisProgress, isStoryboardProcessing, storyboardProgress, getCurrentScript } = useScriptStore();
@@ -90,9 +91,9 @@ function App() {
               
               {/* Storyboard - Unified professional workflow */}
               {currentView === 'storyboard' && features.enable_storyboard && (
-                <Suspense fallback={<div className="flex items-center justify-center h-full text-cinema-text">Storyboard yükleniyor...</div>}>
+                <ErrorBoundary>
                   <ProfessionalStoryboard />
-                </Suspense>
+                </ErrorBoundary>
               )}
               
               {/* Show message if trying to access disabled storyboard module */}

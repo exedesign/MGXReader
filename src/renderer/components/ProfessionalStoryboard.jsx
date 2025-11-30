@@ -27,7 +27,7 @@ export default function ProfessionalStoryboard() {
   // Aşama 1: Karakter ve Mekan Analizi
   const [characterAnalysis, setCharacterAnalysis] = useState(null);
   const [locationAnalysis, setLocationAnalysis] = useState(null);
-  
+
   // Karakter görselleri
   const [characterImages, setCharacterImages] = useState({});
 
@@ -43,6 +43,10 @@ export default function ProfessionalStoryboard() {
   // Aşama 4: Final Storyboard
   const [finalStoryboard, setFinalStoryboard] = useState({});
   const [storyboardScenes, setStoryboardScenes] = useState([]);
+
+  // Image modal states
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
   // Safe data access with error handling
   let currentScript, scriptText, scenes;
@@ -79,7 +83,7 @@ export default function ProfessionalStoryboard() {
         return message;
       }
     };
-    
+
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isProcessing]);
@@ -92,12 +96,12 @@ export default function ProfessionalStoryboard() {
         console.log('⏭️ Skipping auto-load: no script text or name');
         return;
       }
-      
+
       const fileName = currentScript.name;
       const storageKey = `storyboard_${fileName}`;
-      
+
       console.log('🔍 Auto-loading storyboard check for:', fileName);
-      
+
       try {
         // FIRST: Try to load existing analysis data from analysisStorageService
         let analysisData = null;
@@ -109,22 +113,22 @@ export default function ProfessionalStoryboard() {
               analysisData = await analysisStorageService.loadAnalysisByKey(pdfMatch.key);
             }
           }
-          
+
           if (analysisData) {
             console.log('📊 Found existing analysis data, will use for storyboard');
-            
+
             // Extract character data from analysis
             if (analysisData.characters && !characterAnalysis) {
               console.log('👥 Using analysis character data');
               setCharacterAnalysis(analysisData.characters);
             }
-            
+
             // Extract location data from analysis
             if (analysisData.locations && !locationAnalysis) {
               console.log('📍 Using analysis location data');
               setLocationAnalysis(analysisData.locations);
             }
-            
+
             // Extract visual style hints if available
             if (analysisData.visual_style && !styleAnalysis) {
               console.log('🎨 Using analysis visual style data');
@@ -134,24 +138,24 @@ export default function ProfessionalStoryboard() {
         } catch (analysisError) {
           console.log('ℹ️ No existing analysis found:', analysisError.message);
         }
-        
+
         // THEN: Try to load cached storyboard data
         const cached = localStorage.getItem(storageKey);
         if (!cached) {
           console.log('ℹ️ No cached storyboard found');
           return;
         }
-        
+
         const data = JSON.parse(cached);
         console.log('📦 Found cached storyboard data');
-        
+
         // Validate data structure
         if (!data || typeof data !== 'object') {
           console.warn('⚠️ Invalid cached data format');
           localStorage.removeItem(storageKey);
           return;
         }
-        
+
         // Restore all storyboard state with safety checks
         if (data.characterAnalysis && typeof data.characterAnalysis === 'object') {
           setCharacterAnalysis(data.characterAnalysis);
@@ -180,7 +184,7 @@ export default function ProfessionalStoryboard() {
         if (data.storyboardScenes && Array.isArray(data.storyboardScenes)) {
           setStoryboardScenes(data.storyboardScenes);
         }
-        
+
         // Set to appropriate step based on what's completed
         if (data.finalStoryboard && Object.keys(data.finalStoryboard).length > 0) {
           setCurrentStep(4);
@@ -191,7 +195,7 @@ export default function ProfessionalStoryboard() {
         } else if (data.characterAnalysis) {
           setCurrentStep(1);
         }
-        
+
         console.log('✅ Auto-loaded cached storyboard successfully');
       } catch (error) {
         console.error('❌ Auto-load storyboard failed:', error);
@@ -205,12 +209,12 @@ export default function ProfessionalStoryboard() {
         }
       }
     };
-    
+
     // Add a small delay to ensure component is fully mounted
     const timeoutId = setTimeout(() => {
       autoLoadStoryboard();
     }, 100);
-    
+
     return () => clearTimeout(timeoutId);
   }, [scriptText, currentScript?.name]);
 
@@ -221,18 +225,18 @@ export default function ProfessionalStoryboard() {
         console.log('⏭️ Skipping save: no script name');
         return;
       }
-      
+
       // Only save if we have some actual data (not initial empty states)
-      const hasData = characterAnalysis || 
-                      styleAnalysis || 
-                      (characterReferences && Object.keys(characterReferences).length > 0) ||
-                      (finalStoryboard && Object.keys(finalStoryboard).length > 0);
-      
+      const hasData = characterAnalysis ||
+        styleAnalysis ||
+        (characterReferences && Object.keys(characterReferences).length > 0) ||
+        (finalStoryboard && Object.keys(finalStoryboard).length > 0);
+
       if (!hasData) {
         console.log('⏭️ Skipping save: no data to save yet');
         return;
       }
-      
+
       try {
         const storageKey = `storyboard_${currentScript.name}`;
         const data = {
@@ -248,7 +252,7 @@ export default function ProfessionalStoryboard() {
           timestamp: new Date().toISOString(),
           version: '1.0'
         };
-        
+
         localStorage.setItem(storageKey, JSON.stringify(data));
         console.log('💾 Storyboard data saved to cache');
       } catch (error) {
@@ -259,18 +263,18 @@ export default function ProfessionalStoryboard() {
         }
       }
     };
-    
+
     // Debounce save operations
     const timeoutId = setTimeout(() => {
       saveStoryboard();
     }, 500);
-    
+
     return () => clearTimeout(timeoutId);
   }, [
-    characterAnalysis, 
-    locationAnalysis, 
-    styleAnalysis, 
-    colorPalette, 
+    characterAnalysis,
+    locationAnalysis,
+    styleAnalysis,
+    colorPalette,
     visualLanguage,
     characterReferences,
     locationReferences,
@@ -287,9 +291,9 @@ export default function ProfessionalStoryboard() {
     }
 
     console.log('🎨 Auto-generating character images for:', characters.length, 'characters');
-    setStoryboardProgress({ 
-      message: 'Karakter görselleri otomatik oluşturuluyor...', 
-      progress: 10 
+    setStoryboardProgress({
+      message: 'Karakter görselleri otomatik oluşturuluyor...',
+      progress: 10
     });
 
     let generatedCount = 0;
@@ -297,20 +301,20 @@ export default function ProfessionalStoryboard() {
 
     for (let i = 0; i < characters.length; i++) {
       const character = characters[i];
-      
+
       try {
-        setStoryboardProgress({ 
-          message: `${character.name} karakter görseli oluşturuluyor...`, 
-          progress: 10 + (i / characters.length) * 30 
+        setStoryboardProgress({
+          message: `${character.name} karakter görseli oluşturuluyor...`,
+          progress: 10 + (i / characters.length) * 30
         });
 
         // Build character prompt
         let characterPrompt = `Professional character portrait of ${character.name}`;
-        
+
         if (character.physical) {
           characterPrompt += `, ${character.physical}`;
         }
-        
+
         if (character.personality) {
           const personalityVisuals = {
             'confident': 'confident posture, strong gaze',
@@ -320,7 +324,7 @@ export default function ProfessionalStoryboard() {
             'gentle': 'soft features, kind eyes',
             'intelligent': 'thoughtful expression, sharp eyes'
           };
-          
+
           Object.keys(personalityVisuals).forEach(trait => {
             if (character.personality.toLowerCase().includes(trait)) {
               characterPrompt += `, ${personalityVisuals[trait]}`;
@@ -331,7 +335,7 @@ export default function ProfessionalStoryboard() {
         if (character.age) {
           characterPrompt += `, ${character.age} years old`;
         }
-        
+
         if (character.style) {
           characterPrompt += `, ${character.style}`;
         }
@@ -353,7 +357,7 @@ export default function ProfessionalStoryboard() {
             timestamp: new Date().toISOString(),
             character: character.name
           };
-          
+
           generatedCount++;
           console.log(`✅ Character image generated for ${character.name}`);
         }
@@ -373,10 +377,10 @@ export default function ProfessionalStoryboard() {
     if (generatedCount > 0) {
       setCharacterImages(characterImagesData);
       console.log(`✅ Generated ${generatedCount}/${characters.length} character images`);
-      
-      setStoryboardProgress({ 
-        message: `${generatedCount} karakter görseli oluşturuldu!`, 
-        progress: 50 
+
+      setStoryboardProgress({
+        message: `${generatedCount} karakter görseli oluşturuldu!`,
+        progress: 50
       });
     } else {
       console.log('⚠️ No character images could be generated');
@@ -384,33 +388,26 @@ export default function ProfessionalStoryboard() {
   };
 
   const steps = [
-    { 
-      id: 1, 
+    {
+      id: 1,
       title: 'Karakter & Mekan Analizi',
       description: 'Senaryodaki karakterlerin ve mekanların detaylı analizi',
-      status: (characterAnalysis && locationAnalysis) ? 'completed' : 
-              isProcessing && currentStep === 1 ? 'processing' : 'pending'
+      status: (characterAnalysis && locationAnalysis) ? 'completed' :
+        isProcessing && currentStep === 1 ? 'processing' : 'pending'
     },
-    { 
-      id: 2, 
+    {
+      id: 2,
       title: 'Stil & Renk Paleti',
       description: 'Görsel stil, renk paleti ve sinematik dil belirleme',
-      status: (styleAnalysis && colorPalette) ? 'completed' : 
-              isProcessing && currentStep === 2 ? 'processing' : 'pending'
+      status: (styleAnalysis && colorPalette) ? 'completed' :
+        isProcessing && currentStep === 2 ? 'processing' : 'pending'
     },
-    { 
-      id: 3, 
-      title: 'Referans Görseller',
-      description: 'Karakter ve mekanlar için tutarlı referans görseller',
-      status: Object.keys(characterReferences).length > 0 ? 'completed' : 
-              isProcessing && currentStep === 3 ? 'processing' : 'pending'
-    },
-    { 
-      id: 4, 
+    {
+      id: 3,
       title: 'Final Storyboard',
-      description: 'Tutarlı stil ile profesyonel storyboard üretimi',
-      status: Object.keys(finalStoryboard).length > 0 ? 'completed' : 
-              isProcessing && currentStep === 4 ? 'processing' : 'pending'
+      description: 'Profesyonel storyboard sahneleri oluştur',
+      status: Object.keys(finalStoryboard).length > 0 ? 'completed' :
+        isProcessing && currentStep === 3 ? 'processing' : 'pending'
     }
   ];
 
@@ -419,16 +416,16 @@ export default function ProfessionalStoryboard() {
     setError(null);
     setIsStoryboardProcessing(true);
     setStoryboardProgress({ message: 'Karakter ve mekan analizi başlıyor...', progress: 0 });
-    
+
     // Create AbortController for cancellation
     const controller = new AbortController();
     setAbortController(controller);
     setStoryboardAbortController(controller);
-    
+
     try {
       const isAIConfigured = isConfigured();
       let aiHandler = null;
-      
+
       try {
         aiHandler = getAIHandler();
       } catch (aiError) {
@@ -436,7 +433,7 @@ export default function ProfessionalStoryboard() {
         alert('AI bağlantısında sorun var. Lütfen AI ayarlarını kontrol edin.');
         return;
       }
-      
+
       if (!isAIConfigured || !aiHandler) {
         alert('AI ayarları yapılmamış. Lütfen önce AI sağlayıcısını yapılandırın.');
         return;
@@ -444,11 +441,11 @@ export default function ProfessionalStoryboard() {
 
       // FIRST: Check if AnalysisPanel has required data
       console.log('🔍 Checking if AnalysisPanel has storyboard requirements...');
-      
+
       if (window.analysisPanel && window.analysisPanel.hasAnalysisData()) {
         const requirements = window.analysisPanel.checkStoryboardRequirements();
         console.log('📊 Analysis requirements check:', requirements);
-        
+
         if (!requirements.hasRequired) {
           const runMissingAnalysis = confirm(
             '🎬 Storyboard için bazı analizler eksik!\n\n' +
@@ -458,7 +455,7 @@ export default function ProfessionalStoryboard() {
             '✅ EVET = Ana analiz modülünde eksik analizleri yap\n' +
             '❌ HAYIR = Manuel analiz yap (daha uzun sürer)'
           );
-          
+
           if (runMissingAnalysis) {
             console.log('🚀 Running missing analysis via AnalysisPanel...');
             try {
@@ -474,7 +471,7 @@ export default function ProfessionalStoryboard() {
       }
 
       setIsProcessing(true);
-      
+
       // Check if we already have analysis data from AnalysisPanel
       let existingAnalysis = null;
       try {
@@ -511,7 +508,7 @@ export default function ProfessionalStoryboard() {
           return;
         }
       }
-      
+
       // Fallback to legacy simple analysis
       if (existingAnalysis?.characters && existingAnalysis?.locations) {
         const useExisting = confirm(
@@ -582,19 +579,19 @@ Lütfen MUTLAKA JSON formatında yanıt ver (ek açıklama olmadan sadece JSON):
 
       console.log('🎭 Karakter analizi başlıyor...');
       setStoryboardProgress({ message: 'Karakter analizi yapılıyor...', progress: 25 });
-      
+
       // Check for cancellation
       if (controller.signal.aborted) {
         console.log('🚫 Character analysis cancelled');
         return;
       }
-      
+
       // Senaryo metnini kısalt (çok uzunsa chunking kullan)
       const maxTextLength = 8000; // 8K karakter limit
-      const textToAnalyze = scriptText.length > maxTextLength 
+      const textToAnalyze = scriptText.length > maxTextLength
         ? scriptText.substring(0, maxTextLength) + '\n\n[Metin kısaltıldı...]'
         : scriptText;
-      
+
       // Kısaltılmış karakter promptı
       const shortCharacterPrompt = `Sen bir senaryo analiz uzmanısın. Aşağıdaki senaryodaki karakterleri analiz et:
 
@@ -613,23 +610,23 @@ Lütfen JSON formatında yanıt ver:
     }
   ]
 }`;
-      
+
       const characterResult = await getAIHandler().generateText(
         'Sen bir senaryo analiz uzmanısın.',
         shortCharacterPrompt,
         { timeout: 300000 } // 5 dakika
       );
-      
+
       // Mekan analizi
       console.log('🏢 Mekan analizi başlıyor...');
       setStoryboardProgress({ message: 'Mekan analizi yapılıyor...', progress: 50 });
-      
+
       // Check for cancellation
       if (controller.signal.aborted) {
         console.log('🚫 Location analysis cancelled');
         return;
       }
-      
+
       const shortLocationPrompt = `Sen bir senaryo analiz uzmanısın. Aşağıdaki senaryodaki mekanları analiz et:
 
 SENARYO:
@@ -660,11 +657,11 @@ Lütfen JSON formatında yanıt ver:
         // Ham sonuçları logla
         console.log('🔍 Ham karakter sonucu:', characterResult.substring(0, 500));
         console.log('🔍 Ham mekan sonucu:', locationResult.substring(0, 500));
-        
+
         // JSON formatını temizle
         let cleanCharacterResult = characterResult.replace(/```json|```/g, '').trim();
         let cleanLocationResult = locationResult.replace(/```json|```/g, '').trim();
-        
+
         // İlk ve son satırları kontrol et (bazen açıklama gelir)
         if (!cleanCharacterResult.startsWith('{')) {
           const jsonStart = cleanCharacterResult.indexOf('{');
@@ -678,10 +675,10 @@ Lütfen JSON formatında yanıt ver:
             cleanLocationResult = cleanLocationResult.substring(jsonStart);
           }
         }
-        
+
         const characterData = JSON.parse(cleanCharacterResult);
         const locationData = JSON.parse(cleanLocationResult);
-        
+
         // Veri doğrulama
         if (!characterData.characters || !Array.isArray(characterData.characters)) {
           throw new Error('Karakter listesi bulunamadı');
@@ -689,27 +686,27 @@ Lütfen JSON formatında yanıt ver:
         if (!locationData.locations || !Array.isArray(locationData.locations)) {
           throw new Error('Mekan listesi bulunamadı');
         }
-        
+
         setCharacterAnalysis(characterData);
         setLocationAnalysis(locationData);
-        
+
         setStoryboardProgress({ message: 'Karakter ve mekan analizi tamamlandı!', progress: 100 });
-        
+
         console.log('✅ Karakter ve mekan analizi tamamlandı:', {
           characters: characterData.characters.length,
           locations: locationData.locations.length
         });
         console.log('📋 Bulunan karakterler:', characterData.characters.map(c => c.name).join(', '));
         console.log('📋 Bulunan mekanlar:', locationData.locations.map(l => l.name).join(', '));
-        
+
         // 🎨 Otomatik karakter görseli oluşturma başlat
         await autoGenerateCharacterImages(characterData.characters);
-        
+
       } catch (parseError) {
         console.error('❌ JSON parse hatası:', parseError);
         console.log('Ham karakter yanıtı:', characterResult);
         console.log('Ham mekan yanıtı:', locationResult);
-        
+
         // Fallback: Ham metni yapılandırılmış formata çevirmeye çalış
         const fallbackCharacters = {
           characters: [{
@@ -724,7 +721,7 @@ Lütfen JSON formatında yanıt ver:
             development: 'Lütfen analizi tekrar deneyin'
           }]
         };
-        
+
         const fallbackLocations = {
           locations: [{
             name: 'Parse Hatası',
@@ -740,13 +737,13 @@ Lütfen JSON formatında yanıt ver:
             mood: 'Lütfen analizi tekrar deneyin'
           }]
         };
-        
+
         setCharacterAnalysis(fallbackCharacters);
         setLocationAnalysis(fallbackLocations);
-        
+
         alert('⚠️ AI yanıtı beklenilen formatta değil. Lütfen analizi tekrar deneyin veya farklı bir AI modeli seçin.');
       }
-      
+
     } catch (error) {
       if (error.name === 'AbortError') {
         console.log('🚫 Storyboard generation cancelled by user');
@@ -763,6 +760,17 @@ Lütfen JSON formatında yanıt ver:
     }
   };
 
+  // Image modal functions
+  const openImageModal = (imageData) => {
+    setSelectedImage(imageData);
+    setIsImageModalOpen(true);
+  };
+
+  const closeImageModal = () => {
+    setSelectedImage(null);
+    setIsImageModalOpen(false);
+  };
+
   // Aşama 2: Stil ve Renk Analizi
   const analyzeStyleAndColors = async () => {
     const isAIConfigured = isConfigured();
@@ -777,7 +785,7 @@ Lütfen JSON formatında yanıt ver:
     setStoryboardAbortController(controller);
 
     setIsProcessing(true);
-    
+
     try {
       const stylePrompt = `
 Aşağıdaki senaryo, karakter ve mekan analizlerine dayanarak görsel stil belirle:
@@ -813,20 +821,26 @@ JSON formatında yanıt ver:
         'Sen bir görsel tasarım uzmanısın.',
         stylePrompt
       );
-      
+
       try {
         const styleData = JSON.parse(styleResult.replace(/```json|```/g, ''));
         setStyleAnalysis(styleData);
         setColorPalette(styleData.primaryColors);
         setVisualLanguage(styleData);
-        
+
         console.log('✅ Stil analizi tamamlandı:', styleData);
-        
+
+        // Update step progress - skip reference images, go directly to final storyboard
+        setTimeout(() => {
+          setCurrentStep(3);
+          console.log('📈 Step updated to 3 (Style analysis completed, skipping references)');
+        }, 1000);
+
       } catch (parseError) {
         console.warn('Style JSON parse hatası:', parseError);
         setStyleAnalysis({ text: styleResult });
       }
-      
+
     } catch (error) {
       console.error('Stil analizi hatası:', error);
       alert('Stil analizi sırasında hata oluştu: ' + error.message);
@@ -846,13 +860,13 @@ JSON formatında yanıt ver:
     setIsProcessing(true);
     const newCharacterRefs = {};
     const newLocationRefs = {};
-    
+
     try {
       // Karakter referans görselleri - güvenli erişim
       if (characterAnalysis && characterAnalysis.characters && Array.isArray(characterAnalysis.characters)) {
         for (const character of characterAnalysis.characters) {
           if (!character.name) continue; // Boş karakterleri atla
-          
+
           const characterPrompt = `
 Professional character reference sheet: ${character.name}
 
@@ -867,7 +881,7 @@ Art style: ${styleAnalysis?.artStyle || 'professional illustration'}
 
 Create a clean character reference image showing the character from multiple angles (front, side, back view), consistent with the established visual style and color palette.
           `;
-          
+
           try {
             const imageResult = await generateImage(characterPrompt);
             if (imageResult.success) {
@@ -887,7 +901,7 @@ Create a clean character reference image showing the character from multiple ang
       if (locationAnalysis && locationAnalysis.locations && Array.isArray(locationAnalysis.locations)) {
         for (const location of locationAnalysis.locations.slice(0, 3)) { // İlk 3 mekan
           if (!location.name) continue; // Boş mekanları atla
-          
+
           const locationPrompt = `
 Professional location reference: ${location.name}
 
@@ -903,7 +917,7 @@ Lighting style: ${styleAnalysis?.lightingStyle || 'natural'}
 
 Create a detailed environment reference showing the location with consistent lighting and color palette.
           `;
-          
+
           try {
             const imageResult = await generateImage(locationPrompt);
             if (imageResult.success) {
@@ -921,12 +935,18 @@ Create a detailed environment reference showing the location with consistent lig
 
       setCharacterReferences(newCharacterRefs);
       setLocationReferences(newLocationRefs);
-      
+
       console.log('✅ Referans görseller oluşturuldu:', {
         characters: Object.keys(newCharacterRefs).length,
         locations: Object.keys(newLocationRefs).length
       });
-      
+
+      // Update step progress
+      setTimeout(() => {
+        setCurrentStep(4);
+        console.log('📈 Step updated to 4 (Reference images completed)');
+      }, 1000);
+
     } catch (error) {
       console.error('Referans görsel üretim hatası:', error);
       alert('Referans görsel üretimi sırasında hata oluştu: ' + error.message);
@@ -938,36 +958,36 @@ Create a detailed environment reference showing the location with consistent lig
   // Aşama 4: Final Storyboard Üretimi
   const generateFinalStoryboard = async () => {
     const isAIConfigured = isConfigured();
-    if (!characterAnalysis || !styleAnalysis || Object.keys(characterReferences).length === 0 || !isAIConfigured || !aiHandler) {
-      alert('Önce önceki aşamaları tamamlayın ve AI ayarlarınızı kontrol edin.');
+    if (!characterAnalysis || !styleAnalysis || !isAIConfigured || !aiHandler) {
+      alert('Önce karakter ve stil analizini tamamlayın ve AI ayarlarınızı kontrol edin.');
       return;
     }
 
     setIsProcessing(true);
     const newStoryboard = {};
-    
+
     try {
       // Her sahne için storyboard frame'i oluştur - güvenli erişim
       const scenesToProcess = scenes && Array.isArray(scenes) ? scenes.slice(0, 6) : [];
-      
+
       for (let i = 0; i < scenesToProcess.length; i++) {
         const scene = scenesToProcess[i];
         if (!scene || !scene.title) continue; // Boş sahneleri atla
-        
+
         const storyboardPrompt = `
 Professional storyboard frame for scene: "${scene.title}"
 
 Scene description: ${scene.text || 'No description available'}
 
 CHARACTER REFERENCES:
-${Object.entries(characterReferences).map(([name, ref]) => 
-  `- ${name}: ${ref.physical || 'Not specified'}, ${ref.style || 'Casual'}`
-).join('\n')}
+${Object.entries(characterReferences).map(([name, ref]) =>
+          `- ${name}: ${ref.physical || 'Not specified'}, ${ref.style || 'Casual'}`
+        ).join('\n')}
 
 LOCATION CONTEXT:
-${Object.entries(locationReferences).map(([name, ref]) => 
-  `- ${name}: ${ref.description || 'Not specified'}, ${ref.atmosphere || 'Neutral'}`
-).join('\n')}
+${Object.entries(locationReferences).map(([name, ref]) =>
+          `- ${name}: ${ref.description || 'Not specified'}, ${ref.atmosphere || 'Neutral'}`
+        ).join('\n')}
 
 VISUAL STYLE GUIDE:
 - Style: ${styleAnalysis?.visualStyle || 'realistic'}
@@ -985,16 +1005,22 @@ Create a detailed storyboard frame that:
 
 Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
         `;
-        
+
         try {
           const imageResult = await generateImage(storyboardPrompt);
-          if (imageResult.success) {
-            newStoryboard[scene.id || `scene_${i}`] = {
-              ...scene,
-              storyboardImage: imageResult.imageUrl,
-              prompt: storyboardPrompt,
-              frameNumber: i + 1
-            };
+          if (imageResult && (imageResult.success || imageResult.imageData)) {
+            const imageUrl = imageResult.imageUrl ||
+              imageResult.imageData ? `data:${imageResult.mimeType || 'image/png'};base64,${imageResult.imageData}` : null;
+
+            if (imageUrl) {
+              newStoryboard[scene.id || `scene_${i}`] = {
+                ...scene,
+                storyboardImage: imageUrl,
+                prompt: storyboardPrompt,
+                frameNumber: i + 1
+              };
+              console.log(`✅ Sahne ${i + 1} storyboard'u oluşturuldu`);
+            }
           }
         } catch (error) {
           console.warn(`Sahne ${i + 1} storyboard'u oluşturulamadı:`, error);
@@ -1003,7 +1029,7 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
 
       setFinalStoryboard(newStoryboard);
       setStoryboardScenes(Object.values(newStoryboard));
-      
+
       // Storyboard'u script'e kaydet
       if (currentScriptId) {
         updateScript(currentScriptId, {
@@ -1019,9 +1045,10 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
           }
         });
       }
-      
+
+      // Final storyboard completed - keep step 3
       console.log('✅ Final storyboard oluşturuldu:', Object.keys(newStoryboard).length, 'sahne');
-      
+
     } catch (error) {
       console.error('Final storyboard üretim hatası:', error);
       alert('Final storyboard üretimi sırasında hata oluştu: ' + error.message);
@@ -1046,7 +1073,7 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
 
   const executeStep = async (step) => {
     setCurrentStep(step);
-    
+
     switch (step) {
       case 1:
         await analyzeCharactersAndLocations();
@@ -1055,9 +1082,6 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
         await analyzeStyleAndColors();
         break;
       case 3:
-        await generateReferenceImages();
-        break;
-      case 4:
         await generateFinalStoryboard();
         break;
     }
@@ -1068,8 +1092,7 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
     switch (currentStep) {
       case 1: return 'AI Karakterleri ve Mekanları Sizin İçin Hazırlıyor...';
       case 2: return 'Görsel Stil ve Renk Paleti Belirleniyor...';
-      case 3: return 'Referans Görseller Oluşturuluyor...';
-      case 4: return 'Final Storyboard Üretiliyor...';
+      case 3: return 'Final Storyboard Üretiliyor...';
       default: return 'İşleniyor...';
     }
   };
@@ -1081,7 +1104,7 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
         <div className="error-banner bg-red-600 text-white p-4 rounded-lg mb-6">
           <h3 className="font-bold mb-2">❌ Storyboard Hatası</h3>
           <p>{error}</p>
-          <button 
+          <button
             onClick={() => setError(null)}
             className="mt-2 bg-red-500 hover:bg-red-400 px-3 py-1 rounded text-sm"
           >
@@ -1089,7 +1112,7 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
           </button>
         </div>
       )}
-      
+
       {/* Script Check */}
       {!currentScript && !error && (
         <div className="no-script-warning bg-yellow-600 text-white p-4 rounded-lg mb-6">
@@ -1097,498 +1120,538 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
           <p>Storyboard oluşturmak için önce bir senaryo yükleyin.</p>
         </div>
       )}
-      
+
       <div className="professional-storyboard flex flex-col h-full bg-cinema-black">
         <div className="p-4 lg:p-6 flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto">
             {/* Progress panel removed per user request */}
             <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-2">
-              🎨 Storyboard
-            </h1>
-            <p className="text-cinema-text-dim">
-              Senaryonuzdan profesyonel storyboard oluşturun
-            </p>
-          </div>
-          {(characterAnalysis || styleAnalysis || Object.keys(characterReferences).length > 0) && (
-            <button
-              onClick={() => {
-                if (confirm('Tüm storyboard verilerini sıfırlamak istediğinizden emin misiniz?')) {
-                  // Clear all state
-                  setCharacterAnalysis(null);
-                  setLocationAnalysis(null);
-                  setStyleAnalysis(null);
-                  setColorPalette(null);
-                  setVisualLanguage(null);
-                  setCharacterReferences({});
-                  setLocationReferences({});
-                  setFinalStoryboard({});
-                  setStoryboardScenes([]);
-                  setCurrentStep(1);
-                  
-                  // Clear from cache
-                  if (currentScript?.name) {
-                    const storageKey = `storyboard_${currentScript.name}`;
-                    localStorage.removeItem(storageKey);
-                    console.log('🗑️ Storyboard data cleared');
-                  }
-                }
-              }}
-              className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded-lg text-sm transition-colors border border-red-500/30"
-            >
-              🗑️ Sıfırla
-            </button>
-          )}
-        </div>
-
-      {/* Modern Wizard Progress Steps */}
-      <div className="mb-8 bg-cinema-dark rounded-xl p-6 border border-cinema-gray">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative">
-          {steps.map((step, index) => (
-            <React.Fragment key={step.id}>
-              <div className={`
-                relative p-4 rounded-lg border-2 transition-all cursor-pointer
-                ${step.status === 'completed' ? 'border-green-500 bg-green-500/10' : 
-                  step.status === 'processing' ? 'border-cinema-accent bg-cinema-accent/10 animate-pulse' :
-                  currentStep === step.id ? 'border-cinema-accent bg-cinema-accent/5' : 
-                  'border-cinema-gray bg-cinema-gray/30 opacity-60'}
-              `}>
-                {/* Step number badge */}
-                <div className={`
-                  absolute -top-3 -left-3 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
-                  ${step.status === 'completed' ? 'bg-green-500 text-white' : 
-                    step.status === 'processing' ? 'bg-cinema-accent text-cinema-black' :
-                    currentStep === step.id ? 'bg-cinema-accent text-cinema-black' : 
-                    'bg-cinema-gray text-cinema-text-dim'}
-                `}>
-                  {step.status === 'completed' ? '✓' : step.id}
-                </div>
-                
-                {/* Step content */}
-                <div className="mt-2">
-                  <h3 className={`font-semibold text-sm mb-1 ${
-                    step.status === 'completed' || step.status === 'processing' || currentStep === step.id 
-                      ? 'text-white' : 'text-cinema-text-dim'
-                  }`}>
-                    {step.title}
-                  </h3>
-                  <p className="text-xs text-cinema-text-dim">
-                    {step.description}
-                  </p>
-                </div>
-                
-                {/* Status icon */}
-                <div className="absolute top-4 right-4">
-                  {step.status === 'completed' && <span className="text-green-500 text-xl">✓</span>}
-                  {step.status === 'processing' && <span className="text-cinema-accent text-xl animate-spin">⚙️</span>}
-                </div>
-              </div>
-              
-              {/* Connection line */}
-              {index < steps.length - 1 && (
-                <div className="hidden md:flex items-center justify-center absolute left-1/4 right-3/4 top-1/2 transform -translate-y-1/2"
-                     style={{ left: `${(index + 1) * 25 - 2}%`, width: '4%' }}>
-                  <div className={`h-0.5 w-full ${
-                    steps[index + 1].status === 'completed' || steps[index + 1].status === 'processing' 
-                      ? 'bg-cinema-accent' : 'bg-cinema-gray'
-                  }`} />
-                </div>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
-
-      {/* Current Step Content */}
-      <div className="bg-cinema-dark rounded-xl border border-cinema-gray p-6 mb-6">
-        {currentStep === 1 && (
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-cinema-accent rounded-lg flex items-center justify-center text-2xl">
-                🎭
-              </div>
               <div>
-                <h2 className="text-xl font-semibold text-white">Karakter ve Mekan Analizi</h2>
-                <p className="text-cinema-text-dim text-sm">
-                  Senaryodaki karakterler ve mekanlar AI tarafından analiz ediliyor
+                <h1 className="text-3xl font-bold text-white mb-2">
+                  🎨 Storyboard
+                </h1>
+                <p className="text-cinema-text-dim">
+                  Senaryonuzdan profesyonel storyboard oluşturun
                 </p>
               </div>
-            </div>
-            
-            {(!characterAnalysis || !locationAnalysis) && !isStoryboardProcessing ? (
-              <div className="text-center py-8">
-                <div className="flex flex-col gap-4 items-center">
-                  <button
-                    onClick={() => executeStep(1)}
-                    disabled={isProcessing || isStoryboardProcessing || !isConfigured() || !aiHandler}
-                    className="bg-cinema-accent hover:bg-cinema-accent/90 text-cinema-black px-8 py-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium text-lg transition-all transform hover:scale-105"
-                  >
-                    {(isProcessing || isStoryboardProcessing) ? '🔄 Analiz Ediliyor...' : 
-                     !isConfigured() ? '⚠️ AI Ayarları Gerekli' :
-                     !aiHandler ? '⏳ Yükleniyor...' :
-                     '🚀 Analizi Başlat'}
-                  </button>
-                  
-                  {(isProcessing || isStoryboardProcessing) && (
-                    <button
-                      onClick={() => {
-                        if (abortController) {
-                          abortController.abort();
-                        }
-                        cancelStoryboard();
-                      }}
-                      className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm transition-colors border border-red-500/30"
-                    >
-                      ✕ İptal Et
-                    </button>
-                  )}
-                </div>
-                {!isConfigured() && (
-                  <p className="mt-4 text-cinema-text-dim text-sm">
-                    Ayarlar {'>'} AI Sağlayıcıları bölümünden API key ekleyin
-                  </p>
-                )}
-              </div>
-            ) : (!characterAnalysis || !locationAnalysis) && isStoryboardProcessing ? (
-              <div className="text-center py-12">
-                <div className="flex flex-col gap-4 items-center max-w-md mx-auto">
-                  <div className="text-6xl mb-4 animate-spin">🎭</div>
-                  <h3 className="text-2xl font-semibold text-cinema-accent mb-2">
-                    🔄 Karakter ve Mekan Analizi
-                  </h3>
-                  
-                  <p className="text-cinema-text-dim text-lg mb-6">
-                    Senaryodaki karakterler ve mekanlar AI tarafından analiz ediliyor...
-                  </p>
-                  <button
-                    onClick={() => {
-                      if (abortController) {
-                        abortController.abort();
+              {(characterAnalysis || styleAnalysis || Object.keys(characterReferences).length > 0) && (
+                <button
+                  onClick={() => {
+                    if (confirm('Tüm storyboard verilerini sıfırlamak istediğinizden emin misiniz?')) {
+                      // Clear all state
+                      setCharacterAnalysis(null);
+                      setLocationAnalysis(null);
+                      setStyleAnalysis(null);
+                      setColorPalette(null);
+                      setVisualLanguage(null);
+                      setCharacterReferences({});
+                      setLocationReferences({});
+                      setFinalStoryboard({});
+                      setStoryboardScenes([]);
+                      setCurrentStep(1);
+
+                      // Clear from cache
+                      if (currentScript?.name) {
+                        const storageKey = `storyboard_${currentScript.name}`;
+                        localStorage.removeItem(storageKey);
+                        console.log('🗑️ Storyboard data cleared');
                       }
-                      cancelStoryboard();
-                    }}
-                    className="px-6 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm transition-colors border border-red-500/30"
-                  >
-                    ✖ İptal Et
-                  </button>
-                </div>
+                    }
+                  }}
+                  className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded-lg text-sm transition-colors border border-red-500/30"
+                >
+                  🗑️ Sıfırla
+                </button>
+              )}
+            </div>
+
+            {/* Modern Wizard Progress Steps */}
+            <div className="mb-8 bg-cinema-dark rounded-xl p-6 border border-cinema-gray">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative">
+                {steps.map((step, index) => (
+                  <React.Fragment key={step.id}>
+                    <div className={`
+                relative p-4 rounded-lg border-2 transition-all cursor-pointer
+                ${step.status === 'completed' ? 'border-green-500 bg-green-500/10' :
+                        step.status === 'processing' ? 'border-cinema-accent bg-cinema-accent/10 animate-pulse' :
+                          currentStep === step.id ? 'border-cinema-accent bg-cinema-accent/5' :
+                            'border-cinema-gray bg-cinema-gray/30 opacity-60'}
+              `}>
+                      {/* Step number badge */}
+                      <div className={`
+                  absolute -top-3 -left-3 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
+                  ${step.status === 'completed' ? 'bg-green-500 text-white' :
+                          step.status === 'processing' ? 'bg-cinema-accent text-cinema-black' :
+                            currentStep === step.id ? 'bg-cinema-accent text-cinema-black' :
+                              'bg-cinema-gray text-cinema-text-dim'}
+                `}>
+                        {step.status === 'completed' ? '✓' : step.id}
+                      </div>
+
+                      {/* Step content */}
+                      <div className="mt-2">
+                        <h3 className={`font-semibold text-sm mb-1 ${step.status === 'completed' || step.status === 'processing' || currentStep === step.id
+                            ? 'text-white' : 'text-cinema-text-dim'
+                          }`}>
+                          {step.title}
+                        </h3>
+                        <p className="text-xs text-cinema-text-dim">
+                          {step.description}
+                        </p>
+                      </div>
+
+                      {/* Status icon */}
+                      <div className="absolute top-4 right-4">
+                        {step.status === 'completed' && <span className="text-green-500 text-xl">✓</span>}
+                        {step.status === 'processing' && <span className="text-cinema-accent text-xl animate-spin">⚙️</span>}
+                      </div>
+                    </div>
+
+                    {/* Connection line */}
+                    {index < steps.length - 1 && (
+                      <div className="hidden md:flex items-center justify-center absolute left-1/4 right-3/4 top-1/2 transform -translate-y-1/2"
+                        style={{ left: `${(index + 1) * 25 - 2}%`, width: '4%' }}>
+                        <div className={`h-0.5 w-full ${steps[index + 1].status === 'completed' || steps[index + 1].status === 'processing'
+                            ? 'bg-cinema-accent' : 'bg-cinema-gray'
+                          }`} />
+                      </div>
+                    )}
+                  </React.Fragment>
+                ))}
               </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Character Visualization and Image Generation */}
+            </div>
+
+            {/* Current Step Content */}
+            <div className="bg-cinema-dark rounded-xl border border-cinema-gray p-6 mb-6">
+              {currentStep === 1 && (
                 <div>
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-lg font-semibold text-cinema-accent">👥 Karakterler</span>
-                    <span className="text-sm text-cinema-text-dim">
-                      ({characterAnalysis?.characters?.length || 0} karakter analiz edildi)
-                    </span>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-cinema-accent rounded-lg flex items-center justify-center text-2xl">
+                      🎭
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-semibold text-white">Karakter ve Mekan Analizi</h2>
+                      <p className="text-cinema-text-dim text-sm">
+                        Senaryodaki karakterler ve mekanlar AI tarafından analiz ediliyor
+                      </p>
+                    </div>
                   </div>
-                  
-                  {/* Character Images Section */}
-                  <div className="mb-6">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-lg font-semibold text-cinema-text">🎨 Karakter Görselleri</h3>
-                      {Object.keys(characterImages).length > 0 && (
-                        <span className="text-sm text-cinema-accent">
-                          {Object.keys(characterImages).length} görsel oluşturuldu
-                        </span>
+
+                  {(!characterAnalysis || !locationAnalysis) && !isStoryboardProcessing ? (
+                    <div className="text-center py-8">
+                      <div className="flex flex-col gap-4 items-center">
+                        <button
+                          onClick={() => executeStep(1)}
+                          disabled={isProcessing || isStoryboardProcessing || !isConfigured() || !aiHandler}
+                          className="bg-cinema-accent hover:bg-cinema-accent/90 text-cinema-black px-8 py-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium text-lg transition-all transform hover:scale-105"
+                        >
+                          {(isProcessing || isStoryboardProcessing) ? '🔄 Analiz Ediliyor...' :
+                            !isConfigured() ? '⚠️ AI Ayarları Gerekli' :
+                              !aiHandler ? '⏳ Yükleniyor...' :
+                                '🚀 Analizi Başlat'}
+                        </button>
+
+                        {(isProcessing || isStoryboardProcessing) && (
+                          <button
+                            onClick={() => {
+                              if (abortController) {
+                                abortController.abort();
+                              }
+                              cancelStoryboard();
+                            }}
+                            className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm transition-colors border border-red-500/30"
+                          >
+                            ✕ İptal Et
+                          </button>
+                        )}
+                      </div>
+                      {!isConfigured() && (
+                        <p className="mt-4 text-cinema-text-dim text-sm">
+                          Ayarlar {'>'} AI Sağlayıcıları bölümünden API key ekleyin
+                        </p>
                       )}
                     </div>
-                    
-                    {Object.keys(characterImages).length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                        {Object.entries(characterImages).map(([characterName, imageData]) => (
-                          <div key={characterName} className="bg-cinema-gray rounded-lg border border-cinema-gray-light p-4">
-                            <div className="text-sm font-semibold text-cinema-accent mb-2">
-                              {characterName}
+                  ) : (!characterAnalysis || !locationAnalysis) && isStoryboardProcessing ? (
+                    <div className="text-center py-12">
+                      <div className="flex flex-col gap-4 items-center max-w-md mx-auto">
+                        <div className="text-6xl mb-4 animate-spin">🎭</div>
+                        <h3 className="text-2xl font-semibold text-cinema-accent mb-2">
+                          🔄 Karakter ve Mekan Analizi
+                        </h3>
+
+                        <p className="text-cinema-text-dim text-lg mb-6">
+                          Senaryodaki karakterler ve mekanlar AI tarafından analiz ediliyor...
+                        </p>
+                        <button
+                          onClick={() => {
+                            if (abortController) {
+                              abortController.abort();
+                            }
+                            cancelStoryboard();
+                          }}
+                          className="px-6 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm transition-colors border border-red-500/30"
+                        >
+                          ✖ İptal Et
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Character Visualization and Image Generation */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <span className="text-lg font-semibold text-cinema-accent">👥 Karakterler</span>
+                          <span className="text-sm text-cinema-text-dim">
+                            ({characterAnalysis?.characters?.length || 0} karakter analiz edildi)
+                          </span>
+                        </div>
+
+                        {/* Character Images Section */}
+                        <div className="mb-6">
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-lg font-semibold text-cinema-text">🎨 Karakter Görselleri</h3>
+                            {Object.keys(characterImages).length > 0 && (
+                              <span className="text-sm text-cinema-accent">
+                                {Object.keys(characterImages).length} görsel oluşturuldu
+                              </span>
+                            )}
+                          </div>
+
+                          {Object.keys(characterImages).length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                              {Object.entries(characterImages).map(([characterName, imageData]) => (
+                                <div key={characterName} className="bg-cinema-gray rounded-lg border border-cinema-gray-light p-4">
+                                  <div className="text-sm font-semibold text-cinema-accent mb-2">
+                                    {characterName}
+                                  </div>
+                                  <img
+                                    src={imageData.url}
+                                    alt={`${characterName} character visual`}
+                                    className="w-full h-48 object-cover rounded border border-cinema-gray cursor-pointer hover:border-cinema-accent transition-colors"
+                                    onClick={() => openImageModal(imageData)}
+                                    title="Görseli büyütmek için tıklayın"
+                                  />
+                                  <div className="text-xs text-cinema-text-dim mt-2">
+                                    🕐 {new Date(imageData.timestamp).toLocaleString('tr-TR')}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                            <img 
-                              src={imageData.url} 
-                              alt={`${characterName} character visual`}
-                              className="w-full h-48 object-cover rounded border border-cinema-gray"
+                          ) : characterAnalysis?.characters?.length > 0 && (
+                            <div className="text-center py-6 bg-cinema-gray/50 rounded-lg border border-cinema-gray">
+                              <div className="text-4xl mb-3 text-cinema-text-dim">🎨</div>
+                              <p className="text-cinema-text-dim mb-4">Karakter görselleri otomatik oluşturuldu</p>
+                              <p className="text-xs text-cinema-text-dim">
+                                Yukarıdaki analiz adımında karakter görselleri otomatik olarak üretildi
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Individual Character Image Generators */}
+                        {characterAnalysis?.characters?.map((character, index) => (
+                          <CharacterImageGenerator
+                            key={character.name + index}
+                            character={character}
+                            onImageGenerated={(characterName, imageData) => {
+                              setCharacterImages(prev => ({
+                                ...prev,
+                                [characterName]: imageData
+                              }));
+                            }}
+                          />
+                        ))}
+                      </div>
+
+                      {/* Original Character Visualization */}
+                      <CharacterVisualization
+                        characterAnalysis={characterAnalysis}
+                        locationAnalysis={locationAnalysis}
+                        onCharactersUpdated={(updated) => {
+                          setCharacterAnalysis(updated.characters);
+                          setLocationAnalysis(updated.locations);
+                        }}
+                        onContinue={() => setCurrentStep(2)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {currentStep === 2 && (
+                <div>
+                  <h2 className="text-xl font-semibold mb-4">2. Stil ve Renk Paleti</h2>
+                  <p className="text-gray-600 mb-4">
+                    Görsel stil, renk paleti ve sinematik dil belirlenecek.
+                  </p>
+
+                  {!styleAnalysis && !isStoryboardProcessing ? (
+                    <button
+                      onClick={() => executeStep(2)}
+                      disabled={isProcessing || isStoryboardProcessing || !characterAnalysis || !locationAnalysis || !isConfigured() || !aiHandler}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg disabled:opacity-50"
+                    >
+                      {(isProcessing || isStoryboardProcessing) ? 'Stil Analizi Yapılıyor...' :
+                        !characterAnalysis || !locationAnalysis ? 'Önce 1. Aşamayı Tamamlayın' :
+                          !isConfigured() ? 'AI Ayarları Gerekli' :
+                            !aiHandler ? 'AI Handler Yükleniyor...' :
+                              'Stil ve Renk Analizini Başlat'}
+                    </button>
+                  ) : !styleAnalysis && isStoryboardProcessing ? (
+                    <div className="text-center py-12">
+                      <div className="flex flex-col gap-4 items-center max-w-md mx-auto">
+                        <div className="text-6xl mb-4 animate-spin">🎨</div>
+                        <h3 className="text-2xl font-semibold text-blue-400 mb-2">
+                          🔄 Stil ve Renk Analizi
+                        </h3>
+
+                        <p className="text-gray-400 text-lg">
+                          Görsel stil ve renk paleti belirleniyor...
+                        </p>
+                      </div>
+                    </div>
+                  ) : !styleAnalysis && isStoryboardProcessing ? (
+                    <div className="text-center py-12">
+                      <div className="flex flex-col gap-4 items-center">
+                        <div className="text-6xl mb-4 animate-spin">🎨</div>
+                        <h3 className="text-2xl font-semibold text-blue-400 mb-2">
+                          🔄 Stil Analizi Devam Ediyor
+                        </h3>
+                        <p className="text-gray-400 text-lg">
+                          Görsel stil ve renk paleti belirleniyor...
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border border-gray-700 rounded-lg p-4 bg-gray-800">
+                      <h3 className="font-semibold text-green-400 mb-3">✅ Stil Analizi Tamamlandı</h3>
+                      {styleAnalysis.visualStyle ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="text-gray-200">
+                            <strong className="text-blue-400">Görsel Stil:</strong> {styleAnalysis.visualStyle}<br />
+                            <strong className="text-blue-400">Aydınlatma:</strong> {styleAnalysis.lightingStyle}<br />
+                            <strong className="text-blue-400">Atmosfer:</strong> {styleAnalysis.atmosphere}
+                          </div>
+                          <div className="text-gray-200">
+                            <strong className="text-blue-400">Ana Renkler:</strong>
+                            <div className="flex gap-2 mt-1">
+                              {(styleAnalysis.primaryColors || colorPalette)?.map((color, index) => (
+                                <div key={index} className="w-8 h-8 rounded border border-gray-600" style={{ backgroundColor: color }} title={color}></div>
+                              )) || (
+                                  <span className="text-gray-400 text-sm">Renk paleti belirlenmedi</span>
+                                )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <pre className="text-xs bg-gray-700 text-gray-200 p-3 rounded overflow-auto max-h-32 border border-gray-600">
+                          {styleAnalysis.text}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {currentStep === 3 && (
+                <div>
+                  <h2 className="text-xl font-semibold mb-4">3. Final Storyboard</h2>
+                  <p className="text-gray-600 mb-4">
+                    Karakter ve stil analizine dayalı profesyonel storyboard sahneleri oluşturacağız.
+                  </p>
+
+                  {Object.keys(finalStoryboard).length === 0 && !isStoryboardProcessing ? (
+                    <button
+                      onClick={generateFinalStoryboard}
+                      disabled={isProcessing || isStoryboardProcessing || !styleAnalysis || !isConfigured() || !aiHandler}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg disabled:opacity-50"
+                    >
+                      {(isProcessing || isStoryboardProcessing) ? 'Final Storyboard Oluşturuluyor...' :
+                        !styleAnalysis ? 'Önce 2. Aşamayı Tamamlayın' :
+                          !isConfigured() ? 'AI Ayarları Gerekli' :
+                            !aiHandler ? 'AI Handler Yükleniyor...' :
+                              'Final Storyboard Üretimini Başlat'}
+                    </button>
+                  ) : Object.keys(finalStoryboard).length === 0 && isStoryboardProcessing ? (
+                    <div className="text-center py-12">
+                      <div className="flex flex-col gap-4 items-center max-w-md mx-auto">
+                        <div className="text-6xl mb-4 animate-spin">🎬</div>
+                        <h3 className="text-2xl font-semibold text-green-400 mb-2">
+                          🔄 Final Storyboard
+                        </h3>
+
+                        <p className="text-gray-400 text-lg">
+                          Profesyonel storyboard üretimi devam ediyor...
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border border-gray-700 rounded-lg p-4 bg-gray-800">
+                      <h3 className="font-semibold text-green-400 mb-3">✅ Referans Görseller Oluşturuldu</h3>
+
+                      {/* Karakter Referansları */}
+                      {Object.keys(characterReferences).length > 0 && (
+                        <div className="mb-6">
+                          <h4 className="font-semibold mb-3 text-blue-400">Karakter Referansları ({Object.keys(characterReferences).length})</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {Object.entries(characterReferences).map(([name, ref]) => (
+                              <div key={name} className="border border-gray-700 rounded-lg p-3 bg-gray-800">
+                                <h5 className="font-semibold mb-2 text-gray-200">{name}</h5>
+                                <img
+                                  src={ref.referenceImage}
+                                  alt={`${name} referansı`}
+                                  className="w-full h-40 object-cover rounded mb-2 cursor-pointer hover:border hover:border-cinema-accent transition-colors"
+                                  onClick={() => openImageModal({ url: ref.referenceImage, character: name, type: 'reference' })}
+                                  title="Görseli büyütmek için tıklayın"
+                                />
+                                <p className="text-xs text-gray-400">{ref.physical}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Mekan Referansları */}
+                      {Object.keys(locationReferences).length > 0 && (
+                        <div>
+                          <h4 className="font-semibold mb-3 text-blue-400">Mekan Referansları ({Object.keys(locationReferences).length})</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {Object.entries(locationReferences).map(([name, ref]) => (
+                              <div key={name} className="border border-gray-700 rounded-lg p-3 bg-gray-800">
+                                <h5 className="font-semibold mb-2 text-gray-200">{name}</h5>
+                                <img
+                                  src={ref.referenceImage}
+                                  alt={`${name} referansı`}
+                                  className="w-full h-40 object-cover rounded mb-2 cursor-pointer hover:border hover:border-cinema-accent transition-colors"
+                                  onClick={() => openImageModal({ url: ref.referenceImage, location: name, type: 'location_reference' })}
+                                  title="Görseli büyütmek için tıklayın"
+                                />
+                                className="w-full h-40 object-cover rounded mb-2"
+                          />
+                                <p className="text-xs text-gray-600">{ref.description}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {currentStep === 4 && (
+                <div>
+                  <h2 className="text-xl font-semibold mb-4">4. Final Storyboard</h2>
+                  <p className="text-gray-600 mb-4">
+                    Tutarlı stil ile profesyonel storyboard üretimi yapılacak.
+                  </p>
+
+                  {Object.keys(finalStoryboard).length === 0 && !isStoryboardProcessing ? (
+                    <button
+                      onClick={() => executeStep(4)}
+                      disabled={isProcessing || isStoryboardProcessing || Object.keys(characterReferences).length === 0 || !isConfigured() || !aiHandler}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg disabled:opacity-50"
+                    >
+                      {(isProcessing || isStoryboardProcessing) ? 'Final Storyboard Oluşturuluyor...' :
+                        Object.keys(characterReferences).length === 0 ? 'Önce 3. Aşamayı Tamamlayın' :
+                          !isConfigured() ? 'AI Ayarları Gerekli' :
+                            !aiHandler ? 'AI Handler Yükleniyor...' :
+                              'Final Storyboard Üretimini Başlat'}
+                    </button>
+                  ) : Object.keys(finalStoryboard).length === 0 && isStoryboardProcessing ? (
+                    <div className="text-center py-12">
+                      <div className="flex flex-col gap-4 items-center max-w-md mx-auto">
+                        <div className="text-6xl mb-4 animate-spin">🎬</div>
+                        <h3 className="text-2xl font-semibold text-green-400 mb-2">
+                          🔄 Final Storyboard
+                        </h3>
+
+                        <p className="text-gray-400 text-lg">
+                          Profesyonel storyboard üretimi devam ediyor...
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border border-gray-700 rounded-lg p-4 bg-gray-800">
+                      <h3 className="font-semibold text-green-400 mb-3">
+                        ✅ Profesyonel Storyboard Tamamlandı ({Object.keys(finalStoryboard).length} sahne)
+                      </h3>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {storyboardScenes.map((scene, index) => (
+                          <div key={index} className="border border-gray-700 rounded-lg p-4 bg-gray-800">
+                            <div className="flex justify-between items-start mb-3">
+                              <h4 className="font-semibold text-blue-400">Frame {scene.frameNumber}</h4>
+                              <span className="text-sm text-gray-400">{scene.title}</span>
+                            </div>
+                            <img
+                              src={scene.storyboardImage}
+                              alt={`Storyboard frame ${scene.frameNumber}`}
+                              className="w-full h-48 object-cover rounded mb-3 cursor-pointer hover:border hover:border-cinema-accent transition-colors"
+                              onClick={() => openImageModal({ url: scene.storyboardImage, scene: scene.title, frame: scene.frameNumber, type: 'storyboard' })}
+                              title="Görseli büyütmek için tıklayın"
                             />
-                            <div className="text-xs text-cinema-text-dim mt-2">
-                              🕐 {new Date(imageData.timestamp).toLocaleString('tr-TR')}
-                            </div>
+                            <p className="text-sm text-gray-300">{scene.text}</p>
                           </div>
                         ))}
                       </div>
-                    ) : characterAnalysis?.characters?.length > 0 && (
-                      <div className="text-center py-6 bg-cinema-gray/50 rounded-lg border border-cinema-gray">
-                        <div className="text-4xl mb-3 text-cinema-text-dim">🎨</div>
-                        <p className="text-cinema-text-dim mb-4">Karakter görselleri otomatik oluşturuldu</p>
-                        <p className="text-xs text-cinema-text-dim">
-                          Yukarıdaki analiz adımında karakter görselleri otomatik olarak üretildi
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Individual Character Image Generators */}
-                  {characterAnalysis?.characters?.map((character, index) => (
-                    <CharacterImageGenerator
-                      key={character.name + index}
-                      character={character}
-                      onImageGenerated={(characterName, imageData) => {
-                        setCharacterImages(prev => ({
-                          ...prev,
-                          [characterName]: imageData
-                        }));
-                      }}
-                    />
-                  ))}
+                    </div>
+                  )}
                 </div>
+              )}
+            </div>
 
-                {/* Original Character Visualization */}
-                <CharacterVisualization
-                  characterAnalysis={characterAnalysis}
-                  locationAnalysis={locationAnalysis}
-                  onCharactersUpdated={(updated) => {
-                    setCharacterAnalysis(updated.characters);
-                    setLocationAnalysis(updated.locations);
-                  }}
-                  onContinue={() => setCurrentStep(2)}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {currentStep === 2 && (
-          <div>
-            <h2 className="text-xl font-semibold mb-4">2. Stil ve Renk Paleti</h2>
-            <p className="text-gray-600 mb-4">
-              Görsel stil, renk paleti ve sinematik dil belirlenecek.
-            </p>
-            
-            {!styleAnalysis && !isStoryboardProcessing ? (
+            {/* Step Navigation */}
+            <div className="flex justify-between">
               <button
-                onClick={() => executeStep(2)}
-                disabled={isProcessing || isStoryboardProcessing || !characterAnalysis || !locationAnalysis || !isConfigured() || !aiHandler}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg disabled:opacity-50"
+                onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
+                disabled={currentStep === 1}
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg disabled:opacity-50"
               >
-                {(isProcessing || isStoryboardProcessing) ? 'Stil Analizi Yapılıyor...' :
-                 !characterAnalysis || !locationAnalysis ? 'Önce 1. Aşamayı Tamamlayın' :
-                 !isConfigured() ? 'AI Ayarları Gerekli' :
-                 !aiHandler ? 'AI Handler Yükleniyor...' :
-                 'Stil ve Renk Analizini Başlat'}
+                Önceki Aşama
               </button>
-            ) : !styleAnalysis && isStoryboardProcessing ? (
-              <div className="text-center py-12">
-                <div className="flex flex-col gap-4 items-center max-w-md mx-auto">
-                  <div className="text-6xl mb-4 animate-spin">🎨</div>
-                  <h3 className="text-2xl font-semibold text-blue-400 mb-2">
-                    🔄 Stil ve Renk Analizi
-                  </h3>
-                  
-                  <p className="text-gray-400 text-lg">
-                    Görsel stil ve renk paleti belirleniyor...
-                  </p>
-                </div>
-              </div>
-            ) : !styleAnalysis && isStoryboardProcessing ? (
-              <div className="text-center py-12">
-                <div className="flex flex-col gap-4 items-center">
-                  <div className="text-6xl mb-4 animate-spin">🎨</div>
-                  <h3 className="text-2xl font-semibold text-blue-400 mb-2">
-                    🔄 Stil Analizi Devam Ediyor
-                  </h3>
-                  <p className="text-gray-400 text-lg">
-                    Görsel stil ve renk paleti belirleniyor...
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="border rounded-lg p-4">
-                <h3 className="font-semibold text-green-600 mb-3">✅ Stil Analizi Tamamlandı</h3>
-                {styleAnalysis.visualStyle ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <strong>Görsel Stil:</strong> {styleAnalysis.visualStyle}<br/>
-                      <strong>Aydınlatma:</strong> {styleAnalysis.lightingStyle}<br/>
-                      <strong>Atmosfer:</strong> {styleAnalysis.atmosphere}
-                    </div>
-                    <div>
-                      <strong>Ana Renkler:</strong>
-                      <div className="flex gap-2 mt-1">
-                        {styleAnalysis.primaryColors?.map((color, index) => (
-                          <div key={index} className="w-8 h-8 rounded" style={{backgroundColor: color}} title={color}></div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <pre className="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-32">
-                    {styleAnalysis.text}
-                  </pre>
-                )}
-              </div>
-            )}
-          </div>
-        )}
 
-        {currentStep === 3 && (
-          <div>
-            <h2 className="text-xl font-semibold mb-4">3. Referans Görseller</h2>
-            <p className="text-gray-600 mb-4">
-              Karakterler ve mekanlar için tutarlı referans görseller oluşturacağız.
-            </p>
-            
-            {Object.keys(characterReferences).length === 0 && !isStoryboardProcessing ? (
               <button
-                onClick={() => executeStep(3)}
-                disabled={isProcessing || isStoryboardProcessing || !styleAnalysis || !isConfigured() || !aiHandler}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg disabled:opacity-50"
+                onClick={() => setCurrentStep(Math.min(3, currentStep + 1))}
+                disabled={currentStep === 3}
+                className="bg-cinema-gray hover:bg-cinema-gray-light text-white px-6 py-3 rounded-lg disabled:opacity-50 transition-colors font-medium"
               >
-                {(isProcessing || isStoryboardProcessing) ? 'Referans Görseller Oluşturuluyor...' :
-                 !styleAnalysis ? 'Önce 2. Aşamayı Tamamlayın' :
-                 !isConfigured() ? 'AI Ayarları Gerekli' :
-                 !aiHandler ? 'AI Handler Yükleniyor...' :
-                 'Referans Görsel Üretimini Başlat'}
+                Sonraki Adım →
               </button>
-            ) : Object.keys(characterReferences).length === 0 && isStoryboardProcessing ? (
-              <div className="text-center py-12">
-                <div className="flex flex-col gap-4 items-center max-w-md mx-auto">
-                  <div className="text-6xl mb-4 animate-spin">🖼️</div>
-                  <h3 className="text-2xl font-semibold text-purple-400 mb-2">
-                    🔄 Referans Görseller
-                  </h3>
-                  
-                  <p className="text-gray-400 text-lg">
-                    Karakterler ve mekanlar için referans görseller hazırlanıyor...
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <h3 className="font-semibold text-green-600 mb-3">✅ Referans Görseller Oluşturuldu</h3>
-                
-                {/* Karakter Referansları */}
-                {Object.keys(characterReferences).length > 0 && (
-                  <div className="mb-6">
-                    <h4 className="font-semibold mb-3">Karakter Referansları ({Object.keys(characterReferences).length})</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {Object.entries(characterReferences).map(([name, ref]) => (
-                        <div key={name} className="border rounded-lg p-3">
-                          <h5 className="font-semibold mb-2">{name}</h5>
-                          <img 
-                            src={ref.referenceImage} 
-                            alt={`${name} referansı`}
-                            className="w-full h-40 object-cover rounded mb-2"
-                          />
-                          <p className="text-xs text-gray-600">{ref.physical}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Mekan Referansları */}
-                {Object.keys(locationReferences).length > 0 && (
-                  <div>
-                    <h4 className="font-semibold mb-3">Mekan Referansları ({Object.keys(locationReferences).length})</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {Object.entries(locationReferences).map(([name, ref]) => (
-                        <div key={name} className="border rounded-lg p-3">
-                          <h5 className="font-semibold mb-2">{name}</h5>
-                          <img 
-                            src={ref.referenceImage} 
-                            alt={`${name} referansı`}
-                            className="w-full h-40 object-cover rounded mb-2"
-                          />
-                          <p className="text-xs text-gray-600">{ref.description}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {currentStep === 4 && (
-          <div>
-            <h2 className="text-xl font-semibold mb-4">4. Final Storyboard</h2>
-            <p className="text-gray-600 mb-4">
-              Tutarlı stil ile profesyonel storyboard üretimi yapılacak.
-            </p>
-            
-            {Object.keys(finalStoryboard).length === 0 && !isStoryboardProcessing ? (
-              <button
-                onClick={() => executeStep(4)}
-                disabled={isProcessing || isStoryboardProcessing || Object.keys(characterReferences).length === 0 || !isConfigured() || !aiHandler}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg disabled:opacity-50"
-              >
-                {(isProcessing || isStoryboardProcessing) ? 'Final Storyboard Oluşturuluyor...' :
-                 Object.keys(characterReferences).length === 0 ? 'Önce 3. Aşamayı Tamamlayın' :
-                 !isConfigured() ? 'AI Ayarları Gerekli' :
-                 !aiHandler ? 'AI Handler Yükleniyor...' :
-                 'Final Storyboard Üretimini Başlat'}
-              </button>
-            ) : Object.keys(finalStoryboard).length === 0 && isStoryboardProcessing ? (
-              <div className="text-center py-12">
-                <div className="flex flex-col gap-4 items-center max-w-md mx-auto">
-                  <div className="text-6xl mb-4 animate-spin">🎬</div>
-                  <h3 className="text-2xl font-semibold text-green-400 mb-2">
-                    🔄 Final Storyboard
-                  </h3>
-                  
-                  <p className="text-gray-400 text-lg">
-                    Profesyonel storyboard üretimi devam ediyor...
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <h3 className="font-semibold text-green-600 mb-3">
-                  ✅ Profesyonel Storyboard Tamamlandı ({Object.keys(finalStoryboard).length} sahne)
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {storyboardScenes.map((scene, index) => (
-                    <div key={index} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <h4 className="font-semibold">Frame {scene.frameNumber}</h4>
-                        <span className="text-sm text-gray-500">{scene.title}</span>
-                      </div>
-                      <img 
-                        src={scene.storyboardImage} 
-                        alt={`Storyboard frame ${scene.frameNumber}`}
-                        className="w-full h-48 object-cover rounded mb-3"
-                      />
-                      <p className="text-sm text-gray-600">{scene.text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Step Navigation */}
-      <div className="flex justify-between">
-        <button
-          onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-          disabled={currentStep === 1}
-          className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg disabled:opacity-50"
-        >
-          Önceki Aşama
-        </button>
-        
-        <button
-          onClick={() => setCurrentStep(Math.min(4, currentStep + 1))}
-          disabled={currentStep === 4}
-          className="bg-cinema-gray hover:bg-cinema-gray-light text-white px-6 py-3 rounded-lg disabled:opacity-50 transition-colors font-medium"
-        >
-          Sonraki Adım →
-        </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Image Modal */}
+      {isImageModalOpen && selectedImage && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4" onClick={closeImageModal}>
+          <div className="relative max-w-6xl max-h-full">
+            <button
+              onClick={closeImageModal}
+              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full w-10 h-10 flex items-center justify-center hover:bg-opacity-75 transition-opacity z-10"
+            >
+              ✕
+            </button>
+            <img
+              src={selectedImage.url}
+              alt={selectedImage.character || selectedImage.location || selectedImage.scene || "Görsel"}
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+            {(selectedImage.character || selectedImage.location || selectedImage.scene) && (
+              <div className="absolute bottom-4 left-4 bg-black bg-opacity-70 text-white p-3 rounded-lg">
+                <h4 className="font-semibold">
+                  {selectedImage.type === 'storyboard' && `Frame ${selectedImage.frame} - ${selectedImage.scene}`}
+                  {selectedImage.type === 'reference' && `${selectedImage.character} Referansı`}
+                  {selectedImage.type === 'location_reference' && `${selectedImage.location} Referansı`}
+                  {selectedImage.character && !selectedImage.type && selectedImage.character}
+                </h4>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -4,6 +4,11 @@ const fs = require('fs').promises;
 const pdfParse = require('pdf-parse');
 const poppler = require('pdf-poppler');
 
+// Disable Electron security warnings in development
+if (process.env.NODE_ENV !== 'production') {
+  process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
+}
+
 // Fix Electron cache and GPU errors
 app.commandLine.appendSwitch('--disable-gpu-sandbox');
 app.commandLine.appendSwitch('--disable-software-rasterizer');
@@ -135,9 +140,9 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      webSecurity: false, // Disable web security for API calls
-      allowRunningInsecureContent: true,
-      experimentalFeatures: true
+      webSecurity: process.env.NODE_ENV === 'production', // Only enable in production
+      allowRunningInsecureContent: process.env.NODE_ENV !== 'production', // Allow in development
+      experimentalFeatures: process.env.NODE_ENV !== 'production' // Only in development
     },
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     frame: true, // Always show frame for better UX
@@ -194,7 +199,10 @@ async function createWindow() {
       await mainWindow.loadURL('data:text/html,<h1>Development Server Not Running</h1><p>Please start the development server with: npm run start:react</p>');
     }
     
-    mainWindow.webContents.openDevTools();
+    // Only open DevTools in development mode
+    if (process.env.NODE_ENV !== 'production') {
+      mainWindow.webContents.openDevTools();
+    }
   } else {
     // Production mode
     mainWindow.loadFile(path.join(__dirname, '../../build/index.html'));
