@@ -294,9 +294,16 @@ export default function AnalysisPanel() {
           
           await analysisStorageService.saveAnalysis(
             text,
-            `${tempKey}_partial`,
+            scriptFileName,
             tempAnalysisData,
-            { isPartialAnalysis: true }
+            { 
+              isPartialAnalysis: true,
+              projectName: scriptFileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+              analysisType: `partial_${completed + 1}of${totalAnalyses}`,
+              originalFileName: currentScript?.originalFileName || scriptFileName,
+              fileType: currentScript?.fileType || 'unknown',
+              analysisProvider: provider
+            }
           );
           
           console.log(`💾 Devam ara kayıt: ${analysisType} tamamlandı (${completed + 1}/${totalAnalyses})`);
@@ -340,6 +347,8 @@ export default function AnalysisPanel() {
       if (currentScript && scriptFileName) {
         await analysisStorageService.saveAnalysis(text, scriptFileName, finalAnalysisData, {
           fileName: scriptFileName,
+          projectName: scriptFileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+          analysisType: 'full',
           originalFileName: currentScript?.originalFileName || scriptFileName,
           fileType: currentScript?.fileType || 'unknown',
           analysisProvider: provider
@@ -636,9 +645,16 @@ export default function AnalysisPanel() {
             // Bellekte ara kayıt
             await analysisStorageService.saveAnalysis(
               filteredAnalysisText,
-              `${tempKey}_partial`,
+              scriptFileName,
               tempAnalysisData,
-              { isPartialAnalysis: true }
+              { 
+                isPartialAnalysis: true,
+                projectName: scriptFileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+                analysisType: `partial_${completed}of${totalAnalyses}`,
+                originalFileName: currentScript?.originalFileName || scriptFileName,
+                fileType: currentScript?.fileType || 'script',
+                analysisProvider: provider
+              }
             );
             
             console.log(`💾 Ara kayıt yapıldı: ${analysisType} analizi tamamlandı (${completed}/${totalAnalyses})`);
@@ -715,9 +731,17 @@ export default function AnalysisPanel() {
             
             await analysisStorageService.saveAnalysis(
               filteredAnalysisText,
-              `${tempKey}_partial`,
+              scriptFileName,
               tempAnalysisData,
-              { isPartialAnalysis: true, hasErrors: true }
+              { 
+                isPartialAnalysis: true, 
+                hasErrors: true,
+                projectName: scriptFileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+                analysisType: `partial_error_${completed}of${totalAnalyses}`,
+                originalFileName: currentScript?.originalFileName || scriptFileName,
+                fileType: currentScript?.fileType || 'script',
+                analysisProvider: provider
+              }
             );
             
             console.log(`💾 Hata ile ara kayıt yapıldı: ${analysisType} analizi başarısız (${completed}/${totalAnalyses})`);
@@ -802,6 +826,8 @@ export default function AnalysisPanel() {
       // Save analysis to storage with metadata
       try {
         const scriptMetadata = {
+          projectName: fileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+          analysisType: 'full',
           originalFileName: scriptStore.currentScript?.name || fileName,
           fileType: fileName.endsWith('.pdf') ? 'pdf' : 'text',
           uploadDate: scriptStore.currentScript?.uploadDate || new Date().toISOString(),
@@ -1139,6 +1165,8 @@ export default function AnalysisPanel() {
       const scriptFileName = currentScript?.fileName || currentScript?.name || 'Unknown_Script';
       const scriptText = currentScript?.cleanedText || currentScript?.scriptText || text;
       await analysisStorageService.saveAnalysis(scriptText, scriptFileName, finalResults, {
+        projectName: scriptFileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+        analysisType: 'full',
         fileName: scriptFileName,
         originalFileName: currentScript?.originalFileName || scriptFileName,
         fileType: currentScript?.fileType || 'unknown',
@@ -3682,8 +3710,20 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
             <div className="flex justify-between items-start">
               <div className="flex-1">
                 <h4 className="text-lg font-semibold text-cinema-text mb-2">
-                  📄 {analysis.fileName}
+                  📄 {analysis.projectName || analysis.fileName}
                 </h4>
+                {analysis.readableFileName && analysis.readableFileName !== analysis.fileName && (
+                  <div className="text-xs text-cinema-accent mb-1">
+                    🏷️ {analysis.readableFileName}
+                  </div>
+                )}
+                {analysis.analysisType && (
+                  <div className="inline-block px-2 py-0.5 rounded text-xs bg-cinema-accent/20 text-cinema-accent mb-2">
+                    {analysis.analysisType === 'full' ? '📊 Tam Analiz' : 
+                     analysis.analysisType === 'partial' ? '⏸️ Kısmi Analiz' : 
+                     `📋 ${analysis.analysisType}`}
+                  </div>
+                )}
                 <div className="text-sm text-cinema-text-dim space-y-1">
                   <div>
                     📅 {new Date(analysis.timestamp).toLocaleDateString('tr-TR', {

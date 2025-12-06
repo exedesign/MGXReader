@@ -43,12 +43,52 @@ export class AnalysisStorageService {
     return `analysis_${Math.abs(hash).toString(36)}.json`;
   }
 
+  // Generate human-readable analysis filename
+  generateReadableFileName(projectName, analysisType = 'full', version = '1.0') {
+    // Clean project name: remove special chars, limit length
+    const cleanName = (projectName || 'Unnamed_Project')
+      .replace(/[^a-zA-Z0-9\u00C0-\u017F_-]/g, '_') // Keep alphanumeric, Turkish chars, underscore, hyphen
+      .replace(/_+/g, '_') // Remove duplicate underscores
+      .replace(/^_|_$/g, '') // Remove leading/trailing underscores
+      .substring(0, 50); // Limit to 50 chars
+    
+    // Format date: YYYY-MM-DD
+    const date = new Date();
+    const dateStr = date.toISOString().split('T')[0]; // 2025-12-06
+    
+    // Format time: HH-MM
+    const timeStr = date.toTimeString().split(':').slice(0, 2).join('-'); // 15-30
+    
+    // Clean analysis type
+    const cleanType = analysisType.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    
+    // Format: projectname_analysistype_v1.0_2025-12-06_15-30.json
+    return `${cleanName}_${cleanType}_v${version}_${dateStr}_${timeStr}.json`;
+  }
+
   // Save analysis data to persistent storage
   async saveAnalysis(scriptText, fileName, analysisData, scriptMetadata = {}) {
     try {
+      // Determine project name from metadata or fileName
+      const projectName = scriptMetadata.projectName || 
+                          scriptMetadata.originalFileName || 
+                          fileName.replace(/\.(pdf|txt|fountain)$/i, '');
+      
+      // Determine analysis type
+      const analysisType = scriptMetadata.analysisType || 
+                           scriptMetadata.isPartialAnalysis ? 'partial' : 'full';
+      
+      // Use readable filename for storage
+      const readableFileName = this.generateReadableFileName(projectName, analysisType, '1.1');
+      
+      // Also keep hash-based key for backwards compatibility and quick lookup
       const analysisKey = this.generateAnalysisKey(scriptText, fileName);
+      
       const dataToSave = {
         fileName,
+        readableFileName, // NEW: Human-readable name
+        projectName, // NEW: Extracted project name
+        analysisType, // NEW: Analysis type
         timestamp: new Date().toISOString(),
         scriptHash: this.generateAnalysisKey(scriptText, ''), // Hash without filename
         analysisData,
@@ -56,6 +96,8 @@ export class AnalysisStorageService {
           originalFileName: scriptMetadata.originalFileName || fileName,
           fileType: scriptMetadata.fileType || 'unknown',
           uploadDate: scriptMetadata.uploadDate || new Date().toISOString(),
+          projectName: projectName, // Store project name
+          analysisType: analysisType, // Store analysis type
           ...scriptMetadata
         },
         metadata: {
@@ -66,11 +108,11 @@ export class AnalysisStorageService {
       };
 
       if (this.tempDir === 'localStorage') {
-        // Browser fallback
-        localStorage.setItem(`mgx_analysis_${analysisKey}`, JSON.stringify(dataToSave));
+        // Browser fallback - use readable name as key
+        localStorage.setItem(`mgx_analysis_${readableFileName}`, JSON.stringify(dataToSave));
       } else {
-        // Electron environment
-        const filePath = path.join(this.tempDir, analysisKey);
+        // Electron environment - use readable filename
+        const filePath = path.join(this.tempDir, readableFileName);
         await window.electronAPI.saveFileContent({
           filePath,
           data: JSON.stringify(dataToSave, null, 2),
@@ -78,8 +120,10 @@ export class AnalysisStorageService {
         });
       }
 
-      console.log(`Analysis saved for ${fileName} with key: ${analysisKey}`);
-      return analysisKey;
+      console.log(`✅ Analiz kaydedildi: ${readableFileName}`);
+      console.log(`   📁 Proje: ${projectName}`);
+      console.log(`   📊 Tip: ${analysisType}`);
+      return readableFileName.replace('.json', '');
     } catch (error) {
       console.error('Failed to save analysis:', error);
       throw error;
@@ -89,28 +133,39 @@ export class AnalysisStorageService {
   // Load analysis data by analysis key (for saved analyses list)
   async loadAnalysisByKey(analysisKey) {
     try {
+      // Support both old hash-based keys and new readable filenames
+      const keyVariants = [
+        analysisKey,
+        `${analysisKey}.json`,
+        analysisKey.replace('.json', '')
+      ];
+      
       if (this.tempDir === 'localStorage') {
         // Browser fallback
-        const stored = localStorage.getItem(`mgx_analysis_${analysisKey}`);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          console.log(`Analysis loaded by key from localStorage: ${analysisKey}`);
-          return parsed.analysisData;
+        for (const variant of keyVariants) {
+          const stored = localStorage.getItem(`mgx_analysis_${variant}`);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            console.log(`✅ Analiz yüklendi (localStorage): ${parsed.readableFileName || variant}`);
+            return parsed.analysisData;
+          }
         }
       } else {
-        // Electron environment
-        const filePath = path.join(this.tempDir, `${analysisKey}.json`);
-        if (await window.electronAPI.fileExists(filePath)) {
-          const content = await window.electronAPI.readFileContent(filePath);
-          const parsed = JSON.parse(content);
-          console.log(`Analysis loaded by key from file: ${filePath}`);
-          return parsed.analysisData;
+        // Electron environment - try all variants
+        for (const variant of keyVariants) {
+          const filePath = path.join(this.tempDir, variant.endsWith('.json') ? variant : `${variant}.json`);
+          if (await window.electronAPI.fileExists(filePath)) {
+            const content = await window.electronAPI.readFileContent(filePath);
+            const parsed = JSON.parse(content);
+            console.log(`✅ Analiz yüklendi: ${parsed.readableFileName || variant}`);
+            return parsed.analysisData;
+          }
         }
       }
 
       return null;
     } catch (error) {
-      console.error('Failed to load analysis by key:', error);
+      console.error('❌ Analiz yükleme hatası:', error);
       return null;
     }
   }
@@ -216,8 +271,11 @@ export class AnalysisStorageService {
             if (content) {
               const parsed = JSON.parse(content);
               analyses.push({
-                key: key.replace('mgx_analysis_', ''),
+                key: key.replace('mgx_analysis_', '').replace('.json', ''),
                 fileName: parsed.fileName,
+                readableFileName: parsed.readableFileName || parsed.fileName, // NEW
+                projectName: parsed.projectName || parsed.fileName, // NEW
+                analysisType: parsed.analysisType || 'full', // NEW
                 timestamp: parsed.timestamp,
                 metadata: parsed.metadata,
                 scriptMetadata: parsed.scriptMetadata
@@ -238,12 +296,15 @@ export class AnalysisStorageService {
                 analyses.push({
                   key: file.replace('.json', ''),
                   fileName: parsed.fileName,
+                  readableFileName: parsed.readableFileName || file, // NEW
+                  projectName: parsed.projectName || parsed.fileName, // NEW
+                  analysisType: parsed.analysisType || 'full', // NEW
                   timestamp: parsed.timestamp,
                   metadata: parsed.metadata,
                   scriptMetadata: parsed.scriptMetadata
                 });
               } catch (e) {
-                console.warn(`Failed to read analysis file ${file}:`, e);
+                console.warn(`⚠️ Analiz dosyası okunamadı (${file}):`, e);
               }
             }
           }
