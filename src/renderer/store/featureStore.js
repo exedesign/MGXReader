@@ -7,6 +7,7 @@ export const useFeatureStore = create(
             features: {
                 enable_ai_analysis: true,
                 enable_storyboard: true,
+                enable_canvas: true,
             },
 
             toggleFeature: (featureName) =>
@@ -44,6 +45,7 @@ export const useFeatureStore = create(
                     features: {
                         enable_ai_analysis: true,
                         enable_storyboard: true,
+                        enable_canvas: true,
                     }
                 }),
 

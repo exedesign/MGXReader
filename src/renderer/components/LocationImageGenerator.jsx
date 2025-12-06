@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAIStore } from '../store/aiStore';
 import { useScriptStore } from '../store/scriptStore';
 
-export default function CharacterImageGenerator({ character, onImageGenerated }) {
+export default function LocationImageGenerator({ location, onImageGenerated, characterReferences = [] }) {
     const { t } = useTranslation();
     const { getAIHandler, provider, isGeneratingImage, setGeneratingImage, generateImage } = useAIStore();
     const { getCurrentScript } = useScriptStore();
@@ -12,82 +12,84 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
     const [referenceImages, setReferenceImages] = useState([]); // Changed to array for multiple images
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState(null);
-    const [prompt, setPrompt] = useState('Professional character portrait');
+    const [prompt, setPrompt] = useState('Professional location environment');
     const [isImageModalOpen, setIsImageModalOpen] = useState(false);
     const fileInputRef = useRef(null);
 
-    // Auto-generate prompt from character data
+    // Auto-generate prompt from location data
     useEffect(() => {
-        if (character && character.name) {
-            generatePromptFromCharacter();
+        if (location && location.name) {
+            generatePromptFromLocation();
         }
-    }, [character]);
+    }, [location]);
 
-    const generatePromptFromCharacter = () => {
-        if (!character) {
-            setPrompt('Professional character portrait');
+    const generatePromptFromLocation = () => {
+        if (!location) {
+            setPrompt('Professional location environment');
             return;
         }
 
-        let characterPrompt = `Professional character portrait of ${character.name || 'character'}`;
+        let locationPrompt = `Professional cinematic environment: ${location.name || 'location'}`;
 
-        // Add physical description if available
-        if (character.physicalDescription || character.physical) {
-            const physicalDesc = character.physicalDescription || character.physical;
-            if (typeof physicalDesc === 'string' && physicalDesc.trim()) {
-                characterPrompt += `, ${physicalDesc}`;
-            }
-        } else if (character.description) {
-            if (typeof character.description === 'string' && character.description.trim()) {
-                characterPrompt += `, ${character.description}`;
+        // Add type/setting if available
+        if (location.type) {
+            if (typeof location.type === 'string' && location.type.trim()) {
+                locationPrompt += `, ${location.type}`;
             }
         }
 
-        // Add personality traits for visual style
-        if (character.personality && typeof character.personality === 'string') {
-            const personalityVisuals = {
-                'confident': 'confident posture, strong gaze',
-                'mysterious': 'enigmatic expression, dramatic lighting',
-                'friendly': 'warm smile, approachable demeanor',
-                'aggressive': 'intense expression, strong jaw',
-                'gentle': 'soft features, kind eyes',
-                'intelligent': 'thoughtful expression, sharp eyes'
-            };
-
-            Object.keys(personalityVisuals).forEach(trait => {
-                if (character.personality.toLowerCase().includes(trait)) {
-                    characterPrompt += `, ${personalityVisuals[trait]}`;
-                }
-            });
+        // Add description if available
+        if (location.description) {
+            if (typeof location.description === 'string' && location.description.trim()) {
+                locationPrompt += `, ${location.description}`;
+            }
         }
 
-        // Add age/role context if available
-        if (character.age && typeof character.age === 'string' && character.age.trim()) {
-            characterPrompt += `, ${character.age} years old`;
+        // Add atmosphere/mood
+        if (location.atmosphere || location.mood) {
+            const atmos = location.atmosphere || location.mood;
+            if (typeof atmos === 'string' && atmos.trim()) {
+                locationPrompt += `, ${atmos} atmosphere`;
+            }
         }
 
-        if (character.role || character.occupation) {
-            const role = character.role || character.occupation;
-            if (typeof role === 'string' && role.trim()) {
-                characterPrompt += `, ${role}`;
+        // Add lighting if available
+        if (location.lighting) {
+            if (typeof location.lighting === 'string' && location.lighting.trim()) {
+                locationPrompt += `, ${location.lighting} lighting`;
+            }
+        }
+
+        // Add time of day context
+        if (location.timeOfDay || location.time) {
+            const timeOfDay = location.timeOfDay || location.time;
+            if (typeof timeOfDay === 'string' && timeOfDay.trim()) {
+                locationPrompt += `, ${timeOfDay}`;
+            }
+        }
+
+        // Add INT/EXT context
+        if (location.setting) {
+            if (typeof location.setting === 'string' && location.setting.trim()) {
+                locationPrompt += `, ${location.setting}`;
             }
         }
 
         // Add style if available
-        if (character.style && typeof character.style === 'string' && character.style.trim()) {
-            characterPrompt += `, ${character.style}`;
+        if (location.style && typeof location.style === 'string' && location.style.trim()) {
+            locationPrompt += `, ${location.style}`;
         }
 
-        // Add cinematic style
-        characterPrompt += ', cinematic portrait, professional lighting, 4K quality, detailed facial features';
+        // Add cinematic style for locations
+        locationPrompt += ', cinematic wide shot, professional lighting, 4K quality, detailed environment, establishing shot';
 
         // Add reference image context if available
         if (referenceImages.length > 0) {
-            characterPrompt += ', similar to reference image style and composition';
+            locationPrompt += ', similar to reference image style, composition and atmosphere';
         }
 
         // Ensure prompt is a valid string before setting
-        const finalPrompt = characterPrompt || 'Professional character portrait';
+        const finalPrompt = locationPrompt || 'Professional location environment';
         setPrompt(finalPrompt);
     };
 
@@ -114,7 +116,7 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
 
                     setReferenceImages(prev => [...prev, newImage]);
                     // Regenerate prompt with reference context
-                    setTimeout(generatePromptFromCharacter, 100);
+                    setTimeout(generatePromptFromLocation, 100);
                 };
                 reader.readAsDataURL(file);
             } else {
@@ -130,7 +132,7 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
             fileInputRef.current.value = '';
         }
         // Regenerate prompt without removed reference
-        setTimeout(generatePromptFromCharacter, 100);
+        setTimeout(generatePromptFromLocation, 100);
     };
 
     const clearAllReferenceImages = () => {
@@ -138,13 +140,13 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
-        setTimeout(generatePromptFromCharacter, 100);
+        setTimeout(generatePromptFromLocation, 100);
     };
 
-    const generateCharacterImage = async () => {
+    const generateLocationImage = async () => {
         // Validate prompt
         if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
-            setError('Karakter açıklaması bulunamadı');
+            setError('Mekan açıklaması bulunamadı');
             return;
         }
 
@@ -152,25 +154,50 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
         setError(null);
 
         try {
-            console.log('🎨 Generating character image for:', character?.name || 'Unknown');
+            console.log('🏞️ Generating location image for:', location?.name || 'Unknown');
             console.log('📝 Prompt:', prompt);
 
             // Build image generation options
             let imageOptions = {
-                character: character?.name || 'character',
-                style: 'cinematic character portrait',
-                aspectRatio: '3:4', // Portrait orientation for characters
+                location: location?.name || 'location',
+                style: 'cinematic environment establishing shot',
+                aspectRatio: '16:9', // Landscape orientation for locations
                 imageSize: '2K' // High quality
             };
 
-            // Add reference images if available
+            // Add reference images if available (user uploaded)
+            const allReferenceImages = [];
+            
             if (referenceImages.length > 0) {
-                imageOptions.referenceImages = referenceImages.map(refImage => ({
+                allReferenceImages.push(...referenceImages.map(refImage => ({
                     data: refImage.data,
                     mimeType: refImage.type || 'image/png',
-                    instruction: 'Create a character similar to this reference image'
-                }));
-                console.log('🖼️ Including reference images:', referenceImages.length, 'images');
+                    instruction: 'Create a location environment similar to this reference image'
+                })));
+            }
+            
+            // Add approved character images as references for consistency
+            if (characterReferences && characterReferences.length > 0) {
+                console.log('👥 Including character references for consistency:', characterReferences.length);
+                characterReferences.forEach(charRef => {
+                    if (charRef.image?.url) {
+                        // Convert data URL to base64
+                        const base64Data = charRef.image.url.split(',')[1];
+                        const mimeType = charRef.image.url.match(/data:([^;]+);/)?.[1] || 'image/png';
+                        
+                        allReferenceImages.push({
+                            data: `data:${mimeType};base64,${base64Data}`,
+                            mimeType: mimeType,
+                            instruction: `Maintain visual consistency with character ${charRef.name} shown in this reference`
+                        });
+                    }
+                });
+            }
+            
+            if (allReferenceImages.length > 0) {
+                // Limit to 14 images (Gemini 3 Pro limit)
+                imageOptions.referenceImages = allReferenceImages.slice(0, 14);
+                console.log('🖼️ Total reference images:', imageOptions.referenceImages.length);
             }
 
             // Use the store's generateImage method which handles provider fallback
@@ -181,7 +208,7 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                 const imageData = {
                     url: imageUrl,
                     prompt: prompt,
-                    character: character.name,
+                    location: location.name,
                     timestamp: new Date().toISOString()
                 };
 
@@ -189,19 +216,19 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
 
                 // Callback to parent component
                 if (onImageGenerated) {
-                    onImageGenerated(character.name, {
+                    onImageGenerated(location.name, {
                         url: imageUrl,
                         prompt: prompt,
                         mimeType: result.mimeType
                     });
                 }
 
-                console.log('✅ Character image generated successfully');
+                console.log('✅ Location image generated successfully');
             } else {
                 throw new Error('Görsel oluşturulamadı');
             }
         } catch (err) {
-            console.error('❌ Character image generation error:', err);
+            console.error('❌ Location image generation error:', err);
             setError(err.message || 'Görsel oluşturma hatası');
         } finally {
             setIsGenerating(false);
@@ -210,37 +237,37 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
 
     const regenerateImage = () => {
         setGeneratedImage(null);
-        generateCharacterImage();
+        generateLocationImage();
     };
 
     const downloadImage = () => {
         if (generatedImage?.url) {
             const link = document.createElement('a');
             link.href = generatedImage.url;
-            link.download = `${character.name}_character.png`;
+            link.download = `${location.name}_location.png`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         }
     };
 
-    if (!character) {
+    if (!location) {
         return (
             <div className="text-center text-cinema-text-dim p-8">
-                <div className="text-4xl mb-4">🎭</div>
-                <p>Karakter seçin</p>
+                <div className="text-4xl mb-4">🏞️</div>
+                <p>Mekan seçin</p>
             </div>
         );
     }
 
     return (
         <div className="bg-cinema-dark rounded-lg border border-cinema-gray p-6 mb-6">
-            {/* Character Header */}
+            {/* Location Header */}
             <div className="flex items-center gap-3 mb-4 pb-4 border-b border-cinema-gray">
-                <div className="text-2xl">🎨</div>
+                <div className="text-2xl">🏞️</div>
                 <div>
-                    <h3 className="text-lg font-semibold text-cinema-accent">{character.name}</h3>
-                    <p className="text-sm text-cinema-text-dim">Karakter Görsel Oluşturucu</p>
+                    <h3 className="text-lg font-semibold text-cinema-accent">{location.name}</h3>
+                    <p className="text-sm text-cinema-text-dim">Mekan Görsel Oluşturucu</p>
                 </div>
             </div>
 
@@ -310,7 +337,7 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                         />
                         <div className="text-4xl mb-3 text-cinema-text-dim">📷</div>
                         <p className="text-sm text-cinema-text mb-2">
-                            Karakterinize benzer referans görseller yükleyin
+                            Mekanınıza benzer referans görseller yükleyin
                         </p>
                         <p className="text-xs text-cinema-text-dim mb-4">
                             Gemini 3 Pro Image ile en fazla 14 görsel kullanabilirsiniz
@@ -339,14 +366,14 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                         }
                     }}
                     className="w-full h-24 bg-cinema-gray border border-cinema-gray-light rounded px-3 py-2 text-cinema-text text-sm resize-none focus:border-cinema-accent focus:outline-none"
-                    placeholder="Karakterin görsel açıklamasını yazın..."
+                    placeholder="Mekanın görsel açıklamasını yazın..."
                 />
                 <div className="flex justify-between items-center mt-2">
                     <span className="text-xs text-cinema-text-dim">
-                        Karakter bilgilerinden otomatik oluşturuldu
+                        Mekan bilgilerinden otomatik oluşturuldu
                     </span>
                     <button
-                        onClick={generatePromptFromCharacter}
+                        onClick={generatePromptFromLocation}
                         className="text-xs text-cinema-accent hover:text-cinema-accent-light"
                     >
                         🔄 Yeniden Oluştur
@@ -359,7 +386,7 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                 <div className="mb-6">
                     <div className="flex items-center justify-between mb-3">
                         <h4 className="text-sm font-medium text-cinema-accent">
-                            🎨 Oluşturulan Görsel
+                            🏞️ Oluşturulan Görsel
                         </h4>
                         <div className="flex gap-2">
                             <button
@@ -382,13 +409,13 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                     <div className="relative">
                         <img
                             src={generatedImage.url}
-                            alt={`${character.name} karakter görseli`}
+                            alt={`${location.name} mekan görseli`}
                             className="w-full h-auto rounded-lg border border-cinema-gray shadow-lg max-h-96 object-cover cursor-pointer hover:opacity-90 transition-opacity"
                             onClick={() => setIsImageModalOpen(true)}
                             title="Tam ekran için tıklayın"
                         />
                         <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                            {character.name}
+                            {location.name}
                         </div>
                     </div>
                     <div className="mt-2 text-xs text-cinema-text-dim">
@@ -399,7 +426,7 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                 <div className="mb-6 border-2 border-dashed border-cinema-gray rounded-lg p-8 text-center">
                     {isGenerating ? (
                         <div>
-                            <div className="text-4xl mb-3 animate-spin">🎨</div>
+                            <div className="text-4xl mb-3 animate-spin">🏞️</div>
                             <p className="text-cinema-accent font-medium mb-2">Görsel Oluşturuluyor...</p>
                             <p className="text-sm text-cinema-text-dim">Bu işlem 30-60 saniye sürebilir</p>
                             <div className="mt-4 w-full bg-cinema-gray rounded-full h-2">
@@ -411,11 +438,11 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                             <div className="text-4xl mb-3 text-cinema-text-dim">🖼️</div>
                             <p className="text-cinema-text-dim mb-4">Henüz görsel oluşturulmamış</p>
                             <button
-                                onClick={generateCharacterImage}
+                                onClick={generateLocationImage}
                                 className="btn-primary"
                                 disabled={!prompt.trim()}
                             >
-                                🎨 Karakter Görseli Oluştur
+                                🏞️ Mekan Görseli Oluştur
                             </button>
                         </div>
                     )}
@@ -448,12 +475,12 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                         </button>
                         <img
                             src={generatedImage.url}
-                            alt={`${character.name} tam ekran`}
+                            alt={`${location.name} tam ekran`}
                             className="max-w-full max-h-[90vh] object-contain rounded-lg"
                             onClick={(e) => e.stopPropagation()}
                         />
                         <div className="absolute bottom-4 left-4 bg-black bg-opacity-70 text-white px-4 py-2 rounded-lg">
-                            <h4 className="font-semibold text-lg">{character.name}</h4>
+                            <h4 className="font-semibold text-lg">{location.name}</h4>
                             <p className="text-sm text-gray-300 mt-1">{new Date(generatedImage.timestamp).toLocaleString('tr-TR')}</p>
                         </div>
                     </div>

@@ -364,6 +364,115 @@ export class AnalysisStorageService {
       return [];
     }
   }
+
+  // ========================================
+  // STORYBOARD DATA PERSISTENCE
+  // ========================================
+
+  // Generate storyboard storage key based on script
+  generateStoryboardKey(scriptText, fileName) {
+    const analysisKey = this.generateAnalysisKey(scriptText, fileName);
+    return analysisKey.replace('analysis_', 'storyboard_');
+  }
+
+  // Save storyboard data (character images, location images, storyboard frames)
+  async saveStoryboard(scriptText, fileName, storyboardData) {
+    try {
+      const storyboardKey = this.generateStoryboardKey(scriptText, fileName);
+      const dataToSave = {
+        fileName,
+        timestamp: new Date().toISOString(),
+        scriptHash: this.generateAnalysisKey(scriptText, ''),
+        storyboardData: {
+          characterApprovals: storyboardData.characterApprovals || {},
+          locationApprovals: storyboardData.locationApprovals || {},
+          storyboardFrames: storyboardData.storyboardFrames || [],
+          phaseCompletion: storyboardData.phaseCompletion || {},
+          currentPhase: storyboardData.currentPhase || null
+        },
+        metadata: {
+          version: '1.0',
+          characterCount: Object.keys(storyboardData.characterApprovals || {}).length,
+          locationCount: Object.keys(storyboardData.locationApprovals || {}).length,
+          frameCount: (storyboardData.storyboardFrames || []).length
+        }
+      };
+
+      if (this.tempDir === 'localStorage') {
+        localStorage.setItem(`mgx_storyboard_${storyboardKey}`, JSON.stringify(dataToSave));
+      } else {
+        const filePath = path.join(this.tempDir, storyboardKey);
+        await window.electronAPI.saveFileContent({
+          filePath,
+          data: JSON.stringify(dataToSave, null, 2),
+          encoding: 'utf8'
+        });
+      }
+
+      console.log(`✅ Storyboard saved for ${fileName} with key: ${storyboardKey}`);
+      return storyboardKey;
+    } catch (error) {
+      console.error('❌ Failed to save storyboard:', error);
+      throw error;
+    }
+  }
+
+  // Load storyboard data
+  async loadStoryboard(scriptText, fileName) {
+    try {
+      const storyboardKey = this.generateStoryboardKey(scriptText, fileName);
+      
+      if (this.tempDir === 'localStorage') {
+        const stored = localStorage.getItem(`mgx_storyboard_${storyboardKey}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          console.log(`✅ Storyboard loaded from localStorage: ${storyboardKey}`);
+          return parsed.storyboardData;
+        }
+      } else {
+        const filePath = path.join(this.tempDir, storyboardKey);
+        if (window.electronAPI && window.electronAPI.readFileContent) {
+          try {
+            const content = await window.electronAPI.readFileContent(filePath);
+            const parsed = JSON.parse(content);
+            console.log(`✅ Storyboard loaded from file: ${storyboardKey}`);
+            return parsed.storyboardData;
+          } catch (readError) {
+            if (!readError.message.includes('ENOENT')) {
+              throw readError;
+            }
+          }
+        }
+      }
+      
+      console.log(`ℹ️ No storyboard found for ${fileName}`);
+      return null;
+    } catch (error) {
+      console.error('❌ Failed to load storyboard:', error);
+      return null;
+    }
+  }
+
+  // Delete storyboard data
+  async deleteStoryboard(scriptText, fileName) {
+    try {
+      const storyboardKey = this.generateStoryboardKey(scriptText, fileName);
+      
+      if (this.tempDir === 'localStorage') {
+        localStorage.removeItem(`mgx_storyboard_${storyboardKey}`);
+      } else {
+        const filePath = path.join(this.tempDir, storyboardKey);
+        if (window.electronAPI && window.electronAPI.deleteFile) {
+          await window.electronAPI.deleteFile(filePath);
+        }
+      }
+      
+      console.log(`✅ Storyboard deleted: ${storyboardKey}`);
+    } catch (error) {
+      console.error('❌ Failed to delete storyboard:', error);
+      throw error;
+    }
+  }
 }
 
 // Singleton instance

@@ -6,10 +6,19 @@ export default function CharacterVisualization({
   onCharactersUpdated,
   onContinue 
 }) {
-  const [characters, setCharacters] = useState(characterAnalysis?.characters || []);
+  // Yapılandırılmış karakter verisini kullan
+  const initialCharacters = characterAnalysis?.parsed 
+    ? characterAnalysis.characters 
+    : (characterAnalysis?.characters || []);
+    
+  const [characters, setCharacters] = useState(initialCharacters);
   const [locations, setLocations] = useState(locationAnalysis?.locations || []);
   const [editingIndex, setEditingIndex] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [showRawData, setShowRawData] = useState(false);
+  
+  // Karakter özet bilgisini göster
+  const characterSummary = characterAnalysis?.summary;
 
   const handleEdit = (index, type = 'character') => {
     const item = type === 'character' ? characters[index] : locations[index];
@@ -37,17 +46,36 @@ export default function CharacterVisualization({
   };
 
   const handleAddCharacter = () => {
-    setCharacters([...characters, {
+    // Yeni yapılandırılmış karakter formatı
+    const newCharacter = {
+      id: `char_${Date.now()}`,
       name: 'Yeni Karakter',
+      displayName: 'Yeni Karakter',
+      role: 'Ana karakter / Yan karakter',
+      physicalDescription: 'Fiziksel özellikler: boy, kilo, saç, göz rengi, ayırt edici özellikler',
+      personality: 'Kişilik özellikleri ve karakter yapısı',
+      motivations: 'Motivasyonlar ve amaçlar',
+      visualStyle: 'Giyim tarzı ve görsel stil',
+      costumeNotes: 'Kostüm detayları',
+      keyScenes: [],
+      relationships: [],
+      development: 'Karakter gelişim yayı',
+      visualPrompt: '',
+      metadata: {
+        extractedAt: new Date().toISOString(),
+        sourceFormat: 'manual',
+        completeness: 0,
+        readyForVisualization: false,
+        hasVisualDescription: false
+      },
+      // Eski format uyumluluğu için
       age: '25-35',
       physical: 'Fiziksel özellikler (boy, saç, göz rengi)',
-      personality: 'Kişilik özellikleri ve motivasyonlar',
       style: 'Giyim tarzı',
-      role: 'Ana karakter / Yan karakter',
-      gestures: 'Karakteristik hareketler ve konuşma tarzı',
-      relationships: 'Diğer karakterlerle ilişkiler',
-      development: 'Karakter gelişimi'
-    }]);
+      gestures: 'Karakteristik hareketler'
+    };
+    
+    setCharacters([...characters, newCharacter]);
   };
 
   const handleDelete = (index, type = 'character') => {
@@ -78,6 +106,21 @@ export default function CharacterVisualization({
             <div>
               <h2 className="text-2xl font-bold text-white">Karakterler ve Mekanlar</h2>
               <p className="text-cinema-text-dim text-sm">Karakterleri ve mekanları inceleyip düzenleyin</p>
+              
+              {/* Karakter Özet Bilgisi */}
+              {characterSummary && (
+                <div className="flex gap-4 mt-2 text-xs">
+                  <span className="text-green-400">
+                    ✓ {characterSummary.readyForVisualization}/{characterSummary.totalCharacters} görselleştirmeye hazır
+                  </span>
+                  <span className="text-cinema-text-dim">
+                    📊 Ortalama tamlık: %{Math.round(characterSummary.averageCompleteness)}
+                  </span>
+                  <span className="text-cinema-text-dim">
+                    🎨 {characterSummary.charactersWithVisualDescription} fiziksel tanım
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <button
@@ -186,14 +229,33 @@ export default function CharacterVisualization({
                   </div>
                 </div>
               ) : (
-                // View Mode
+                // View Mode - Yapılandırılmış veri desteği
                 <>
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
-                      <h4 className="text-lg font-bold text-white mb-1">{char.name}</h4>
-                      <span className="text-xs text-cinema-accent bg-cinema-accent/10 px-2 py-1 rounded">
-                        {char.age}
-                      </span>
+                      <h4 className="text-lg font-bold text-white mb-1">{char.name || char.displayName}</h4>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {char.role && (
+                          <span className="text-xs text-cinema-accent bg-cinema-accent/10 px-2 py-1 rounded">
+                            {char.role}
+                          </span>
+                        )}
+                        {char.age && (
+                          <span className="text-xs text-blue-400 bg-blue-400/10 px-2 py-1 rounded">
+                            {char.age}
+                          </span>
+                        )}
+                        {char.metadata?.readyForVisualization && (
+                          <span className="text-xs text-green-400 bg-green-400/10 px-2 py-1 rounded">
+                            ✓ Hazır
+                          </span>
+                        )}
+                        {char.metadata?.completeness && (
+                          <span className="text-xs text-purple-400 bg-purple-400/10 px-2 py-1 rounded">
+                            %{char.metadata.completeness}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex gap-1">
                       <button
@@ -218,34 +280,70 @@ export default function CharacterVisualization({
                   </div>
 
                   <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="text-cinema-text-dim">Fiziksel:</span>
-                      <p className="text-cinema-text">{char.physical}</p>
-                    </div>
-                    <div>
-                      <span className="text-cinema-text-dim">Kişilik:</span>
-                      <p className="text-cinema-text">{char.personality}</p>
-                    </div>
-                    {char.style && (
+                    {/* Fiziksel Tanım - Yeni ve eski yapı desteği */}
+                    {(char.physicalDescription || char.physical) && (
                       <div>
-                        <span className="text-cinema-text-dim">Giyim:</span>
-                        <p className="text-cinema-text">{char.style}</p>
+                        <span className="text-cinema-text-dim font-semibold">Fiziksel:</span>
+                        <p className="text-cinema-text text-xs mt-1 whitespace-pre-line">
+                          {char.physicalDescription || char.physical}
+                        </p>
                       </div>
                     )}
-                    <div>
-                      <span className="text-cinema-text-dim">Rol:</span>
-                      <p className="text-cinema-text">{char.role}</p>
-                    </div>
+                    
+                    {/* Kişilik */}
+                    {char.personality && (
+                      <div>
+                        <span className="text-cinema-text-dim font-semibold">Kişilik:</span>
+                        <p className="text-cinema-text text-xs mt-1 whitespace-pre-line">{char.personality}</p>
+                      </div>
+                    )}
+                    
+                    {/* Görsel Stil */}
+                    {(char.visualStyle || char.style || char.costumeNotes) && (
+                      <div>
+                        <span className="text-cinema-text-dim font-semibold">Görsel Stil:</span>
+                        <p className="text-cinema-text text-xs mt-1 whitespace-pre-line">
+                          {char.visualStyle || char.style || char.costumeNotes}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Motivasyon */}
+                    {char.motivations && (
+                      <div>
+                        <span className="text-cinema-text-dim font-semibold">Motivasyon:</span>
+                        <p className="text-cinema-text text-xs mt-1 whitespace-pre-line">{char.motivations}</p>
+                      </div>
+                    )}
+                    
+                    {/* Jestler ve Hareketler */}
                     {char.gestures && (
                       <div>
-                        <span className="text-cinema-text-dim">Jestler:</span>
-                        <p className="text-cinema-text text-xs">{char.gestures}</p>
+                        <span className="text-cinema-text-dim font-semibold">Karakteristik Özellikler:</span>
+                        <p className="text-cinema-text text-xs mt-1">{char.gestures}</p>
                       </div>
                     )}
-                    {char.relationships && (
+                    
+                    {/* İlişkiler */}
+                    {char.relationships && char.relationships.length > 0 && (
                       <div>
-                        <span className="text-cinema-text-dim">İlişkiler:</span>
-                        <p className="text-cinema-text text-xs">{char.relationships}</p>
+                        <span className="text-cinema-text-dim font-semibold">İlişkiler:</span>
+                        <ul className="text-cinema-text text-xs mt-1 space-y-1 list-disc list-inside">
+                          {Array.isArray(char.relationships) 
+                            ? char.relationships.map((rel, i) => <li key={i}>{rel}</li>)
+                            : <li>{char.relationships}</li>
+                          }
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {/* Görsel Prompt */}
+                    {char.visualPrompt && (
+                      <div className="mt-3 pt-3 border-t border-cinema-gray">
+                        <span className="text-green-400 text-xs font-semibold">🎨 Görsel Prompt:</span>
+                        <p className="text-cinema-text-dim text-xs mt-1 italic bg-cinema-black/50 p-2 rounded">
+                          {char.visualPrompt}
+                        </p>
                       </div>
                     )}
                   </div>

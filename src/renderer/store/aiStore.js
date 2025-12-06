@@ -253,6 +253,32 @@ export const useAIStore = create(
       clearGeneratingScenes: () => set({ generatingScenes: new Set() }),
       
       // Generate image using current AI provider with Google priority for storyboards
+      analyzeImage: async (imageData, prompt, options = {}) => {
+        const state = get();
+        
+        try {
+          if (!state.geminiApiKey) {
+            throw new Error('Gemini API key gerekli. Lütfen ayarlardan API key ekleyin.');
+          }
+          
+          const handler = new AIHandler({
+            provider: AI_PROVIDERS.GEMINI,
+            apiKey: state.geminiApiKey,
+            model: state.geminiModel,
+            temperature: state.temperature,
+            maxTokens: state.maxTokens
+          });
+          
+          console.log('🔍 Analyzing image with Gemini Vision...');
+          const result = await handler.analyzeImageGemini(imageData, prompt, options);
+          return result;
+          
+        } catch (error) {
+          console.error('Image analysis failed:', error);
+          throw error;
+        }
+      },
+
       generateImage: async (prompt, options = {}) => {
         const state = get();
         

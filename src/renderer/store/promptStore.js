@@ -280,45 +280,65 @@ High-energy, dynamic aksiyon filmi tarzında prompt oluştur.`
   analysis: {
     character: {
       name: 'Karakter Analizi',
-      system: `Bir senaryo analiz uzmanısın. Karakterleri derinlemesine analiz et.
-Şunlara odaklan:
-- Karakter gelişimi ve motivasyonları
-- Diyalog tarzları ve konuşma kalıpları
-- Karakterler arası ilişkiler ve dinamikler
-- Karakter tutarlılığı ve gerçekçiliği
+      system: `Bir senaryo analiz uzmanısın. Karakterleri derinlemesine analiz et ve JSON formatında yanıt ver.
+
+ÖNEMLİ KURALLAR:
+1. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
+2. Her karakter için name, age, physical, personality, style, role alanları olmalı
+3. Tüm metinleri {{language}} dilinde yaz
+4. Fiziksel özellikleri detaylı ve açık yaz (boy, kilo, saç, göz, ten rengi)
+5. Kişilik özelliklerini spesifik yaz (ör: "güvenli, gizemli, arkadaş canlısı")
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
-      user: `Lütfen metindeki karakterleri analiz et ve şu başlıklar altında raporla:
+      user: `Senaryodaki TÜM karakterleri analiz et ve SADECE JSON formatında yanıt ver:
 
-1. Ana Karakterler:
-   - İsim ve temel özellikler
-   - Motivasyonlar ve hedefler
-   - Karakter gelişimi
+{
+  "characters": [
+    {
+      "name": "KARAKTER ADI (tam isim)",
+      "age": "yaş veya yaş aralığı (ör: 35, 40-45, genç yetişkin)",
+      "physical": "Detaylı fiziksel özellikler: boy (kısa/orta/uzun), vücut yapısı, saç rengi ve stili, göz rengi, ten rengi, belirgin özellikler",
+      "personality": "Kişilik özellikleri: mizaç, davranış tarzı, karakter yapısı (ör: güvenli, gizemli, arkadaş canlısı, agresif, nazik, zeki)",
+      "style": "Giyim tarzı ve görünüm: kıyafet tercihleri, aksesuar kullanımı, genel stil (ör: resmi takım elbise, rahat spor, vintage, modern)",
+      "role": "Hikayedeki rolü (main/supporting/minor)",
+      "description": "Karakterin hikayedeki önemi ve ilişkileri (1-2 cümle)"
+    }
+  ],
+  "summary": {
+    "totalCharacters": 0,
+    "mainCharacters": 0,
+    "supportingCharacters": 0
+  }
+}
 
-2. Yan Karakterler:
-   - Rolleri ve önemleri
-   - Ana karakterlerle ilişkileri
-
-3. Diyalog Analizi:
-   - Her karakterin konuşma tarzı
-   - Diyalog tutarlılığı
-
-4. Öneriler:
-   - Geliştirilmesi gereken alanlar
-   - Güçlü yönler`
+ÖNEMLİ: Yanıtında SADECE JSON olsun, başka açıklama ekleme!`
     },
     llama_character: {
       name: '🦙 Llama 3.1 - Karakter Analizi',
-      system: 'Sen senaryo uzmanısın. Karakterleri analiz edersin. Basit ve net {{language}} dilinde cevaplar ver.',
-      user: `Bu Türkçe senaryodaki karakterleri analiz et. Cevabını Türkçe yaz:
+      system: 'Sen senaryo uzmanısın. Karakterleri analiz edersin ve JSON formatında yanıt verirsin. Basit ve net {{language}} dilinde cevaplar ver.',
+      user: `Bu senaryodaki karakterleri analiz et ve JSON formatında yaz:
 
-• Ana karakter kimdir? Ne istiyor?
-• Diğer önemli karakterler kimler?
-• Karakterlerin kişilikleri nasıl?
-• Hangi karakterler değişiyor hikayede?
-• Diyaloglar karaktere uygun mu?
+{
+  "characters": [
+    {
+      "name": "KARAKTER ADI",
+      "age": "yaş",
+      "physical": "fiziksel görünüm (boy, saç, göz, vücut)",
+      "personality": "kişilik (güvenli/gizemli/nazik/vs)",
+      "style": "giyim tarzı",
+      "role": "main/supporting/minor",
+      "description": "karakterin önemi (1 cümle)"
+    }
+  ]
+}
 
-Net ve açık Türkçe cevaplar ver. Örnekler kullan.`,
+KURALLAR:
+• Sadece JSON formatında yaz, başka açıklama ekleme
+• Tüm karakterleri listele
+• Fiziksel özellikleri net yaz
+• {{language}} dilinde yaz
+
+Net ve açık {{language}} cevap ver.`,
       optimizedFor: 'llama'
     },
     plot: {
@@ -433,36 +453,50 @@ Basit ve net cevaplar ver. Sahne örnekleri göster.`,
     },
     structure: {
       name: 'Yapısal Analiz',
-      system: `Senaryo formatı ve yapısı uzmanısın. Teknik yönleri değerlendir.
-Şunlara odaklan:
-- Format standartlarına uyum
-- Sahne başlıkları ve açıklamaları
-- Uzunluk ve sayfa dağılımı
-- Profesyonel sunum
+      system: `Senaryo formatı ve yapısı uzmanısın. Sahneleri tek tek çıkarıp analiz edersin ve JSON formatında yanıt verirsin.
+
+ÖNEMLİ KURALLAR:
+1. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
+2. Her sahne için number, title, location, intExt, timeOfDay, characters, content alanları olmalı
+3. Sahne başlıklarını "SAHNE X - MEKAN" formatında yaz
+4. Tüm metinleri {{language}} dilinde yaz
+5. İç/Dış bilgisini net belirt (İÇ veya DIŞ)
+6. Zaman bilgisini standart formatla (GÜNDÜZ, GECE, SABAH, AKŞAM)
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
-      user: `Metindeki yapısal özellikleri analiz et ve şu başlıklar altında raporla:
+      user: `Senaryodaki TÜM sahneleri çıkar ve SADECE JSON formatında yanıt ver:
 
-1. Format Uyumu:
-   - Profesyonel standartlara uyum
-   - Sahne başlıkları
-   - Karakter adları
-   - Açıklama metinleri
+{
+  "scenes": [
+    {
+      "number": 1,
+      "title": "SAHNE 1 - MEKAN ADI",
+      "location": "Mekan adı (kısa ve net)",
+      "intExt": "İÇ veya DIŞ",
+      "timeOfDay": "GÜNDÜZ/GECE/SABAH/AKŞAM",
+      "characters": ["KARAKTER1", "KARAKTER2"],
+      "content": "Sahnede ne oluyor? Aksiyonlar, diyaloglar, önemli anlar (2-4 cümle)",
+      "description": "Sahnenin görsel ve duygusal tanımı (1-2 cümle)",
+      "duration": "Tahmini süre (ör: 2 dakika, kısa, orta, uzun)",
+      "mood": "Sahne atmosferi (ör: gergin, romantik, aksiyon dolu)"
+    }
+  ],
+  "summary": {
+    "totalScenes": 0,
+    "totalPages": "tahmini",
+    "estimatedRuntime": "tahmini dakika",
+    "interiorScenes": 0,
+    "exteriorScenes": 0,
+    "dayScenes": 0,
+    "nightScenes": 0
+  }
+}
 
-2. Yapısal Özellikler:
-   - Toplam sayfa sayısı
-   - Sahne dağılımı
-   - Konum çeşitliliği
-   - Zaman akışı
-
-3. Teknik Detaylar:
-   - Yazım kuralları
-   - Boşluk kullanımı
-   - Sayfa düzeni
-
-4. Öneriler:
-   - Format iyileştirmeleri
-   - Yapısal sorunların çözümü`
+ÖNEMLİ: 
+- Yanıtında SADECE JSON olsun, başka açıklama ekleme!
+- Tüm sahneleri sırayla numara ver
+- Karakter isimlerini büyük harfle yaz
+- Sahne başlıklarını net ve standart formatta yaz`
     },
     production: {
       name: 'Prodüksiyon Analizi',
@@ -717,58 +751,51 @@ Basit ve net cevaplar ver. Sahne numaraları belirt. 17 m² alan kısıtını ö
     // Yeni Standart Sinema Analiz Türleri
     cinematography: {
       name: 'Görüntü Yönetimi (Cinematography)',
-      system: `Görüntü yönetmeni (cinematographer/DOP) uzmanısın. Görsel anlatım ve teknik kamera çalışması analizi yaparsın.
-Şunlara odaklan:
-- Kamera açıları ve hareketleri
-- Aydınlatma tasarımı ve mood
-- Kompozisyon ve framing
-- Lens seçimleri
-- Renk paleti ve görsel ton
-- Visual storytelling
+      system: `Görüntü yönetmeni (cinematographer/DOP) uzmanısın. Görsel anlatım ve teknik kamera çalışması analizi yaparsın ve JSON formatında yanıt verirsin.
+
+ÖNEMLİ KURALLAR:
+1. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
+2. Her sahne için shotType, angle, movement, lighting, description alanları olmalı
+3. Tüm metinleri {{language}} dilinde yaz
+4. Kamera açılarını ve hareketlerini spesifik ve net yaz
+5. Aydınlatma ve mood tanımlarını detaylı yaz
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
-      user: `Bu senaryoyu görüntü yönetimi açısından analiz et:
+      user: `Bu senaryoyu görüntü yönetimi açısından analiz et ve SADECE JSON formatında yanıt ver:
 
-1. KAMERA ÇALIŞMASI:
-   - Önerilen kamera açıları (wide, medium, close-up dağılımı)
-   - Kamera hareketleri (tracking, dolly, crane, steadicam)
-   - Handheld vs stabilize çekim önerileri
-   - POV (Point of View) sahneleri
-   - Özel kamera teknikleri (slow motion, time-lapse, vb.)
+{
+  "shots": [
+    {
+      "sceneNumber": 1,
+      "location": "Mekan adı",
+      "shotType": "wide/medium/close-up/extreme close-up/establishing",
+      "angle": "eye level/high angle/low angle/dutch angle/overhead/POV",
+      "movement": "static/pan/tilt/dolly/tracking/crane/steadicam/handheld",
+      "lighting": "Aydınlatma karakteri (ör: doğal, yapay, karanlık, parlak, kontraslı, yumuşak, dramatik)",
+      "mood": "Görsel atmosfer (ör: gizemli, gergin, romantik, aksiyon dolu)",
+      "description": "Çekim açıklaması ve kompozisyon notları (1-2 cümle)",
+      "lensType": "wide/normal/telephoto/anamorphic (opsiyonel)",
+      "focusType": "deep focus/shallow focus (opsiyonel)"
+    }
+  ],
+  "visualStyle": {
+    "overallApproach": "Genel görsel yaklaşım (ör: documentary, cinematic, noir, naturalistic)",
+    "cameraWork": "Kamera stili (ör: handheld, tripod, mix)",
+    "aspectRatio": "Önerilen en-boy oranı (16:9, 2.39:1, vb.)",
+    "colorPalette": "Ana renk paleti ve ton (ör: warm tones, cool blues, desaturated)",
+    "referenceFilms": ["Referans film 1", "Referans film 2"],
+    "lightingStyle": "Genel aydınlatma stili (naturalistic, expressionist, noir, etc.)"
+  },
+  "summary": {
+    "totalShots": 0,
+    "wideShots": 0,
+    "closeUps": 0,
+    "movingShots": 0,
+    "staticShots": 0
+  }
+}
 
-2. AYDINLATMA TASARIMI:
-   - Genel aydınlatma stili (naturalistic, expressionist, noir, vb.)
-   - Gündüz/gece oranı
-   - İç/dış mekan aydınlatma zorlukları
-   - Mood ve atmosfer yaratma
-   - Özel aydınlatma gereksinimleri
-
-3. KOMPOZİSYON VE FRAMING:
-   - Görsel kompozisyon önerileri
-   - Derinlik kullanımı (deep focus vs shallow)
-   - Simetri/asimetri tercihleri
-   - Rule of thirds uygulamaları
-   - Negative space kullanımı
-
-4. GÖRSEL STİL:
-   - Renk paleti önerileri
-   - Kontrast ve ton haritası
-   - Film/digital cinematography tercihi
-   - Aspect ratio önerisi (16:9, 2.39:1, vb.)
-   - Referans filmler (görsel stil benzetmeleri)
-
-5. LENS SEÇİMLERİ:
-   - Önerilen lens set'i (anamorphic, spherical, vintage)
-   - Focal length tercihleri
-   - Bokeh ve derinlik efektleri
-
-6. TEKNİK GEREKSINIMLER:
-   - Kamera ekipmanı listesi
-   - Grip ekipmanı (dolly, crane, jib)
-   - Aydınlatma ekipmanı
-   - Özel efekt ekipmanları
-
-Sahne bazlı detaylı öneriler sun. Sahne numaralarıyla referans ver.`
+ÖNEMLİ: Yanıtında SADECE JSON olsun, başka açıklama ekleme!`
     },
     
     soundDesign: {
@@ -1015,87 +1042,104 @@ Detaylı pazarlama stratejisi ve ticari analiz sun.`
     // Storyboard için özel analiz türleri
     location_analysis: {
       name: 'Mekan ve Lokasyon Analizi',
-      system: `Lokasyon yöneticisi ve sanat yönetmeni uzmanısın. Senaryodaki mekanları analiz edersin.
-Şunlara odaklan:
-- İç/dış mekan dağılımı  
-- Lokasyon çeşitliliği ve gereksinimleri
-- Set tasarımı ihtiyaçları
-- Görsel atmosfer ve mood
-- Prodüksiyon zorluklarına
+      system: `Lokasyon yöneticisi ve sanat yönetmeni uzmanısın. Senaryodaki mekanları analiz edersin ve JSON formatında yanıt verirsin.
+
+ÖNEMLİ KURALLAR:
+1. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
+2. Her mekan için name, type, description, atmosphere, lighting, timeOfDay, colors alanları olmalı
+3. Tüm metinleri {{language}} dilinde yaz
+4. Mekan açıklamalarını detaylı ve görsel olarak yaz
+5. Atmosfer ve mood tanımlarını spesifik yaz
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
-      user: `Bu senaryodaki mekanları ve lokasyonları analiz et:
+      user: `Senaryodaki TÜM mekanları analiz et ve SADECE JSON formatında yanıt ver:
 
-1. MEKAN ENVANTERİ:
-   - Ana lokasyonlar listesi
-   - İç mekan / dış mekan oranı
-   - Günün zamanlarına göre dağılım
-   - Özel efekt gerektiren mekanlar
+{
+  "locations": [
+    {
+      "name": "MEKAN ADI (net ve kısa)",
+      "type": "interior veya exterior",
+      "description": "Mekanın detaylı görsel açıklaması: mimari özellikler, boyut, düzenleme, önemli objeler (2-3 cümle)",
+      "atmosphere": "Mekanın atmosferi ve duygusal tonu (ör: gergin, huzurlu, gizemli, neşeli, karanlık, aydınlık)",
+      "lighting": "Işıklandırma karakteri (ör: doğal gün ışığı, yapay aydınlatma, loş, parlak, gölgeli, sıcak, soğuk)",
+      "timeOfDay": "Zaman dilimi (day/night/morning/evening/noon)",
+      "colors": "Baskın renk paleti ve tonları (ör: sıcak tonlar, soğuk maviler, nötr bejler, canlı renkler)",
+      "mood": "Genel mood ve his (1 cümle)",
+      "productionNotes": "Prodüksiyon notları: set mi, hazır lokasyon mu? (opsiyonel)"
+    }
+  ],
+  "summary": {
+    "totalLocations": 0,
+    "interiorCount": 0,
+    "exteriorCount": 0,
+    "dayScenes": 0,
+    "nightScenes": 0
+  }
+}
 
-2. GÖRSEL TASARIM:
-   - Her lokasyonun görsel karakteri
-   - Atmosfer ve mood tanımları
-   - Renk paleti önerileri  
-   - Işık ve gölge kullanımı
-
-3. PRODÜKSIYON AÇISINDAN:
-   - Set inşa gereksinimi olan mekanlar
-   - Hazır lokasyon kullanılabilecek yerler
-   - Çekim zorluk seviyeleri
-   - Budget impact değerlendirmesi
-
-4. STORYBOARD İÇİN:
-   - Her lokasyonun distinctive özellikleri
-   - Kamera açıları için uygun noktalar
-   - Karakter hareketleri için alan analizi
-   - Görsel devamlılık önerileri
-
-Sahne bazlı detaylı lokasyon öneriler sun.`
+ÖNEMLİ: Yanıtında SADECE JSON olsun, başka açıklama ekleme!`
     },
     
     visual_style: {
       name: 'Görsel Stil ve Tonlama',
-      system: `Sinematografi ve görsel stil uzmanısın. Filmin görsel dilini belirlersin.
-Şunlara odaklan:
-- Görsel stil kararları
-- Tonlama ve atmosfer  
-- Referans filmler
-- Teknik görüntü yaklaşımı
-- Sanatsal vizyon
+      system: `Sinematografi ve görsel stil uzmanısın. Filmin görsel dilini belirlersin ve JSON formatında yanıt verirsin.
+
+ÖNEMLİ KURALLAR:
+1. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
+2. Renk paleti, mood, görsel temalar ve teknik kararlar net belirtilmeli
+3. Tüm metinleri {{language}} dilinde yaz
+4. Referans filmleri ve görsel stil açıklamalarını spesifik yaz
+5. Atmosfer ve tonlama tanımlarını detaylı yaz
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
-      user: `Bu senaryo için görsel stil ve tonlama önerisi geliştir:
+      user: `Bu senaryo için görsel stil ve tonlama önerisi geliştir ve SADECE JSON formatında yanıt ver:
 
-1. GENEL GÖRSEL STİL:
-   - Önerilen sinematografik yaklaşım
-   - Gerçekçi vs stilize tercih  
-   - Vintage vs modern aesthetic
-   - Film vs digital karakter
+{
+  "visualStyle": {
+    "approach": "Genel sinematografik yaklaşım (ör: cinematic, documentary, naturalistic, stylized, noir)",
+    "aesthetic": "Estetik tercih (ör: modern, vintage, gritty, polished, minimalist)",
+    "filmVsDigital": "Film karakteri tercihi (film, digital, hybrid)",
+    "overallMood": "Genel atmosfer ve his (1-2 cümle)"
+  },
+  "colorPalette": {
+    "primary": ["Ana renk 1", "Ana renk 2"],
+    "secondary": ["İkincil renk 1", "İkincil renk 2"],
+    "tonality": "Genel tonlama (warm/cool/neutral/desaturated/vibrant)",
+    "characterColors": {
+      "mainCharacter": "Ana karakterin renk kimliği",
+      "supporting": "Yardımcı karakterlerin genel renk şeması"
+    },
+    "locationColors": "Mekanların renk haritası (1-2 cümle)",
+    "moodColors": "Duygusal anlar için renk kullanımı (1-2 cümle)"
+  },
+  "lightingStyle": {
+    "overall": "Genel aydınlatma stili (naturalistic, expressionist, noir, high-key, low-key)",
+    "dramatic": "Dramatik anlar için aydınlatma yaklaşımı",
+    "intimate": "Samimi/romantik sahneler için aydınlatma",
+    "action": "Aksiyon/gerilim sahneleri için aydınlatma"
+  },
+  "technicalChoices": {
+    "lensCharacter": "Lens karakter tercihi (anamorphic, spherical, vintage, modern)",
+    "aspectRatio": "En-boy oranı (16:9, 2.39:1, 1.85:1, vb.)",
+    "contrast": "Kontrast yaklaşımı (high contrast, low contrast, balanced)",
+    "saturation": "Renk doygunluğu (saturated, desaturated, natural)",
+    "grading": "Color grading yönü (warm push, cool teal-orange, monochrome, natural)"
+  },
+  "visualThemes": [
+    "Görsel tema 1 (ör: isolation, connection, transformation)",
+    "Görsel tema 2"
+  ],
+  "referenceFilms": [
+    "Referans film 1 - Sebep açıklaması",
+    "Referans film 2 - Sebep açıklaması"
+  ],
+  "cinematicReferences": [
+    "Sinematik referans 1 (yönetmen, görüntü yönetmeni, sanat hareketi)",
+    "Sinematik referans 2"
+  ]
+}
 
-2. TONLAMA VE MOOD:
-   - Genel atmosfer tanımı
-   - Sahne bazında mood değişimleri
-   - Dramatik anlar için görsel approach
-   - Komedi/gerilim anları için stil
-
-3. RENK PALETİ YAKLAŞIMI:
-   - Ana renk teması
-   - Warm vs cool tonlama
-   - Karakter-renk ilişkileri
-   - Lokasyon-renk mapping
-
-4. TEKNİK KARARLAR:
-   - Lens karakter tercihi (anamorphic, spherical)
-   - Aspect ratio önerisi
-   - Contrast ve saturation yaklaşımı
-   - Post-prodüksiyon color grading yönü
-
-5. REFERANS VE İLHAM:
-   - Benzer filmlerin görsel yaklaşımları
-   - Sanat tarihinden ilhamlar
-   - Fotoğraf stili referansları
-
-Storyboard için tutarlı görsel dil önerisi sun.`
+ÖNEMLİ: Yanıtında SADECE JSON olsun, başka açıklama ekleme!`
     },
     
     color_palette: {

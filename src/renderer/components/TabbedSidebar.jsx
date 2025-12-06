@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useScriptStore } from '../store/scriptStore';
 import ScriptNavigationPanel from './ScriptNavigationPanel';
@@ -8,6 +8,20 @@ export default function TabbedSidebar() {
   const [activeTab, setActiveTab] = useState('scripts');
   const { scripts, setCurrentView } = useScriptStore();
   const { t } = useTranslation();
+
+  // Custom event listener for tab changes
+  useEffect(() => {
+    const handleTabChange = (event) => {
+      const { tab } = event.detail;
+      if (tab === 'analysis') {
+        setActiveTab('settings');
+        // Analysis paneline yönlendirme için ek işlem gerekirse burada yapılabilir
+      }
+    };
+
+    window.addEventListener('changeTab', handleTabChange);
+    return () => window.removeEventListener('changeTab', handleTabChange);
+  }, []);
 
   const handleViewChange = (view) => {
     setCurrentView(view);

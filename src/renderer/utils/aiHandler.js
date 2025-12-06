@@ -179,6 +179,127 @@ class AIHandler {
     }
   }
 
+  async analyzeImageGemini(imageData, prompt = "Bu görseli detaylı bir şekilde analiz et ve açıkla.", options = {}) {
+    console.log('Gemini Vision Analysis:', {
+      hasGeminiKey: !!this.apiKey,
+      imageSize: imageData?.length || 0,
+      prompt: prompt.substring(0, 100)
+    });
+
+    if (!this.apiKey) {
+      throw new Error('Gemini API key gerekli. Lütfen ayarlardan API key ekleyin.');
+    }
+
+    // Use Gemini 2.5 Flash for vision analysis (fast and accurate)
+    const model = options.model || 'gemini-2.5-flash';
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
+
+    // Strip data URL prefix if present
+    const base64Data = imageData.includes(',') ? imageData.split(',')[1] : imageData;
+
+    const requestBody = {
+      contents: [{
+        parts: [
+          {
+            text: prompt
+          },
+          {
+            inline_data: {
+              mime_type: options.mimeType || 'image/jpeg',
+              data: base64Data
+            }
+          }
+        ]
+      }],
+      generationConfig: {
+        temperature: options.temperature || 0.7,
+        maxOutputTokens: options.maxOutputTokens || 2048
+      }
+    };
+
+    try {
+      console.log('🔍 Calling Gemini Vision API...');
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(options.timeout || 60000) // 1 minute timeout
+      });
+
+      console.log('API Response Status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`HTTP ${response.status}: ${errorData.error?.message || response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('API Response received');
+      console.log('🔍 Full API Response:', JSON.stringify(data, null, 2));
+
+      // Gemini API yanıt yapısını parse et
+      if (data.candidates && data.candidates.length > 0) {
+        const candidate = data.candidates[0];
+        
+        // Yöntem 1: content.parts yapısı
+        if (candidate.content && candidate.content.parts) {
+          const textParts = candidate.content.parts.filter(part => part.text);
+          if (textParts.length > 0) {
+            const analysisText = textParts.map(part => part.text).join('\n');
+            console.log('✅ Analysis extracted from content.parts');
+            return {
+              success: true,
+              analysis: analysisText,
+              provider: 'gemini',
+              model: model,
+              analyzedAt: new Date().toISOString()
+            };
+          }
+        }
+        
+        // Yöntem 2: Doğrudan text alanı
+        if (candidate.text) {
+          console.log('✅ Analysis extracted from candidate.text');
+          return {
+            success: true,
+            analysis: candidate.text,
+            provider: 'gemini',
+            model: model,
+            analyzedAt: new Date().toISOString()
+          };
+        }
+        
+        // Yöntem 3: output alanı
+        if (candidate.output) {
+          console.log('✅ Analysis extracted from candidate.output');
+          return {
+            success: true,
+            analysis: candidate.output,
+            provider: 'gemini',
+            model: model,
+            analyzedAt: new Date().toISOString()
+          };
+        }
+      }
+
+      console.error('❌ Unexpected response structure:', JSON.stringify(data, null, 2));
+      throw new Error('API\'den geçerli analiz yanıtı alınamadı. Lütfen konsol loglarını kontrol edin.');
+    } catch (error) {
+      console.error('Image Analysis Error:', error.message);
+      
+      if (error.message?.includes('timeout')) {
+        throw new Error('Analiz zaman aşımına uğradı. Lütfen tekrar deneyin.');
+      } else if (error.message?.includes('403') || error.message?.includes('401')) {
+        throw new Error('API anahtarı geçersiz veya yetki yok.');
+      }
+      
+      throw new Error('Görsel analizi başarısız: ' + error.message);
+    }
+  }
+
   async generateImageGemini(prompt, options = {}) {
     console.log('Gemini Image Generation:', {
       prompt: prompt.substring(0, 100) + '...',
@@ -206,11 +327,11 @@ class AIHandler {
         }],
         generationConfig: {
           response_modalities: ["IMAGE"],
-          thinking_level: options.thinkingLevel || "high", // Gemini 3 specific: "low", "medium", "high"
+          thinking_level: options.thinkingLevel || "medium", // Reduced from "high" to "medium" for faster generation
           temperature: options.temperature || 1.0, // Gemini 3 optimized for 1.0
           image_config: {
             aspect_ratio: options.aspectRatio || "1:1",
-            image_size: options.imageSize || "2K" // 2K or 4K supported
+            image_size: options.imageSize || "1K" // Changed from 2K to 1K for faster generation
           }
         },
         safetySettings: [
@@ -267,7 +388,7 @@ class AIHandler {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(180000) // 3 dakika timeout
+        signal: AbortSignal.timeout(options.timeout || 300000) // 5 minutes default timeout
       });
 
       console.log('API Response Status:', response.status);

@@ -73,7 +73,6 @@ export default function StoryboardLoadingScreen({ message = 'AI Karakterleri ve 
             </span>
           </div>
         </div>
-      }
       </div>
 
       <style dangerouslySetInnerHTML={{__html: `

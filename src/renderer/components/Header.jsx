@@ -145,6 +145,9 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
     ...(features.enable_storyboard ? [
       { id: 'storyboard', label: t('nav.storyboard', 'Storyboard'), icon: '🎨' }
     ] : []),
+    ...(features.enable_canvas ? [
+      { id: 'canvas', label: t('nav.canvas', 'Tuval'), icon: '🖌️' }
+    ] : []),
   ];
 
 

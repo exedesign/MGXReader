@@ -10,6 +10,7 @@ import AnalysisPanel from './components/AnalysisPanel';
 import Header from './components/Header';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProfessionalStoryboard from './components/ProfessionalStoryboard';
+import Canvas from './components/Canvas';
 
 // Lazy load heavy components
 const SpeedReader = React.lazy(() => import('./components/SpeedReader'));
@@ -101,6 +102,32 @@ function App() {
                 <div className="flex flex-col items-center justify-center h-full text-cinema-text p-8">
                   <span className="text-6xl mb-4">🎨</span>
                   <h3 className="text-2xl font-bold mb-2">Storyboard Modülü Kapalı</h3>
+                  <p className="text-cinema-text-dim text-center mb-4">
+                    Bu özelliği kullanmak için Ayarlar &gt; Modüler Özellikler bölümünden etkinleştirin.
+                  </p>
+                  <button
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('openUnifiedSettings', { detail: { activeTab: 'modules' } }));
+                    }}
+                    className="px-6 py-3 bg-cinema-accent text-cinema-black rounded-lg font-medium hover:bg-cinema-accent/90 transition-colors"
+                  >
+                    Ayarları Aç
+                  </button>
+                </div>
+              )}
+
+              {/* Canvas - AI-powered image editing */}
+              {currentView === 'canvas' && features.enable_canvas && (
+                <ErrorBoundary>
+                  <Canvas />
+                </ErrorBoundary>
+              )}
+              
+              {/* Show message if trying to access disabled canvas module */}
+              {currentView === 'canvas' && !features.enable_canvas && (
+                <div className="flex flex-col items-center justify-center h-full text-cinema-text p-8">
+                  <span className="text-6xl mb-4">🎨</span>
+                  <h3 className="text-2xl font-bold mb-2">Tuval Modülü Kapalı</h3>
                   <p className="text-cinema-text-dim text-center mb-4">
                     Bu özelliği kullanmak için Ayarlar &gt; Modüler Özellikler bölümünden etkinleştirin.
                   </p>

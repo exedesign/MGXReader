@@ -281,6 +281,54 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                       )}
                     </div>
 
+                    {/* Canvas Module */}
+                    <div className={`bg-cinema-black/30 rounded-lg p-6 border transition-all ${
+                      features.enable_canvas 
+                        ? 'border-cinema-accent/50 shadow-lg shadow-cinema-accent/10' 
+                        : 'border-cinema-gray/50'
+                    }`}>
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-start gap-4 flex-1">
+                          <span className="text-3xl">🎨</span>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="text-lg font-medium text-cinema-text">Tuval Modülü</h4>
+                              {features.enable_canvas && (
+                                <span className="px-2 py-1 bg-green-900/30 text-green-400 text-xs rounded-full">Aktif</span>
+                              )}
+                            </div>
+                            <p className="text-cinema-text-dim text-sm mb-3">
+                              AI destekli görsel düzenleme: Eskiz, Stil Transferi, Inpainting, Outpainting
+                            </p>
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="text-cinema-text-dim">💾 Bellek:</span>
+                                <span className="text-cinema-accent">20-40 MB</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-cinema-text-dim">🔌 API:</span>
+                                <span className="text-orange-400">Yüksek</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={features.enable_canvas}
+                            onChange={() => toggleFeature('enable_canvas')}
+                          />
+                          <div className="w-11 h-6 bg-cinema-gray rounded-full peer peer-focus:ring-4 peer-focus:ring-cinema-accent/20 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cinema-accent"></div>
+                        </label>
+                      </div>
+                      {!features.enable_canvas && (
+                        <div className="mt-4 p-3 bg-yellow-900/20 border border-yellow-900/30 rounded text-sm text-yellow-200">
+                          <span className="font-bold">⚠️ Uyarı:</span> Görsel düzenleme ve Tuval özellikleri kullanılamayacak.
+                        </div>
+                      )}
+                    </div>
+
                     {/* AI Analysis Module */}
                     <div className={`bg-cinema-black/30 rounded-lg p-6 border transition-all ${
                       features.enable_ai_analysis 
@@ -369,7 +417,8 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                               let active = 2; // Base: Editor + Speed Reader (always active)
                               if (features.enable_ai_analysis) active++;
                               if (features.enable_storyboard) active++;
-                              let total = 4; // Total possible: Editor, Speed Reader, Analysis, Storyboard
+                              if (features.enable_canvas) active++;
+                              let total = 5; // Total possible: Editor, Speed Reader, Analysis, Storyboard, Canvas
                               return `${active} / ${total}`;
                             })()}
                           </div>
@@ -381,6 +430,7 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                               let memory = 30; // Base + Core features (Editor, Speed Reader)
                               if (features.enable_ai_analysis) memory += 40;
                               if (features.enable_storyboard) memory += 75;
+                              if (features.enable_canvas) memory += 30;
                               return `~${memory} MB`;
                             })()}
                           </div>

@@ -8,17 +8,15 @@ import { useFeatureStore } from '../store/featureStore';
 import AIHandler from '../utils/aiHandler';
 import PDFExportService from '../utils/pdfExportService';
 import { analysisStorageService } from '../utils/analysisStorageService';
+import { parseCharacterAnalysis, optimizeForStoryboard, generateCharacterSummary } from '../utils/characterAnalysisParser';
 
-// Storyboard için gerekli analiz türleri - otomatik seçim için
+// Storyboard için gerekli analiz türleri - sadece görsel hikaye anlatımı için gerekli olanlar
 export const STORYBOARD_REQUIRED_ANALYSIS = [
-  'character',          // Karakter analizi - karakterlerin görsel tanımları için
-  'location_analysis',  // Mekan analizi - lokasyonların görsel karakteri için
-  'cinematography',     // Görüntü yönetimi - kamera açıları ve kompozisyon için
-  'visual_style',       // Görsel stil - tonlama ve atmosfer için
-  'color_palette',      // Renk paleti - storyboard renk kılavuzu için
-  'structure',          // Yapısal analiz - sahne akışı için
-  'dialogue',           // Diyalog analizi - karakter etkileşimleri için
-  'production'          // Prodüksiyon analizi - teknik gereksinimler için
+  'character',          // Karakter analizi - karakterlerin görsel tanımları ve özellikler için
+  'location_analysis',  // Mekan analizi - lokasyonların görsel karakteri ve atmosferi için
+  'cinematography',     // Görüntü yönetimi - kamera açıları, kompozisyon ve çerçeveleme için
+  'visual_style',       // Görsel stil - tonlama, atmosfer ve genel görsel yaklaşım için
+  'structure'           // Yapısal analiz - sahne akışı ve sekans organizasyonu için
 ];
 
 export default function AnalysisPanel() {
@@ -127,6 +125,63 @@ export default function AnalysisPanel() {
 
     loadExistingAnalysisData();
   }, [useScriptStore.getState().currentScriptId]); // Track current script changes
+
+  // Storyboard'dan gelen otomatik analiz seçimi eventi dinle
+  // Storyboard'dan geldiğinde otomatik analiz başlatma için flag
+  const [shouldAutoStartAnalysis, setShouldAutoStartAnalysis] = useState(false);
+
+  useEffect(() => {
+    const handleStoryboardAnalysisSelection = () => {
+      if (window.storyboardRequestedAnalysis) {
+        console.log('🎬 Storyboard için gerekli analizler otomatik seçiliyor...');
+        
+        // Sadece storyboard için gerekli analizleri seç
+        const newSelection = {};
+        const types = getPromptTypes('analysis');
+        types.forEach(({ key }) => {
+          // Sadece STORYBOARD_REQUIRED_ANALYSIS'deki analizleri seç
+          newSelection[key] = STORYBOARD_REQUIRED_ANALYSIS.includes(key);
+        });
+        
+        console.log('📋 Seçilen analizler:', Object.keys(newSelection).filter(k => newSelection[k]));
+        console.log('🎯 Storyboard için gerekli analizler:', STORYBOARD_REQUIRED_ANALYSIS);
+        
+        setSelectedAnalysisTypes(newSelection);
+        
+        // Flag'i temizle ve otomatik başlatma flag'ini set et
+        window.storyboardRequestedAnalysis = false;
+        setShouldAutoStartAnalysis(true);
+      }
+    };
+
+    window.addEventListener('selectStoryboardAnalysis', handleStoryboardAnalysisSelection);
+    
+    return () => {
+      window.removeEventListener('selectStoryboardAnalysis', handleStoryboardAnalysisSelection);
+    };
+  }, [getPromptTypes]);
+
+  // State güncellendikten sonra otomatik analiz başlat
+  useEffect(() => {
+    if (shouldAutoStartAnalysis) {
+      const selectedTypes = Object.keys(selectedAnalysisTypes).filter(key => selectedAnalysisTypes[key]);
+      console.log('🚀 Otomatik başlatılacak analizler:', selectedTypes);
+      
+      if (selectedTypes.length > 0) {
+        // Reset progress tracking (storyboard modülüne bildir)
+        window.dispatchEvent(new CustomEvent('storyboardAnalysisReset'));
+        
+        // Biraz bekle ki state tam güncellensin
+        setTimeout(() => {
+          handleAnalyze();
+          setShouldAutoStartAnalysis(false);
+        }, 500);
+      } else {
+        console.error('❌ Hiç analiz seçilmedi!');
+        setShouldAutoStartAnalysis(false);
+      }
+    }
+  }, [shouldAutoStartAnalysis, selectedAnalysisTypes]);
 
   // 🔄 ARA KAYITTAN DEVAM ET FONKSİYONU
   const continuePartialAnalysis = async (text, remainingTypes, existingResults, abortController) => {
@@ -290,6 +345,11 @@ export default function AnalysisPanel() {
           analysisProvider: provider
         });
         console.log('💾 Devam edilen analiz tamamlandı ve kaydedildi!');
+        
+        // Notify other components that analysis has been updated
+        window.dispatchEvent(new CustomEvent('analysisUpdated', { 
+          detail: { customResults: multiResults } 
+        }));
       } else {
         console.warn('⚠️ Script bilgisi eksik, analiz kaydedilemedi');
       }
@@ -335,6 +395,9 @@ export default function AnalysisPanel() {
       // 🔄 ÖNCELİKLE ARA KAYIT KONTROLÜ YAP
       // Selected analysis types'ı önce belirle
       const selectedTypes = Object.keys(selectedAnalysisTypes).filter(key => selectedAnalysisTypes[key]);
+      
+      console.log('📊 Seçili analiz türleri (selectedAnalysisTypes):', selectedTypes);
+      console.log('📋 Tüm selectedAnalysisTypes state:', selectedAnalysisTypes);
       
       if (selectedTypes.length === 0) {
         alert(t('analysis.selectAtLeastOne', 'Lütfen en az bir analiz türü seçin'));
@@ -424,7 +487,20 @@ export default function AnalysisPanel() {
       const isCloudProvider = provider === 'openai' || provider === 'gemini';
       const useChunking = !isCloudProvider && text.length > 8000; // Lower threshold for chunking
 
-      console.log('Running multi-analysis with selected types:', selectedTypes);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('🚀 Analiz Başlatılıyor');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('📊 Seçili Analiz Sayısı:', selectedTypes.length);
+      console.log('📋 Seçili Analizler:', selectedTypes);
+      console.log('🔍 selectedAnalysisTypes State:', selectedAnalysisTypes);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      if (selectedTypes.length === 0) {
+        console.error('❌ Hiç analiz seçilmedi!');
+        alert('❌ Lütfen en az bir analiz türü seçin!');
+        setIsAnalyzing(false);
+        return;
+      }
 
       // Get language variable first
       const currentLanguage = t('language.name', 'Türkçe');
@@ -451,10 +527,22 @@ export default function AnalysisPanel() {
           continue;
         }
 
-        setAnalysisProgress({
+        const progressData = {
           message: `${prompt.name} analizi yapılıyor... (${completed + 1}/${totalAnalyses})`,
-          progress: (completed / totalAnalyses) * 100
-        });
+          progress: (completed / totalAnalyses) * 100,
+          currentAnalysis: analysisType,
+          currentAnalysisName: prompt.name,
+          completed: completed,
+          total: totalAnalyses,
+          status: 'in-progress'
+        };
+        
+        setAnalysisProgress(progressData);
+        
+        // Broadcast to storyboard module
+        window.dispatchEvent(new CustomEvent('storyboardAnalysisProgress', { 
+          detail: progressData
+        }));
 
         try {
           // Check for cancellation
@@ -492,12 +580,23 @@ export default function AnalysisPanel() {
               const chunkProgress = progressInfo.progress || 0;
               const overallProgress = ((completed + (chunkProgress / 100)) / totalAnalyses) * 100;
               
-              setAnalysisProgress({
+              const progressData = {
                 message: `${prompt.name} - ${progressInfo.message || 'Analiz yapılıyor...'}`,
                 progress: overallProgress,
-                currentChunk: progressInfo.chunkNumber,
-                totalChunks: progressInfo.totalChunks
-              });
+                currentAnalysis: analysisType,
+                currentAnalysisName: prompt.name,
+                completed: completed,
+                total: totalAnalyses,
+                status: 'in-progress',
+                chunkProgress: chunkProgress
+              };
+              
+              setAnalysisProgress(progressData);
+              
+              // Broadcast to storyboard
+              window.dispatchEvent(new CustomEvent('storyboardAnalysisProgress', { 
+                detail: progressData
+              }));
             }
           });
 
@@ -549,6 +648,19 @@ export default function AnalysisPanel() {
           }
           
           completed++;
+          
+          // Broadcast completion of this analysis
+          window.dispatchEvent(new CustomEvent('storyboardAnalysisProgress', { 
+            detail: {
+              message: `${prompt.name} tamamlandı!`,
+              progress: (completed / totalAnalyses) * 100,
+              currentAnalysis: analysisType,
+              currentAnalysisName: prompt.name,
+              completed: completed,
+              total: totalAnalyses,
+              status: 'completed'
+            }
+          }));
         } catch (error) {
           console.error(`Error analyzing ${analysisType}:`, error);
           
@@ -620,6 +732,39 @@ export default function AnalysisPanel() {
       // Store results with enhanced structure
       setCustomResults(multiResults);
 
+      // 🎭 Karakter analizini yapılandırılmış formata dönüştür
+      let parsedCharacters = [];
+      let characterSummary = null;
+      
+      if (multiResults['character'] && multiResults['character'].result) {
+        console.log('🎭 Karakter analizi parse ediliyor...');
+        try {
+          const rawCharacterText = multiResults['character'].result;
+          parsedCharacters = parseCharacterAnalysis(rawCharacterText);
+          
+          // Storyboard için optimize et
+          const optimizedCharacters = optimizeForStoryboard(parsedCharacters);
+          
+          // Özet rapor oluştur
+          characterSummary = generateCharacterSummary(parsedCharacters);
+          
+          console.log(`✅ ${parsedCharacters.length} karakter başarıyla parse edildi ve yapılandırıldı`);
+          console.log('📊 Karakter özeti:', characterSummary);
+          
+          // Parse edilmiş karakterleri multiResults'a ekle
+          multiResults['character'] = {
+            ...multiResults['character'],
+            parsed: true,
+            characters: optimizedCharacters,
+            summary: characterSummary,
+            rawCharacters: parsedCharacters
+          };
+        } catch (parseError) {
+          console.error('❌ Karakter parse hatası:', parseError);
+          // Hata durumunda da analiz devam etsin
+        }
+      }
+
       // Create comprehensive structure compatible with tab display and PDF export
       const result = {
         isCustomAnalysis: true,
@@ -636,8 +781,10 @@ export default function AnalysisPanel() {
         },
         scenes: [],
         locations: [],
-        characters: [],
+        characters: parsedCharacters.length > 0 ? optimizeForStoryboard(parsedCharacters) : [],
         equipment: [],
+        // Karakter özet bilgisi
+        characterSummary: characterSummary,
         // Analysis result overview for consistent reporting
         analysisOverview: {
           provider: provider,
@@ -645,7 +792,8 @@ export default function AnalysisPanel() {
           textLength: text.length,
           analysisTypes: selectedTypes,
           timestamp: new Date().toISOString(),
-          resultsGenerated: Object.keys(multiResults).length
+          resultsGenerated: Object.keys(multiResults).length,
+          parsedCharacters: parsedCharacters.length
         }
       };
 
@@ -663,6 +811,11 @@ export default function AnalysisPanel() {
         
         await analysisStorageService.saveAnalysis(text, fileName, result, scriptMetadata);
         console.log('✅ Analysis saved to storage with metadata');
+        
+        // Notify other components that analysis has been updated
+        window.dispatchEvent(new CustomEvent('analysisUpdated', { 
+          detail: { customResults: multiResults } 
+        }));
       } catch (saveError) {
         console.warn('Failed to save analysis:', saveError);
       }
@@ -744,6 +897,30 @@ export default function AnalysisPanel() {
         await analysisStorageService.deleteAnalysis(analysisKey);
         await loadSavedAnalyses(); // Refresh the list
         console.log('🗑️ Deleted saved analysis:', analysisKey);
+        
+        // If the deleted analysis was currently loaded, clear it
+        const currentScript = useScriptStore.getState().getCurrentScript();
+        if (currentScript && currentScript.analysisData) {
+          const currentKey = analysisStorageService.generateKey(
+            currentScript.scriptText || currentScript.cleanedText,
+            currentScript.fileName || currentScript.name
+          );
+          
+          if (currentKey === analysisKey) {
+            setCustomResults({});
+            
+            // Clear from script store
+            const { updateScript } = useScriptStore.getState();
+            updateScript(currentScript.id, {
+              analysisData: null,
+              scenes: [],
+              characters: [],
+              locations: []
+            });
+            
+            console.log('🗑️ Cleared currently loaded analysis from state');
+          }
+        }
       } catch (error) {
         console.error('Failed to delete saved analysis:', error);
         alert('Analizi silmede hata: ' + error.message);
@@ -823,35 +1000,175 @@ export default function AnalysisPanel() {
   };
 
   // Storyboard için eksik analizleri otomatik yap
-  const runStoryboardRequiredAnalysis = async () => {
-    const requirements = checkStoryboardAnalysisRequirements();
-    
-    if (requirements.hasRequired) {
-      console.log('✅ Storyboard için gerekli tüm analizler mevcut');
-      return true;
+  // Sadece belirtilen analiz türleri ile analiz başlatan fonksiyon
+  const handleAnalyzeWithSpecificTypes = async (specificTypes) => {
+    if (!isConfigured()) {
+      throw new Error('AI sağlayıcısı yapılandırılmamış. Lütfen Settings > AI Providers bölümünden API key ekleyin.');
     }
-    
-    console.log('🎬 Storyboard için eksik analizler tespit edildi:', requirements.missing);
-    
-    // Eksik analizleri selectedAnalysisTypes'da işaretle
-    const updatedSelection = { ...selectedAnalysisTypes };
-    requirements.missing.forEach(type => {
-      updatedSelection[type] = true;
-    });
-    setSelectedAnalysisTypes(updatedSelection);
-    
-    // Analizi otomatik başlat
-    console.log('🚀 Storyboard için gerekli analizler başlatılıyor...');
-    await handleAnalyze();
-    
-    return true;
+
+    // Create AbortController for cancellation
+    const abortController = new AbortController();
+    setAnalysisAbortController(abortController);
+    setIsAnalyzing(true);
+
+    try {
+      // Use filtered text for analysis
+      const text = filteredAnalysisText;
+      const aiHandler = getAIHandler();
+
+      console.log(`🔍 Starting specific analysis with provider: ${provider}`);
+      console.log('📝 Text to analyze:', text ? `${text.substring(0, 100)}... (${text.length} chars)` : 'NO TEXT!');
+      console.log('🎯 Analysis types:', specificTypes);
+      
+      if (!text || text.trim().length === 0) {
+        throw new Error('Analiz yapılacak metin bulunamadı! Lütfen bir senaryo yükleyin.');
+      }
+
+      if (!specificTypes || specificTypes.length === 0) {
+        throw new Error('Analiz türü belirtilmedi');
+      }
+
+      // Check if analysis already exists in cache
+      const scriptStore = useScriptStore.getState();
+      const fileName = scriptStore.currentScript?.name || 'Unnamed Script';
+      
+      // 🔄 ÖNCELİKLE ARA KAYIT KONTROLÜ YAP
+      const partialAnalyses = await analysisStorageService.findPartialAnalyses(fileName);
+      if (partialAnalyses && partialAnalyses.length > 0) {
+        const cachedAnalysis = await analysisStorageService.mergePreviousAnalyses(fileName, partialAnalyses);
+        console.log('🗂️ Önceki analiz bulundu:', cachedAnalysis);
+        
+        if (cachedAnalysis?.customResults) {
+          setCustomResults(cachedAnalysis.customResults);
+          setAnalysisData(cachedAnalysis);
+          setActiveTab('custom');
+          setIsAnalyzing(false);
+          return cachedAnalysis;
+        }
+      }
+
+      console.log('Running multi-analysis with specific types:', specificTypes);
+
+      // Get language variable first
+      const currentLanguage = t('language.name', 'Türkçe');
+
+      // Run multiple analyses
+      const multiResults = {};
+      const totalAnalyses = specificTypes.length;
+      let completed = 0;
+
+      // Initialize a structured analysis summary
+      const analysisMetadata = {
+        timestamp: new Date().toISOString(),
+        selectedTypes: specificTypes,
+        provider: provider,
+        totalAnalysisCount: totalAnalyses,
+        language: currentLanguage
+      };
+
+      for (const analysisType of specificTypes) {
+        if (abortController.signal.aborted) {
+          console.log('❌ Analysis aborted by user');
+          break;
+        }
+
+        setAnalysisProgress(prev => ({
+          ...prev,
+          current: completed,
+          total: totalAnalyses,
+          currentType: analysisType,
+          percentage: Math.round((completed / totalAnalyses) * 100)
+        }));
+
+        const typeDisplayName = analysisTypes.find(t => t.key === analysisType)?.label || analysisType;
+        console.log(`📄 Script length: ${text.length} characters - Using chunking for complete analysis`);
+
+        try {
+          let result = await aiHandler.analyzeWithCustomPrompt(text, {
+            analysisType,
+            language: currentLanguage,
+            displayName: typeDisplayName
+          });
+
+          if (result) {
+            multiResults[analysisType] = result;
+            console.log(`💾 Ara kayıt yapıldı: ${analysisType} analizi tamamlandı (${completed}/${totalAnalyses})`);
+          }
+
+          // Ara kayıt yap
+          await analysisStorageService.savePartialAnalysis(fileName, {
+            type: analysisType,
+            result: result,
+            metadata: analysisMetadata
+          });
+
+        } catch (error) {
+          console.error(`Error analyzing ${analysisType}:`, error);
+          
+          // Hata ile ara kayıt yap  
+          await analysisStorageService.savePartialAnalysis(fileName, {
+            type: analysisType,
+            error: error.message,
+            metadata: analysisMetadata
+          });
+          console.log(`💾 Hata ile ara kayıt yapıldı: ${analysisType} analizi başarısız (${completed}/${totalAnalyses})`);
+        }
+
+        completed++;
+        
+        if (!abortController.signal.aborted && completed < totalAnalyses) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
+
+      // If aborted, don't process results
+      if (abortController.signal.aborted) {
+        setIsAnalyzing(false);
+        clearAnalysisProgress();
+        return null;
+      }
+
+      const finalResults = {
+        customResults: multiResults,
+        metadata: analysisMetadata,
+        timestamp: new Date().toISOString()
+      };
+
+      // Save final analysis with correct parameters
+      const currentScript = useScriptStore.getState().getCurrentScript();
+      const scriptFileName = currentScript?.fileName || currentScript?.name || 'Unknown_Script';
+      const scriptText = currentScript?.cleanedText || currentScript?.scriptText || text;
+      await analysisStorageService.saveAnalysis(scriptText, scriptFileName, finalResults, {
+        fileName: scriptFileName,
+        originalFileName: currentScript?.originalFileName || scriptFileName,
+        fileType: currentScript?.fileType || 'unknown',
+        analysisProvider: provider
+      });
+      
+      setCustomResults(multiResults);
+      setAnalysisData(finalResults);
+      setActiveTab('custom');
+
+      return finalResults;
+
+    } catch (error) {
+      console.error('AI Analysis Error:', error);
+      throw error;
+    } finally {
+      setIsAnalyzing(false);
+      clearAnalysisProgress();
+      setAnalysisAbortController(null);
+    }
   };
 
+  // Storyboard için akıllı analiz başlatma - mevcut analizleri kontrol et ve gerekirse başlat
   // Export function for Storyboard component to use
   window.analysisPanel = {
     checkStoryboardRequirements: checkStoryboardAnalysisRequirements,
-    runRequiredAnalysis: runStoryboardRequiredAnalysis,
-    hasAnalysisData: () => !!analysisData && !!analysisData.customResults
+    hasAnalysisData: () => !!analysisData && !!analysisData.customResults,
+    startAnalysis: handleAnalyze,
+    isConfigured: isConfigured,
+    hasText: () => !!filteredAnalysisText && filteredAnalysisText.trim().length > 0
   };
 
   // Load saved analyses when component mounts or when switching to saved tab
@@ -1492,6 +1809,7 @@ export default function AnalysisPanel() {
                     onLoadAnalysis={loadSavedAnalysis}
                     onDeleteAnalysis={deleteSavedAnalysis}
                     onRefresh={loadSavedAnalyses}
+                    setCustomResults={setCustomResults}
                   />
                 )}
               </div>
@@ -2133,7 +2451,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
               {isExpanded && (
                 <div className="p-4 bg-cinema-black/50 border-t border-cinema-gray-light">
                   {/* Analysis metadata */}
-                  {(resultData.timestamp || resultData.wordCount || resultData.type) && (
+                  {(resultData.timestamp || resultData.wordCount || resultData.type || resultData.summary) && (
                     <div className="mb-4 pb-3 border-b border-cinema-gray/30">
                       <div className="grid grid-cols-3 gap-4 text-xs">
                         {resultData.timestamp && (
@@ -2160,15 +2478,113 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                           </div>
                         )}
                       </div>
+                      
+                      {/* Karakter Analizi Özet Bilgisi */}
+                      {promptKey === 'character' && resultData.parsed && resultData.summary && (
+                        <div className="mt-4 pt-3 border-t border-cinema-gray/30">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-cinema-accent font-semibold">🎭 Yapılandırılmış Karakter Analizi</span>
+                            <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded">✓ Parse Edildi</span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-3">
+                            <div className="bg-cinema-black/50 rounded p-2 text-center">
+                              <div className="text-lg font-bold text-cinema-accent">{resultData.summary.totalCharacters}</div>
+                              <div className="text-xs text-cinema-text-dim">Toplam Karakter</div>
+                            </div>
+                            <div className="bg-cinema-black/50 rounded p-2 text-center">
+                              <div className="text-lg font-bold text-green-400">{resultData.summary.readyForVisualization}</div>
+                              <div className="text-xs text-cinema-text-dim">Görselleştirmeye Hazır</div>
+                            </div>
+                            <div className="bg-cinema-black/50 rounded p-2 text-center">
+                              <div className="text-lg font-bold text-blue-400">{resultData.summary.charactersWithVisualDescription}</div>
+                              <div className="text-xs text-cinema-text-dim">Fiziksel Tanım</div>
+                            </div>
+                            <div className="bg-cinema-black/50 rounded p-2 text-center">
+                              <div className="text-lg font-bold text-purple-400">%{Math.round(resultData.summary.averageCompleteness)}</div>
+                              <div className="text-xs text-cinema-text-dim">Ortalama Tamlık</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Analysis result content */}
-                  <div className="bg-cinema-black rounded-lg p-4">
-                    <div className="text-cinema-text whitespace-pre-wrap text-sm leading-relaxed">
-                      {typeof resultText === 'string' ? resultText : JSON.stringify(resultText, null, 2)}
+                  {/* Karakter Analizi - Yapılandırılmış Görünüm */}
+                  {promptKey === 'character' && resultData.parsed && resultData.characters && resultData.characters.length > 0 ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between mb-3">
+                        <h5 className="text-sm font-semibold text-cinema-accent">Karakterler ({resultData.characters.length})</h5>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const json = JSON.stringify(resultData.characters, null, 2);
+                            navigator.clipboard.writeText(json);
+                          }}
+                          className="text-xs px-2 py-1 bg-cinema-gray hover:bg-cinema-gray-light rounded"
+                        >
+                          📋 JSON Olarak Kopyala
+                        </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        {resultData.characters.map((char, idx) => (
+                          <div key={idx} className="bg-cinema-black rounded-lg p-3 border border-cinema-gray/50 hover:border-cinema-accent/30 transition-colors">
+                            <div className="flex items-start gap-3 mb-2">
+                              <div className="text-2xl">🎭</div>
+                              <div className="flex-1">
+                                <h6 className="text-cinema-text font-bold">{char.name || char.displayName}</h6>
+                                {char.role && (
+                                  <span className="text-xs text-cinema-accent bg-cinema-accent/10 px-2 py-0.5 rounded">
+                                    {char.role}
+                                  </span>
+                                )}
+                              </div>
+                              {char.metadata?.completeness && (
+                                <div className="text-xs">
+                                  <span className={`px-2 py-1 rounded ${
+                                    char.metadata.completeness >= 70 ? 'bg-green-500/20 text-green-400' :
+                                    char.metadata.completeness >= 40 ? 'bg-yellow-500/20 text-yellow-400' :
+                                    'bg-red-500/20 text-red-400'
+                                  }`}>
+                                    %{char.metadata.completeness}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {char.physicalDescription && (
+                              <div className="mb-2">
+                                <div className="text-xs text-cinema-text-dim font-semibold mb-1">Fiziksel:</div>
+                                <p className="text-xs text-cinema-text line-clamp-2">{char.physicalDescription}</p>
+                              </div>
+                            )}
+                            
+                            {char.visualPrompt && (
+                              <div className="mt-2 pt-2 border-t border-cinema-gray/30">
+                                <div className="text-xs text-green-400 font-semibold mb-1">🎨 Görsel Prompt:</div>
+                                <p className="text-xs text-cinema-text-dim line-clamp-2 italic">{char.visualPrompt}</p>
+                              </div>
+                            )}
+                            
+                            {char.metadata?.readyForVisualization && (
+                              <div className="mt-2">
+                                <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded">
+                                  ✓ Görselleştirmeye Hazır
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    /* Ham Analiz Sonucu */
+                    <div className="bg-cinema-black rounded-lg p-4">
+                      <div className="text-cinema-text whitespace-pre-wrap text-sm leading-relaxed">
+                        {typeof resultText === 'string' ? resultText : JSON.stringify(resultText, null, 2)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -3172,7 +3588,7 @@ function AudienceTab({ audienceAnalysis }) {
   );
 }
 
-function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyses, onLoadAnalysis, onDeleteAnalysis, onRefresh }) {
+function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyses, onLoadAnalysis, onDeleteAnalysis, onRefresh, setCustomResults }) {
   if (loadingSavedAnalyses) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -3223,6 +3639,24 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
                   try {
                     await analysisStorageService.clearAll();
                     setSavedAnalyses([]);
+                    
+                    // Clear current analysis state
+                    if (setCustomResults) {
+                      setCustomResults({});
+                    }
+                    
+                    // Clear from script store
+                    const currentScript = useScriptStore.getState().getCurrentScript();
+                    if (currentScript) {
+                      const { updateScript } = useScriptStore.getState();
+                      updateScript(currentScript.id, {
+                        analysisData: null,
+                        scenes: [],
+                        characters: [],
+                        locations: []
+                      });
+                    }
+                    
                     alert('✅ Tüm analizler başarıyla temizlendi!');
                   } catch (error) {
                     console.error('❌ Temizleme hatası:', error);
