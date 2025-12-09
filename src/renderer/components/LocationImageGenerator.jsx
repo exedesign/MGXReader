@@ -14,6 +14,7 @@ export default function LocationImageGenerator({ location, onImageGenerated, cha
     const [error, setError] = useState(null);
     const [prompt, setPrompt] = useState('Professional location environment');
     const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+    const [fileInputKey, setFileInputKey] = useState(Date.now()); // Key to force input reset
     const fileInputRef = useRef(null);
 
     // Auto-generate prompt from location data
@@ -123,6 +124,10 @@ export default function LocationImageGenerator({ location, onImageGenerated, cha
                 setError('Lütfen geçerli görsel dosyaları seçin (JPG, PNG, etc.)');
             }
         });
+        
+        // CRITICAL: Reset input to allow selecting same/new files again
+        event.target.value = '';
+        setFileInputKey(Date.now()); // Force input re-render
     };
 
     const removeReferenceImage = (imageId) => {
@@ -328,6 +333,7 @@ export default function LocationImageGenerator({ location, onImageGenerated, cha
                 ) : (
                     <div className="border-2 border-dashed border-cinema-gray rounded-lg p-6 text-center">
                         <input
+                            key={fileInputKey}
                             type="file"
                             ref={fileInputRef}
                             onChange={handleReferenceUpload}

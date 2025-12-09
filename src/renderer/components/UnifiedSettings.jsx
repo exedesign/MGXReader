@@ -4,9 +4,537 @@ import { useAIStore } from '../store/aiStore';
 import { usePromptStore } from '../store/promptStore';
 import { useReaderStore } from '../store/readerStore';
 import { useFeatureStore } from '../store/featureStore';
+import { usePoseStore } from '../store/poseStore';
 import { AI_PROVIDERS } from '../utils/aiHandler';
 import ProvidersTab from './ProvidersTab';
 import PromptsTab from './PromptsTab';
+
+// Character Poses Tab Component
+function CharacterPosesTab() {
+  const poseStore = usePoseStore();
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [editingPose, setEditingPose] = useState(null);
+  const [newPose, setNewPose] = useState({
+    name: '',
+    description: '',
+    prompt: '',
+    icon: '🎭',
+    category: 'custom'
+  });
+
+  // Debug
+  React.useEffect(() => {
+    console.log('🎭 CharacterPosesTab mounted');
+    console.log('📊 Pose templates:', poseStore.poseTemplates?.length);
+    console.log('🖼️ Pose reference images:', poseStore.poseReferenceImages?.length);
+  }, []);
+
+  const filteredPoses = selectedCategory === 'all'
+    ? poseStore.poseTemplates
+    : poseStore.poseTemplates.filter(p => p.category === selectedCategory);
+
+  const handleAddPose = () => {
+    if (!newPose.name || !newPose.prompt) {
+      alert('Poz adı ve prompt alanları zorunludur!');
+      return;
+    }
+
+    poseStore.addPoseTemplate(newPose);
+    setNewPose({
+      name: '',
+      description: '',
+      prompt: '',
+      icon: '🎭',
+      category: 'custom'
+    });
+  };
+
+  const handleUpdatePose = () => {
+    if (!editingPose) return;
+    
+    poseStore.updatePoseTemplate(editingPose.id, {
+      name: editingPose.name,
+      description: editingPose.description,
+      prompt: editingPose.prompt,
+      icon: editingPose.icon,
+      category: editingPose.category
+    });
+    
+    setEditingPose(null);
+  };
+
+  const handleDeletePose = (id) => {
+    if (window.confirm('Bu poz şablonunu silmek istediğinizden emin misiniz?')) {
+      const success = poseStore.deletePoseTemplate(id);
+      if (!success) {
+        alert('Varsayılan poz şablonları silinemez!');
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-semibold text-cinema-text mb-2">Karakter Poz Şablonları</h3>
+        <p className="text-sm text-cinema-text-dim">
+          Storyboard'da kullanılacak karakter poz şablonlarını yönetin. Bu pozlar character sheet oluşturmak için kullanılır.
+        </p>
+      </div>
+
+      {/* Category Filter */}
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => setSelectedCategory('all')}
+          className={`px-4 py-2 rounded-lg transition-all ${
+            selectedCategory === 'all'
+              ? 'bg-cinema-accent text-cinema-black font-medium'
+              : 'bg-cinema-gray/50 text-cinema-text hover:bg-cinema-gray'
+          }`}
+        >
+          📋 Tümü ({poseStore.poseTemplates.length})
+        </button>
+        {poseStore.categories.map(cat => (
+          <button
+            key={cat.id}
+            onClick={() => setSelectedCategory(cat.id)}
+            className={`px-4 py-2 rounded-lg transition-all ${
+              selectedCategory === cat.id
+                ? 'bg-cinema-accent text-cinema-black font-medium'
+                : 'bg-cinema-gray/50 text-cinema-text hover:bg-cinema-gray'
+            }`}
+          >
+            {cat.icon} {cat.name} ({poseStore.getPosesByCategory(cat.id).length})
+          </button>
+        ))}
+      </div>
+
+      {/* Add New Pose Form */}
+      <div className="bg-cinema-gray/20 p-6 rounded-lg border border-cinema-gray">
+        <h4 className="text-lg font-semibold text-cinema-text mb-4">➕ Yeni Poz Ekle</h4>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-cinema-text mb-2">Poz Adı *</label>
+            <input
+              type="text"
+              value={newPose.name}
+              onChange={(e) => setNewPose({ ...newPose, name: e.target.value })}
+              placeholder="Örn: Koşma Pozu"
+              className="w-full bg-cinema-black/60 border border-cinema-gray rounded-lg px-4 py-2 text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-cinema-text mb-2">İkon</label>
+            <input
+              type="text"
+              value={newPose.icon}
+              onChange={(e) => setNewPose({ ...newPose, icon: e.target.value })}
+              placeholder="🏃"
+              className="w-full bg-cinema-black/60 border border-cinema-gray rounded-lg px-4 py-2 text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:border-transparent"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-cinema-text mb-2">Açıklama</label>
+            <input
+              type="text"
+              value={newPose.description}
+              onChange={(e) => setNewPose({ ...newPose, description: e.target.value })}
+              placeholder="Bu pozun kısa açıklaması"
+              className="w-full bg-cinema-black/60 border border-cinema-gray rounded-lg px-4 py-2 text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:border-transparent"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-cinema-text mb-2">Prompt *</label>
+            <textarea
+              value={newPose.prompt}
+              onChange={(e) => setNewPose({ ...newPose, prompt: e.target.value })}
+              placeholder="full body running pose, dynamic movement, character sheet style, white background"
+              rows="3"
+              className="w-full bg-cinema-black/60 border border-cinema-gray rounded-lg px-4 py-2 text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:border-transparent resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-cinema-text mb-2">Kategori</label>
+            <select
+              value={newPose.category}
+              onChange={(e) => setNewPose({ ...newPose, category: e.target.value })}
+              className="w-full bg-cinema-black/60 border border-cinema-gray rounded-lg px-4 py-2 text-cinema-text focus:ring-2 focus:ring-cinema-accent focus:border-transparent"
+            >
+              {poseStore.categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <button
+              onClick={handleAddPose}
+              className="w-full bg-cinema-accent hover:bg-cinema-accent/80 text-cinema-black font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              ➕ Poz Ekle
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Pose List */}
+      <div className="space-y-3">
+        <h4 className="text-lg font-semibold text-cinema-text">
+          Mevcut Pozlar ({filteredPoses.length})
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredPoses.map(pose => (
+            <div
+              key={pose.id}
+              className="bg-cinema-gray/20 rounded-lg border border-cinema-gray p-4 hover:border-cinema-accent/50 transition-all"
+            >
+              {editingPose?.id === pose.id ? (
+                // Edit Mode
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={editingPose.icon}
+                      onChange={(e) => setEditingPose({ ...editingPose, icon: e.target.value })}
+                      className="w-16 bg-cinema-black/60 border border-cinema-gray rounded px-2 py-1 text-cinema-text text-center"
+                    />
+                    <input
+                      type="text"
+                      value={editingPose.name}
+                      onChange={(e) => setEditingPose({ ...editingPose, name: e.target.value })}
+                      className="flex-1 bg-cinema-black/60 border border-cinema-gray rounded px-3 py-1 text-cinema-text font-medium"
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={editingPose.description}
+                    onChange={(e) => setEditingPose({ ...editingPose, description: e.target.value })}
+                    className="w-full bg-cinema-black/60 border border-cinema-gray rounded px-3 py-1 text-cinema-text text-sm"
+                  />
+                  <textarea
+                    value={editingPose.prompt}
+                    onChange={(e) => setEditingPose({ ...editingPose, prompt: e.target.value })}
+                    rows="3"
+                    className="w-full bg-cinema-black/60 border border-cinema-gray rounded px-3 py-2 text-cinema-text text-sm resize-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleUpdatePose}
+                      className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1.5 rounded text-sm transition-colors"
+                    >
+                      ✓ Kaydet
+                    </button>
+                    <button
+                      onClick={() => setEditingPose(null)}
+                      className="flex-1 bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 px-3 py-1.5 rounded text-sm transition-colors"
+                    >
+                      ✕ İptal
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // View Mode
+                <div>
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">{pose.icon}</span>
+                      <div>
+                        <h5 className="font-medium text-cinema-text">{pose.name}</h5>
+                        {pose.description && (
+                          <p className="text-xs text-cinema-text-dim">{pose.description}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      {!pose.isDefault && (
+                        <>
+                          <button
+                            onClick={() => setEditingPose(pose)}
+                            className="p-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded transition-colors"
+                            title="Düzenle"
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeletePose(pose.id)}
+                            className="p-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded transition-colors"
+                            title="Sil"
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        </>
+                      )}
+                      {pose.isDefault && (
+                        <span className="px-2 py-1 bg-cinema-accent/20 text-cinema-accent text-xs rounded">
+                          Varsayılan
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="bg-cinema-black/40 rounded p-2 mt-2">
+                    <p className="text-xs text-cinema-text-dim font-mono">{pose.prompt}</p>
+                  </div>
+                  <div className="mt-2">
+                    <span className="text-xs px-2 py-1 bg-cinema-gray/50 text-cinema-text-dim rounded">
+                      {poseStore.categories.find(c => c.id === pose.category)?.icon} {poseStore.categories.find(c => c.id === pose.category)?.name}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Pose Reference Images Section */}
+      <div className="bg-cinema-gray/20 p-6 rounded-lg border border-cinema-gray">
+        <h4 className="text-lg font-semibold text-cinema-text mb-4">🖼️ Hazır Poz Referans Görselleri</h4>
+        <p className="text-sm text-cinema-text-dim mb-4">
+          Character sheet, skeleton rig veya hazır poz görsellerinizi yükleyin. Bu görseller karakter üretirken referans olarak kullanılabilir.
+        </p>
+        
+        <PoseReferenceImagesManager poseStore={poseStore} />
+      </div>
+
+      {/* Reset Button */}
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h5 className="font-medium text-yellow-400">Varsayılan Pozları Geri Yükle</h5>
+            <p className="text-xs text-cinema-text-dim mt-1">
+              Tüm varsayılan poz şablonlarını geri yükler (özel pozlarınız korunur)
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              if (window.confirm('Varsayılan pozları geri yüklemek istediğinizden emin misiniz?')) {
+                poseStore.resetToDefaults();
+              }
+            }}
+            className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
+          >
+            🔄 Geri Yükle
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Pose Reference Images Manager Component
+function PoseReferenceImagesManager({ poseStore }) {
+  const [uploadingImage, setUploadingImage] = useState(null);
+  const [newImageData, setNewImageData] = useState({
+    name: '',
+    description: '',
+    category: 'custom',
+    tags: []
+  });
+  const fileInputRef = React.useRef(null);
+
+  const handleImageUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Lütfen geçerli bir görsel dosyası seçin!');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setUploadingImage({
+        imageUrl: e.target.result,
+        mimeType: file.type,
+        fileName: file.name
+      });
+      setNewImageData({
+        ...newImageData,
+        name: file.name.replace(/\.[^/.]+$/, '')
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveImage = () => {
+    if (!uploadingImage) return;
+    if (!newImageData.name.trim()) {
+      alert('Lütfen görsel için bir ad girin!');
+      return;
+    }
+
+    poseStore.addPoseReferenceImage({
+      ...newImageData,
+      imageUrl: uploadingImage.imageUrl,
+      mimeType: uploadingImage.mimeType
+    });
+
+    // Reset
+    setUploadingImage(null);
+    setNewImageData({
+      name: '',
+      description: '',
+      category: 'custom',
+      tags: []
+    });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteImage = (id) => {
+    if (window.confirm('Bu referans görselini silmek istediğinizden emin misiniz?')) {
+      poseStore.deletePoseReferenceImage(id);
+    }
+  };
+
+  const referenceImages = poseStore.poseReferenceImages || [];
+
+  return (
+    <div className="space-y-4">
+      {/* Upload Section */}
+      <div className="border-2 border-dashed border-cinema-gray rounded-lg p-4">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          className="hidden"
+        />
+        
+        {!uploadingImage ? (
+          <div className="text-center">
+            <div className="text-4xl mb-2">📤</div>
+            <p className="text-sm text-cinema-text mb-3">
+              Hazır poz görselinizi yükleyin (skeleton rig, character sheet, vb.)
+            </p>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-cinema-accent hover:bg-cinema-accent/80 text-cinema-black px-4 py-2 rounded-lg transition-colors text-sm"
+            >
+              Görsel Seç
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex gap-4">
+              <img
+                src={uploadingImage.imageUrl}
+                alt="Preview"
+                className="w-32 h-32 object-contain bg-cinema-black/40 rounded border border-cinema-gray"
+              />
+              <div className="flex-1 space-y-2">
+                <div>
+                  <label className="block text-xs font-medium text-cinema-text mb-1">Görsel Adı *</label>
+                  <input
+                    type="text"
+                    value={newImageData.name}
+                    onChange={(e) => setNewImageData({ ...newImageData, name: e.target.value })}
+                    placeholder="Örn: Full Body Rig"
+                    className="w-full bg-cinema-black/60 border border-cinema-gray rounded px-3 py-1.5 text-cinema-text text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-cinema-text mb-1">Açıklama</label>
+                  <input
+                    type="text"
+                    value={newImageData.description}
+                    onChange={(e) => setNewImageData({ ...newImageData, description: e.target.value })}
+                    placeholder="Kısa açıklama"
+                    className="w-full bg-cinema-black/60 border border-cinema-gray rounded px-3 py-1.5 text-cinema-text text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-cinema-text mb-1">Kategori</label>
+                  <select
+                    value={newImageData.category}
+                    onChange={(e) => setNewImageData({ ...newImageData, category: e.target.value })}
+                    className="w-full bg-cinema-black/60 border border-cinema-gray rounded px-3 py-1.5 text-cinema-text text-sm"
+                  >
+                    {poseStore.categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveImage}
+                className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 px-4 py-2 rounded-lg transition-colors text-sm"
+              >
+                ✓ Kaydet
+              </button>
+              <button
+                onClick={() => {
+                  setUploadingImage(null);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+                className="flex-1 bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 px-4 py-2 rounded-lg transition-colors text-sm"
+              >
+                ✕ İptal
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Existing Images */}
+      {referenceImages.length > 0 && (
+        <div>
+          <h5 className="text-sm font-medium text-cinema-text mb-3">
+            Yüklü Referans Görselleri ({referenceImages.length})
+          </h5>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {referenceImages.map((img) => (
+              <div
+                key={img.id}
+                className="group relative bg-cinema-black/40 rounded-lg border border-cinema-gray overflow-hidden hover:border-cinema-accent/50 transition-all"
+              >
+                <img
+                  src={img.imageUrl}
+                  alt={img.name}
+                  className="w-full h-32 object-contain bg-cinema-black/20"
+                />
+                <div className="p-2">
+                  <h6 className="text-xs font-medium text-cinema-text line-clamp-1" title={img.name}>
+                    {img.name}
+                  </h6>
+                  {img.description && (
+                    <p className="text-xs text-cinema-text-dim line-clamp-2 mt-1">
+                      {img.description}
+                    </p>
+                  )}
+                  <span className="text-xs bg-cinema-gray/50 text-cinema-text-dim px-2 py-0.5 rounded mt-1 inline-block">
+                    {poseStore.categories.find(c => c.id === img.category)?.icon} {poseStore.categories.find(c => c.id === img.category)?.name}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleDeleteImage(img.id)}
+                  className="absolute top-2 right-2 p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-full transition-all opacity-0 group-hover:opacity-100"
+                  title="Sil"
+                >
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {referenceImages.length === 0 && (
+        <div className="text-center py-8 text-cinema-text-dim text-sm">
+          <div className="text-4xl mb-2">🎭</div>
+          <p>Henüz referans görseli yüklenmemiş</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
   const { t, i18n } = useTranslation();
@@ -459,12 +987,13 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                     setActivePrompt={promptStore.setActivePrompt}
                     activePrompts={promptStore.activePrompts}
                     defaultPrompts={promptStore.defaultPrompts}
+                    exportAllPrompts={promptStore.exportAllPrompts}
+                    exportCategory={promptStore.exportCategory}
+                    importPrompts={promptStore.importPrompts}
                   />
                 </div>
               </div>
             )}
-
-
 
             {/* Word Filter Tab */}
             {activeTab === 'filter' && (

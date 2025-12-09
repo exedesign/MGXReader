@@ -534,6 +534,136 @@ export class AnalysisStorageService {
       throw error;
     }
   }
+
+  // 🆕 GRUP BAZLI YÖNETİM: Aynı session'da yapılan analizleri gruplandır
+  /**
+   * Aynı dosya için yapılan analizleri grup ID'sine göre gruplandır
+   * @param {string} fileName - Dosya adı
+   * @returns {Map} - groupId -> analyses array mapping
+   */
+  async groupAnalysesBySession(fileName) {
+    try {
+      const allAnalyses = await this.listAnalyses();
+      
+      // Aynı dosya için yapılan analizleri filtrele
+      const fileAnalyses = allAnalyses.filter(a => 
+        a.fileName === fileName || 
+        a.scriptMetadata?.originalFileName === fileName ||
+        a.projectName === fileName.replace(/\.(pdf|txt|fountain)$/i, '')
+      );
+      
+      // Timestamp'e göre grupla (5 dakika içinde yapılanlar aynı grup)
+      const groups = new Map();
+      const SESSION_THRESHOLD = 5 * 60 * 1000; // 5 dakika
+      
+      fileAnalyses.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      
+      let currentGroupId = 1;
+      let lastTimestamp = null;
+      
+      for (const analysis of fileAnalyses) {
+        const analysisTime = new Date(analysis.timestamp).getTime();
+        
+        // Yeni grup başlat (ilk analiz veya 5 dakikadan uzun ara)
+        if (!lastTimestamp || (analysisTime - lastTimestamp) > SESSION_THRESHOLD) {
+          currentGroupId++;
+        }
+        
+        const groupKey = `session_${currentGroupId}`;
+        
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, {
+            groupId: groupKey,
+            sessionNumber: currentGroupId,
+            analyses: [],
+            startTime: analysis.timestamp,
+            endTime: analysis.timestamp,
+            totalAnalyses: 0
+          });
+        }
+        
+        const group = groups.get(groupKey);
+        group.analyses.push(analysis);
+        group.endTime = analysis.timestamp;
+        group.totalAnalyses = group.analyses.length;
+        
+        lastTimestamp = analysisTime;
+      }
+      
+      console.log(`📊 ${fileName} için ${groups.size} analiz grubu bulundu`);
+      return groups;
+    } catch (error) {
+      console.error('❌ Analiz gruplama hatası:', error);
+      return new Map();
+    }
+  }
+
+  /**
+   * Bir analiz grubunu tek seferde yükle
+   * @param {string} groupId - Grup ID
+   * @param {Array} analyses - Analizler listesi
+   * @returns {Object} Birleştirilmiş analiz verisi
+   */
+  async loadAnalysisGroup(groupId, analyses) {
+    try {
+      console.log(`📂 Grup yükleniyor: ${groupId} (${analyses.length} analiz)`);
+      
+      const groupData = {
+        groupId,
+        customResults: {},
+        metadata: {
+          loadedAt: new Date().toISOString(),
+          totalAnalyses: analyses.length,
+          analysisKeys: []
+        }
+      };
+      
+      // Tüm analizleri yükle ve birleştir
+      for (const analysis of analyses) {
+        const data = await this.loadAnalysisByKey(analysis.key);
+        
+        if (data && data.customResults) {
+          // Analiz sonuçlarını birleştir
+          Object.assign(groupData.customResults, data.customResults);
+          groupData.metadata.analysisKeys.push(analysis.key);
+          
+          console.log(`  ✅ ${analysis.key}: ${Object.keys(data.customResults).length} analiz tipi yüklendi`);
+        }
+      }
+      
+      console.log(`✅ Grup toplam ${Object.keys(groupData.customResults).length} farklı analiz tipi içeriyor`);
+      return groupData;
+    } catch (error) {
+      console.error('❌ Grup yükleme hatası:', error);
+      return null;
+    }
+  }
+
+  /**
+   * En son analiz grubunu otomatik yükle
+   * @param {string} fileName - Dosya adı
+   * @returns {Object} En son grup verisi
+   */
+  async loadLatestAnalysisGroup(fileName) {
+    try {
+      const groups = await this.groupAnalysesBySession(fileName);
+      
+      if (groups.size === 0) {
+        console.log('ℹ️ Hiç analiz grubu bulunamadı');
+        return null;
+      }
+      
+      // En son grubu al (en yüksek session numarası)
+      const latestGroup = Array.from(groups.values()).sort((a, b) => b.sessionNumber - a.sessionNumber)[0];
+      
+      console.log(`📥 En son grup yükleniyor: ${latestGroup.groupId} (${latestGroup.totalAnalyses} analiz)`);
+      
+      return await this.loadAnalysisGroup(latestGroup.groupId, latestGroup.analyses);
+    } catch (error) {
+      console.error('❌ En son grup yükleme hatası:', error);
+      return null;
+    }
+  }
 }
 
 // Singleton instance

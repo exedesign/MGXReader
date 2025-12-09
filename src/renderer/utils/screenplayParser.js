@@ -436,10 +436,14 @@ export class ScreenplayParser {
 
   isSceneHeading(line) {
     const upper = line.toUpperCase();
+    // Çoklu dil sahne başlıkları: SAHNE/SCENE/SZENE/SCÈNE/ESCENA/SCENA/CENA + rakam (boşluklu veya boşluksuz)
+    const sceneNumberPattern = /^(SAHNE|SCENE|SZENE|SCÈNE|ESCENA|SCENA|CENA)\s*\d+/i;
+    
     return upper.startsWith('INT.') || 
            upper.startsWith('EXT.') || 
            upper.startsWith('İÇ.') || 
            upper.startsWith('DIŞ.') ||
+           sceneNumberPattern.test(upper) ||
            /^[A-Z\\s\\.\\-]+\\s+(DAY|NIGHT|MORNING|EVENING|GECE|GÜNDÜZ|SABAH|AKŞAM)/.test(upper);
   }
 

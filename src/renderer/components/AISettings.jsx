@@ -39,7 +39,11 @@ export default function AISettings({ onClose, initialTab = 'prompts' }) {
     deleteCustomPrompt,
     setActivePrompt,
     activePrompts,
-    defaultPrompts
+    defaultPrompts,
+    exportAllPrompts,
+    exportCategory,
+    importPrompts,
+    getCategories
   } = usePromptStore();
 
   const [testStatus, setTestStatus] = useState(null);
@@ -251,6 +255,10 @@ export default function AISettings({ onClose, initialTab = 'prompts' }) {
               setActivePrompt={setActivePrompt}
               activePrompts={activePrompts}
               defaultPrompts={defaultPrompts}
+              exportAllPrompts={exportAllPrompts}
+              exportCategory={exportCategory}
+              importPrompts={importPrompts}
+              getCategories={getCategories}
             />
           )}
         </div>

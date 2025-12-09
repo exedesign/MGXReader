@@ -25,28 +25,53 @@ export const OPENAI_MODELS = [
 ];
 
 export const GEMINI_MODELS = [
-  // Gemini 3 Series (Latest - November 2025) - Official Release
-  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro 🌟', contextWindow: 1000000, maxOutput: 64000, recommended: true, newest: true, description: 'En akıllı model - gelişmiş akıl yürütme, bağımsız kodlama ve çok modlu görevler', expires: '2025-01-31' },
-  
-  // Generally Available Models (Stable) - Production Ready
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash ⚡', contextWindow: 1000000, maxOutput: 8192, fast: true, description: 'En hızlı ve akıllı model, yüksek performans', stable: true },
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro 💎', contextWindow: 1000000, maxOutput: 8192, description: 'Gelişmiş akıl yürütme ve kodlama için', stable: true },
-  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite ⚡', contextWindow: 1000000, maxOutput: 8192, fast: true, description: 'Ultra hızlı ve verimli', stable: true },
-  
-  // Gemini 2.0 Series - Second Generation
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', contextWindow: 1000000, maxOutput: 8192, description: 'İkinci nesil çok modlu model', stable: true },
-  { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite', contextWindow: 1000000, maxOutput: 8192, fast: true, description: 'Küçük ve güçlü model', stable: true },
+  // Gemini 3 Series - EN AKILLI MODELLER
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview 🌟', contextWindow: 2000000, maxOutput: 8192, description: 'En akıllı model - Çok formatlı anlama konusunda dünyanın en iyisi', recommended: true },
+
+  // Gemini 2.5 Series - HIZLI VE AKILLI
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash ⚡', contextWindow: 1000000, maxOutput: 8192, fast: true, description: 'Fiyat-performans açısından en iyi - Hızlı ve çok yönlü' },
+  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite 🚀', contextWindow: 1000000, maxOutput: 8192, fast: true, description: 'Ultra hızlı - Maliyet verimliliği için optimize edilmiş' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro 🧠', contextWindow: 2000000, maxOutput: 8192, description: 'Gelişmiş düşünme - Kod, matematik ve STEM problemleri için' },
+
+  // Gemini 2.0 Series - İKİNCİ NESİL
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', contextWindow: 1000000, maxOutput: 8192, fast: true, description: 'İkinci nesil çalışkan model' },
+  { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash-Lite', contextWindow: 1000000, maxOutput: 8192, fast: true, description: 'İkinci nesil küçük ve güçlü model' },
+
+  // Gemini 1.5 Series - KARAR LI MODELLER
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', contextWindow: 2000000, maxOutput: 8192, description: 'Kararlı ve güçlü model' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', contextWindow: 1000000, maxOutput: 8192, fast: true, description: 'Hızlı ve ekonomik' },
 ];
 
-// Image Generation Models - Updated November 2025 (Official)
+// Image Generation Models - Verified Available (https://ai.google.dev/gemini-api/docs/image-generation)
 export const GEMINI_IMAGE_MODELS = [
-  // Gemini 3 Series Image Generation (Latest - Preview)
-  { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image 🎨🌟', contextWindow: 65000, maxOutput: 32000, recommended: true, newest: true, description: '🟢 En gelişmiş görsel üretme - referans fotoğraflar ile (max 14 görsel), düşünme modu', working: true, expires: '2025-01-31' },
-  
-  // Imagen 4.0 Series (Production Ready - June 2025)
-  { id: 'imagen-4.0-generate-001', name: 'Imagen 4.0 Standard ✨', description: '🟢 Yüksek kaliteli görsel üretim - 1K/2K çözünürlük', working: true, stable: true, sizes: ['1K', '2K'] },
-  { id: 'imagen-4.0-ultra-generate-001', name: 'Imagen 4.0 Ultra 🌟', description: '🟢 Ultra kalite görsel üretim - En yüksek kalite', working: true, stable: true, sizes: ['1K', '2K'] },
-  { id: 'imagen-4.0-fast-generate-001', name: 'Imagen 4.0 Fast ⚡', description: '🟢 Hızlı görsel üretim - Optimum hız', working: true, stable: true, sizes: ['1K', '2K'] },
+  // Gemini Native Image Generation - NANO BANANA & NANO BANANA PRO (ACTIVE)
+  { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image Preview 🍌 Pro', description: 'Profesyonel görsel üretim - 14 referans görsel, 4K çözünürlük, Google Search', recommended: true, maxReferenceImages: 14, maxResolution: '4K', features: ['google_search', 'thinking_mode', 'multi_turn'] },
+  { id: 'gemini-2.5-flash-image', name: 'Gemini 2.5 Flash Image 🍌', description: 'Hızlı ve verimli görsel üretim - 3 referans görsel, 1K çözünürlük', fast: true, maxReferenceImages: 3, maxResolution: '1K' },
+
+  // Imagen 4.0 Series - DEPRECATED (API tarafından desteklenmiyor)
+  { id: 'imagen-4.0-generate-001', name: 'Imagen 4.0 Standard ⚠️ Deprecated', description: 'API tarafından desteklenmiyor - Gemini modelleri kullanın', deprecated: true, disabled: true },
+  { id: 'imagen-4.0-fast-generate-001', name: 'Imagen 4.0 Fast ⚠️ Deprecated', description: 'API tarafından desteklenmiyor - Gemini modelleri kullanın', deprecated: true, disabled: true },
+  { id: 'imagen-4.0-ultra-generate-001', name: 'Imagen 4.0 Ultra ⚠️ Deprecated', description: 'API tarafından desteklenmiyor - Gemini modelleri kullanın', deprecated: true, disabled: true },
+
+  // Imagen 3.0 Series - LEGACY (Sınırlı destek)
+  { id: 'imagen-3.0-generate-001', name: 'Imagen 3.0 ⚠️ Legacy', description: 'Eski nesil model - Yeni projeler için Gemini önerilir', deprecated: true },
+];
+
+// Image Understanding Models - Verified Available (https://ai.google.dev/gemini-api/docs/image-understanding)
+export const GEMINI_IMAGE_UNDERSTANDING_MODELS = [
+  // Gemini 3 Series - EN AKILLI
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview 🌟', description: 'En akıllı çok formatı model - Görsel açıklama, sınıflandırma, soru-yanıt', recommended: true, features: ['caption', 'classification', 'vqa', 'ocr'] },
+
+  // Gemini 2.5 Series
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash ⚡', description: 'Hızlı görsel anlama - 3600 görsel/istek', fast: true, maxImages: 3600, features: ['segmentation', 'object_detection'] },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro 🧠', description: 'Gelişmiş görsel analiz - Segmentasyon ve nesne algılama', features: ['segmentation', 'object_detection', 'spatial_understanding'] },
+
+  // Gemini 2.0 Series
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', description: 'Gelişmiş nesne algılama - İkinci nesil', features: ['object_detection'], maxImages: 3600 },
+
+  // Gemini 1.5 Series
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Kararlı çok formatı model', stable: true, maxImages: 3600 },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Hızlı ve ekonomik görsel anlama', fast: true, stable: true, maxImages: 3600 },
 ];
 
 // OpenAI image models for comparison
@@ -55,11 +80,7 @@ export const OPENAI_IMAGE_MODELS = [
   { id: 'dall-e-2', name: 'DALL-E 2', description: 'Onceki nesil DALL-E modeli' },
 ];
 
-// Preview models (experimental) - Kasım 2025 Güncel
-export const GEMINI_PREVIEW_MODELS = [
-  { id: 'gemini-3-pro', name: 'Gemini 3 Pro (Preview) 🌟', contextWindow: 1000000, preview: true, description: 'En gelişmiş akıl yürütme modeli' },
-];
-
+// MLX Local Models
 export const MLX_MODELS = [
   { id: 'mlx-community/Llama-3.2-3B-Instruct-4bit', name: 'Llama 3.2 3B (4-bit)', contextWindow: 8192, recommended: true },
   { id: 'mlx-community/Llama-3.1-8B-Instruct-4bit', name: 'Llama 3.1 8B (4-bit)', contextWindow: 16384 },
@@ -73,12 +94,25 @@ class AIHandler {
     // Handle both apiKey and geminiApiKey for backward compatibility
     this.apiKey = config.apiKey || config.geminiApiKey || '';
     this.model = config.model || (config.provider === AI_PROVIDERS.GEMINI ? 'gemini-3-pro-preview' : 'gpt-4o');
-    this.imageModel = config.imageModel || 'dall-e-3';
+    
+    // CRITICAL: Use provider-specific image model from config
+    // This MUST match the model selected in AI Settings
+    if (config.provider === AI_PROVIDERS.GEMINI) {
+      this.geminiImageModel = config.imageModel || 'gemini-2.5-flash-image';
+      this.imageModel = this.geminiImageModel; // Alias for compatibility
+      console.log('🎯 AIHandler initialized with Gemini image model:', this.geminiImageModel);
+    } else if (config.provider === AI_PROVIDERS.OPENAI) {
+      this.openaiImageModel = config.imageModel || 'dall-e-3';
+      this.imageModel = this.openaiImageModel; // Alias for compatibility
+      console.log('🎯 AIHandler initialized with OpenAI image model:', this.openaiImageModel);
+    } else {
+      this.imageModel = config.imageModel || 'dall-e-3';
+    }
     this.localEndpoint = config.localEndpoint || 'http://localhost:11434';
     this.localModel = config.localModel || 'llama3';
     this.temperature = config.temperature || 0.3;
     this.maxTokens = config.maxTokens || 4000;
-    
+
     // API Rate Limiting - son istek zamanını takip et
     this.lastApiCall = 0;
     this.minDelayBetweenCalls = 1000; // 1 saniye minimum bekleme
@@ -90,20 +124,20 @@ class AIHandler {
   async waitForRateLimit() {
     const now = Date.now();
     const timeSinceLastCall = now - this.lastApiCall;
-    
+
     if (timeSinceLastCall < this.minDelayBetweenCalls) {
       const waitTime = this.minDelayBetweenCalls - timeSinceLastCall;
       console.log(`⏳ Rate limit koruması: ${waitTime}ms bekleniyor...`);
       await new Promise(resolve => setTimeout(resolve, waitTime));
     }
-    
+
     this.lastApiCall = Date.now();
   }
 
   async generateText(systemPrompt, userPrompt, options = {}) {
     // Rate limiting kontrolü
     await this.waitForRateLimit();
-    
+
     const temperature = options.temperature || this.temperature;
     const maxTokens = options.maxTokens || this.maxTokens;
 
@@ -114,16 +148,16 @@ class AIHandler {
             throw new Error('OpenAI API key is required');
           }
           return await this.callOpenAI(systemPrompt, userPrompt, temperature, maxTokens);
-          
+
         case AI_PROVIDERS.GEMINI:
           if (!this.apiKey) {
             throw new Error('Gemini API key is required');
           }
           return await this.callGemini(systemPrompt, userPrompt, temperature, maxTokens);
-          
+
         case AI_PROVIDERS.LOCAL:
           return await this.callLocalAI(systemPrompt, userPrompt, temperature, maxTokens);
-          
+
         default:
           throw new Error('Unsupported AI provider: ' + this.provider);
       }
@@ -133,17 +167,88 @@ class AIHandler {
     }
   }
 
+  /**
+   * Parçalı sonuçları birleştir (2/1, 2/2 formatındaki sonuçlar için)
+   * @param {Array} chunks - Chunk sonuçları
+   * @returns {Array} Birleştirilmiş chunks
+   */
+  mergePartialResults(chunks) {
+    const merged = [];
+    const partialGroups = new Map(); // key: base_id, value: array of parts
+
+    chunks.forEach(chunk => {
+      const result = chunk.result;
+
+      // Parçalı sonuç formatını kontrol et: "X/Y" veya "KAPSAMLI ANALİZ (X/Y"
+      const partialMatch = result.match(/(?:KAPSAMLI ANALİZ|PART|BÖLÜM)?\s*\(?\s*(\d+)\s*\/\s*(\d+)/i);
+
+      if (partialMatch) {
+        const currentPart = parseInt(partialMatch[1]);
+        const totalParts = parseInt(partialMatch[2]);
+
+        console.log(`🔍 Parçalı sonuç tespit edildi: ${currentPart}/${totalParts}`);
+
+        // Grup ID'si oluştur (sahne bilgisi veya chunk numarası)
+        const groupId = `${chunk.chunkNumber}_total${totalParts}`;
+
+        if (!partialGroups.has(groupId)) {
+          partialGroups.set(groupId, []);
+        }
+
+        partialGroups.get(groupId).push({
+          ...chunk,
+          partNumber: currentPart,
+          totalParts: totalParts,
+          // Başlık kısmını temizle
+          result: result.replace(/(?:KAPSAMLI ANALİZ|PART|BÖLÜM)?\s*\(?\s*\d+\s*\/\s*\d+[^\n]*/i, '').trim()
+        });
+      } else {
+        // Normal sonuç, direkt ekle
+        merged.push(chunk);
+      }
+    });
+
+    // Parçalı grupları birleştir
+    partialGroups.forEach((parts, groupId) => {
+      // Parça numarasına göre sırala
+      parts.sort((a, b) => a.partNumber - b.partNumber);
+
+      const totalParts = parts[0].totalParts;
+
+      // Tüm parçalar mevcut mu kontrol et
+      if (parts.length === totalParts) {
+        console.log(`✅ ${groupId}: ${parts.length}/${totalParts} parça birleştiriliyor`);
+
+        // Tüm parçaları birleştir
+        const mergedResult = parts.map(p => p.result).join('\n\n');
+
+        merged.push({
+          ...parts[0],
+          result: mergedResult,
+          isMerged: true,
+          mergedFrom: parts.length
+        });
+      } else {
+        console.warn(`⚠️ ${groupId}: Eksik parça! ${parts.length}/${totalParts}`);
+        // Eksik parçalar varsa mevcut olanları ekle
+        parts.forEach(part => merged.push(part));
+      }
+    });
+
+    return merged;
+  }
+
   async generateImage(prompt, options = {}) {
     // Rate limiting kontrolü
     await this.waitForRateLimit();
-    
+
     // Validate prompt parameter
     if (!prompt || typeof prompt !== 'string') {
       throw new Error('Prompt must be a valid string for image generation');
     }
-    
+
     console.log('Image generation request:', { provider: this.provider, prompt: prompt.substring(0, 50) });
-    
+
     try {
       // Handle character-specific image generation
       if (options.character) {
@@ -156,7 +261,7 @@ class AIHandler {
         console.log('🖼️ Reference image provided for character generation');
         enhancedPrompt = prompt + ', use reference image as style guide';
       }
-      
+
       switch (this.provider) {
         case AI_PROVIDERS.OPENAI:
           const { size = '1024x1024', quality = 'standard', style = 'natural', model = 'dall-e-3' } = options;
@@ -219,7 +324,7 @@ class AIHandler {
 
     try {
       console.log('🔍 Calling Gemini Vision API...');
-      
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -243,7 +348,7 @@ class AIHandler {
       // Gemini API yanıt yapısını parse et
       if (data.candidates && data.candidates.length > 0) {
         const candidate = data.candidates[0];
-        
+
         // Yöntem 1: content.parts yapısı
         if (candidate.content && candidate.content.parts) {
           const textParts = candidate.content.parts.filter(part => part.text);
@@ -259,7 +364,7 @@ class AIHandler {
             };
           }
         }
-        
+
         // Yöntem 2: Doğrudan text alanı
         if (candidate.text) {
           console.log('✅ Analysis extracted from candidate.text');
@@ -271,7 +376,7 @@ class AIHandler {
             analyzedAt: new Date().toISOString()
           };
         }
-        
+
         // Yöntem 3: output alanı
         if (candidate.output) {
           console.log('✅ Analysis extracted from candidate.output');
@@ -289,66 +394,129 @@ class AIHandler {
       throw new Error('API\'den geçerli analiz yanıtı alınamadı. Lütfen konsol loglarını kontrol edin.');
     } catch (error) {
       console.error('Image Analysis Error:', error.message);
-      
+
       if (error.message?.includes('timeout')) {
         throw new Error('Analiz zaman aşımına uğradı. Lütfen tekrar deneyin.');
       } else if (error.message?.includes('403') || error.message?.includes('401')) {
         throw new Error('API anahtarı geçersiz veya yetki yok.');
       }
-      
+
       throw new Error('Görsel analizi başarısız: ' + error.message);
     }
   }
 
   async generateImageGemini(prompt, options = {}) {
-    console.log('Gemini Image Generation:', {
-      prompt: prompt.substring(0, 100) + '...',
-      hasGeminiKey: !!this.apiKey,
-      model: options.model || this.geminiImageModel || 'imagen-4.0-generate-001'
-    });
-
     if (!this.apiKey) {
       throw new Error('Gemini API key gerekli. Lutfen ayarlardan API key ekleyin.');
     }
 
-    const model = options.model || this.geminiImageModel || 'imagen-4.0-generate-001';
+    // CRITICAL: ONLY use model from constructor (which comes from store)
+    // Never allow options.model to override the store-selected model
+    const model = this.geminiImageModel || 'gemini-2.5-flash-image';
     
-    // Updated API endpoint format for Imagen 4.0 and Gemini 3 Pro Image
+    if (options.model && options.model !== model) {
+      console.warn('⚠️ IGNORED model override attempt:', options.model, '→ Using store model:', model);
+    }
+
+    console.log('🎯 Gemini Image Generation with STORE model:', {
+      prompt: prompt.substring(0, 100) + '...',
+      hasGeminiKey: !!this.apiKey,
+      storeModel: model,
+      ignoredOptionsModel: options.model || 'none'
+    });
+
+    // Updated API endpoint format for Gemini Native and Imagen models
     let apiUrl, requestBody;
-    
-    if (model.includes('gemini-3-pro-image')) {
-      // Gemini 3 Pro Image Preview API (v1beta)
+
+    // Check if it's a Gemini Native Image model (uses generateContent)
+    if (model.includes('gemini') && model.includes('image')) {
+      // Gemini Native Image Generation - uses generateContent API
       apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
+      
+      // Model-specific capabilities based on AI Settings selection
+      let modelCapabilities = {
+        maxReferenceImages: 3,  // Default for Flash models
+        supportedSizes: ['1K'], // Default
+        defaultTemperature: 1.0
+      };
+
+      // Configure based on selected model
+      if (model === 'gemini-3-pro-image-preview') {
+        modelCapabilities = {
+          maxReferenceImages: 14,  // Pro supports more references
+          supportedSizes: ['1K', '2K', '4K'], // Pro supports larger sizes
+          defaultTemperature: 1.0
+        };
+        console.log('🎨 Using Gemini 3 Pro Image: 14 refs, up to 4K resolution');
+      } else if (model === 'gemini-2.5-flash-image') {
+        modelCapabilities = {
+          maxReferenceImages: 3,
+          supportedSizes: ['1K'], // Flash limited to 1K
+          defaultTemperature: 1.0
+        };
+        console.log('⚡ Using Gemini 2.5 Flash Image: 3 refs, 1K resolution, faster generation');
+      }
+
+      // Validate and adjust image size based on model capabilities
+      let requestedSize = options.imageSize || "1K";
+      if (!modelCapabilities.supportedSizes.includes(requestedSize)) {
+        console.warn(`⚠️ ${model} doesn't support ${requestedSize}, using 1K instead`);
+        requestedSize = "1K";
+      }
+
+      // Validate aspect ratio - Gemini API only supports specific formats
+      const validAspectRatios = ["1:1", "16:9", "9:16", "4:3", "3:4"];
+      let requestedRatio = options.aspectRatio || "1:1";
+      
+      if (!validAspectRatios.includes(requestedRatio)) {
+        console.warn(`⚠️ Invalid aspect ratio ${requestedRatio}, using 1:1 instead`);
+        requestedRatio = "1:1";
+      }
+
+      // Validate temperature (0.0 - 2.0 for image generation)
+      let temperature = options.temperature || modelCapabilities.defaultTemperature;
+      if (temperature < 0.0 || temperature > 2.0) {
+        console.warn(`⚠️ Temperature ${temperature} out of range, clamping to 0.0-2.0`);
+        temperature = Math.max(0.0, Math.min(2.0, temperature));
+      }
+
+      // Base configuration for all Gemini image models
+      const generationConfig = {
+        response_modalities: ["IMAGE"],
+        temperature: temperature,
+        image_config: {
+          aspect_ratio: requestedRatio,
+          image_size: requestedSize
+        }
+      };
+
       requestBody = {
         contents: [{
           parts: [{
             text: prompt
           }]
         }],
-        generationConfig: {
-          response_modalities: ["IMAGE"],
-          thinking_level: options.thinkingLevel || "medium", // Reduced from "high" to "medium" for faster generation
-          temperature: options.temperature || 1.0, // Gemini 3 optimized for 1.0
-          image_config: {
-            aspect_ratio: options.aspectRatio || "1:1",
-            image_size: options.imageSize || "1K" // Changed from 2K to 1K for faster generation
-          }
-        },
+        generationConfig: generationConfig,
         safetySettings: [
           {
             category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
             threshold: "BLOCK_LOW_AND_ABOVE"
           },
           {
-            category: "HARM_CATEGORY_DANGEROUS_CONTENT", 
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
             threshold: "BLOCK_LOW_AND_ABOVE"
           }
         ]
       };
-      
-      // Add reference images if provided (max 14)
+
+      // Add reference images if provided (respecting model limits)
       if (options.referenceImages && Array.isArray(options.referenceImages)) {
-        const imageCount = Math.min(options.referenceImages.length, 14);
+        const imageCount = Math.min(options.referenceImages.length, modelCapabilities.maxReferenceImages);
+        
+        if (options.referenceImages.length > modelCapabilities.maxReferenceImages) {
+          console.warn(`⚠️ ${model} supports max ${modelCapabilities.maxReferenceImages} references, using first ${imageCount}`);
+        }
+        
         for (let i = 0; i < imageCount; i++) {
           const refImage = options.referenceImages[i];
           requestBody.contents[0].parts.push({
@@ -358,10 +526,10 @@ class AIHandler {
             }
           });
         }
-        console.log(`🖼️ Added ${imageCount} reference images to Gemini 3 Pro Image request`);
+        console.log(`🖼️ Added ${imageCount}/${modelCapabilities.maxReferenceImages} reference images to ${model}`);
       }
     } else {
-      // Imagen 4.0 API (v1beta)
+      // Imagen 4.0 API (v1beta) - uses generateImages
       apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateImages?key=${this.apiKey}`;
       requestBody = {
         prompt: prompt,
@@ -375,44 +543,56 @@ class AIHandler {
     }
 
     try {
-      console.log('API Call:', {
+      console.log('📤 API Request:', {
         url: apiUrl.replace(this.apiKey, '***'),
         model: model,
         prompt: (typeof prompt === 'string' ? prompt.substring(0, 100) : String(prompt).substring(0, 100)) + '...',
         requestSize: JSON.stringify(requestBody).length
       });
       
+      // Log full request body for debugging
+      console.log('📦 Full Request Body:', JSON.stringify(requestBody, null, 2));
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(options.timeout || 300000) // 5 minutes default timeout
+        signal: AbortSignal.timeout(options.timeout || 600000) // 10 minutes default timeout for image generation
       });
 
-      console.log('API Response Status:', response.status);
+      console.log('📥 API Response Status:', response.status);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('❌ API Error Response:', JSON.stringify(errorData, null, 2));
         throw new Error(`HTTP ${response.status}: ${errorData.error?.message || response.statusText}`);
       }
 
       const data = await response.json();
       console.log('API Response Data Keys:', Object.keys(data || {}));
 
-      // Handle Gemini 3 Pro Image response
-      if (model.includes('gemini-3-pro-image')) {
+      // Handle ALL Gemini native image generation models (gemini-3-pro-image, gemini-2.5-flash-image, etc.)
+      if (model.includes('gemini') && model.includes('image')) {
         if (data.candidates && data.candidates.length > 0) {
           const candidate = data.candidates[0];
           if (candidate.content && candidate.content.parts) {
-            // Find image parts
-            const imageParts = candidate.content.parts.filter(part => part.inline_data);
+            // Find image parts - API uses both inline_data and inlineData formats
+            const imageParts = candidate.content.parts.filter(part => 
+              part.inline_data || part.inlineData
+            );
+            
             if (imageParts.length > 0) {
+              const imagePart = imageParts[0];
+              // Support both camelCase and snake_case formats
+              const imageData = imagePart.inline_data || imagePart.inlineData;
+              
+              console.log(`✅ ${model}: ${imageParts.length} görsel oluşturuldu`);
               return {
                 success: true,
-                imageData: imageParts[0].inline_data.data,
-                mimeType: imageParts[0].inline_data.mime_type || 'image/jpeg',
+                imageData: imageData.data,
+                mimeType: imageData.mimeType || imageData.mime_type || 'image/jpeg',
                 provider: 'gemini',
                 model: model,
                 originalPrompt: prompt,
@@ -422,11 +602,12 @@ class AIHandler {
             }
           }
         }
-      } 
-      // Handle Imagen 4.0 response
-      else {
+      }
+      // Handle Imagen 4.0 response (legacy format)
+      else if (model.includes('imagen')) {
         if (data.generated_images && data.generated_images.length > 0) {
           const generatedImage = data.generated_images[0];
+          console.log(`✅ ${model}: Görsel oluşturuldu`);
           return {
             success: true,
             imageData: generatedImage.image,
@@ -439,13 +620,14 @@ class AIHandler {
         }
       }
 
+      console.error('❌ API yanıtı beklenmeyen formatta:', JSON.stringify(data, null, 2));
       throw new Error('API\'den geçerli görsel yanıtı alınamadı');
     } catch (error) {
       console.error('Image Generation Error:', {
         message: error.message,
         model: model,
       });
-      
+
       // Hata türlerini kontrol et
       if (error.message?.includes('404')) {
         throw new Error(`Model bulunamadı: ${model}. Model adını kontrol edin.`);
@@ -456,7 +638,24 @@ class AIHandler {
       } else if (error.message?.includes('timeout')) {
         throw new Error('İstek zaman aşımına uğradı. Lütfen tekrar deneyin.');
       }
-      
+
+      // Gemini Internal Fallback (Imagen 4.0/Gemini 3 -> Imagen 3.0)
+      if ((model.includes('imagen-4.0') || model.includes('gemini-3')) &&
+        (error.message?.includes('404') || error.message?.includes('400') || error.message?.includes('503') || error.message?.includes('overloaded')) &&
+        model !== 'imagen-3.0-generate-001') {
+        console.log(`⚠️ ${model} failed, falling back to stable Imagen 3.0...`);
+        try {
+          return await this.generateImageGemini(prompt, {
+            ...options,
+            model: 'imagen-3.0-generate-001',
+            thinkingLevel: undefined // Imagen 3 doesn't support thinking_level
+          });
+        } catch (fallbackError) {
+          console.log('❌ Imagen 3.0 fallback also failed:', fallbackError.message);
+          // Allow execution to continue to OpenAI fallback
+        }
+      }
+
       // OpenAI DALL-E fallback
       if (this.openaiApiKey) {
         console.log('🔄 OpenAI DALL-E fallback aktif...');
@@ -467,7 +666,7 @@ class AIHandler {
             quality: options.quality || 'standard',
             style: options.style || 'natural'
           });
-          
+
           return {
             ...result,
             provider: 'openai-fallback',
@@ -477,7 +676,7 @@ class AIHandler {
           throw new Error('Gorsel uretimi basarisiz: ' + openaiError.message);
         }
       }
-      
+
       throw new Error('Gemini Image API hatasi: ' + error.message);
     }
   }
@@ -488,7 +687,7 @@ class AIHandler {
     }
 
     const { model = 'dall-e-3', size = '1024x1024', quality = 'standard', style = 'natural' } = options;
-    
+
     console.log(`🎨 OpenAI Image Generation with ${model}:`, {
       prompt: prompt.substring(0, 100) + '...',
       size, quality, style
@@ -500,7 +699,7 @@ class AIHandler {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`🔄 OpenAI Image ${model} - Deneme ${attempt}/${maxRetries}`);
-        
+
         const response = await fetch('https://api.openai.com/v1/images/generations', {
           method: 'POST',
           headers: {
@@ -515,21 +714,21 @@ class AIHandler {
             style: style,
             n: 1,
           }),
-          signal: AbortSignal.timeout(180000) // 3 dakika timeout
+          signal: AbortSignal.timeout(300000) // 5 dakika timeout
         });
 
         if (!response.ok) {
           const errorData = await response.text();
           const statusCode = response.status;
-          
+
           if (statusCode === 429) {
             console.log(`⚠️ OpenAI Image API Rate limit (429) - deneme ${attempt}/${maxRetries}`);
-            
+
             // Son deneme ise hata fırlat
             if (attempt === maxRetries) {
               throw new Error(`OpenAI Image API rate limit aşıldı. Birkaç dakika bekleyip tekrar deneyin. Status: ${statusCode}`);
             }
-            
+
             // Exponential backoff ile bekleme
             const delay = baseDelay * Math.pow(2, attempt - 1);
             console.log(`⏳ OpenAI Image rate limit için ${delay}ms bekleniyor...`);
@@ -543,7 +742,7 @@ class AIHandler {
 
         const data = await response.json();
         console.log(`✅ OpenAI Image ${model} başarılı!`);
-        
+
         if (data && data.data && data.data.length > 0) {
           const imageData = data.data[0];
           return {
@@ -558,16 +757,16 @@ class AIHandler {
         }
 
         throw new Error('No image data received from OpenAI');
-        
+
       } catch (error) {
         console.log(`❌ OpenAI Image ${model} deneme ${attempt} başarısız:`, error.message);
-        
+
         // Network error veya 429/rate limit hatasını kontrol et
-        const isRateLimit = error.message.includes('429') || 
-                           error.message.includes('Too Many Requests') || 
-                           error.message.includes('rate limit') ||
-                           (error.name === 'TypeError' && error.message.includes('fetch'));
-        
+        const isRateLimit = error.message.includes('429') ||
+          error.message.includes('Too Many Requests') ||
+          error.message.includes('rate limit') ||
+          (error.name === 'TypeError' && error.message.includes('fetch'));
+
         if (!isRateLimit) {
           // Rate limit değilse hemen fırlat
           throw error;
@@ -577,7 +776,7 @@ class AIHandler {
         if (attempt === maxRetries) {
           throw new Error(`OpenAI Image API: Maksimum deneme sayısına ulaşıldı. ${error.message}`);
         }
-        
+
         // Exponential backoff ile bekleme
         const delay = baseDelay * Math.pow(2, attempt - 1);
         console.log(`⏳ OpenAI Image retry için ${delay}ms bekleniyor...`);
@@ -603,7 +802,7 @@ class AIHandler {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`🔄 OpenAI ${this.model} - Deneme ${attempt}/${maxRetries}`);
-        
+
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -625,15 +824,15 @@ class AIHandler {
         if (!response.ok) {
           const errorData = await response.text();
           const statusCode = response.status;
-          
+
           if (statusCode === 429) {
             console.log(`⚠️ OpenAI Rate limit (429) - deneme ${attempt}/${maxRetries}`);
-            
+
             // Son deneme ise hata fırlat
             if (attempt === maxRetries) {
               throw new Error(`OpenAI API rate limit aşıldı. Birkaç dakika bekleyip tekrar deneyin. Status: ${statusCode}`);
             }
-            
+
             // Exponential backoff ile bekleme
             const delay = baseDelay * Math.pow(2, attempt - 1);
             console.log(`⏳ OpenAI rate limit için ${delay}ms bekleniyor...`);
@@ -648,16 +847,16 @@ class AIHandler {
         const data = await response.json();
         console.log(`✅ OpenAI ${this.model} başarılı!`);
         return data.choices[0].message.content;
-        
+
       } catch (error) {
         console.log(`❌ OpenAI ${this.model} deneme ${attempt} başarısız:`, error.message);
-        
+
         // Network error veya 429/rate limit hatasını kontrol et
-        const isRateLimit = error.message.includes('429') || 
-                           error.message.includes('Too Many Requests') || 
-                           error.message.includes('rate limit') ||
-                           (error.name === 'TypeError' && error.message.includes('fetch'));
-        
+        const isRateLimit = error.message.includes('429') ||
+          error.message.includes('Too Many Requests') ||
+          error.message.includes('rate limit') ||
+          (error.name === 'TypeError' && error.message.includes('fetch'));
+
         if (!isRateLimit) {
           // Rate limit değilse hemen fırlat
           throw error;
@@ -667,7 +866,7 @@ class AIHandler {
         if (attempt === maxRetries) {
           throw new Error(`OpenAI API: Maksimum deneme sayısına ulaşıldı. ${error.message}`);
         }
-        
+
         // Exponential backoff ile bekleme
         const delay = baseDelay * Math.pow(2, attempt - 1);
         console.log(`⏳ OpenAI retry için ${delay}ms bekleniyor...`);
@@ -689,7 +888,7 @@ class AIHandler {
     // Sadece seçili modeli kullan - fallback yok
     const selectedModel = this.model;
     console.log(`🎯 Using selected model: ${selectedModel}`);
-    
+
     try {
       // API v1beta endpoint - More stable for Gemini models
       const apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + selectedModel + ':generateContent?key=' + this.apiKey;
@@ -705,7 +904,7 @@ class AIHandler {
       const result = await this.makeGeminiRequestWithRetry(apiUrl, systemPrompt, userPrompt, temperature, maxTokens, selectedModel);
       console.log(`✅ ${selectedModel} başarılı!`);
       return result;
-      
+
     } catch (error) {
       console.log(`❌ ${selectedModel} başarısız:`, error.message);
       throw error;
@@ -722,13 +921,13 @@ class AIHandler {
         return await this.makeGeminiRequest(apiUrl, systemPrompt, userPrompt, temperature, maxTokens);
       } catch (error) {
         console.log(`❌ ${modelName} deneme ${attempt} başarısız:`, error.message);
-        
+
         // Quota veya rate limit hatalarını tespit et
-        const isQuotaError = error.message?.includes('quota') || 
-                           error.message?.includes('429') || 
-                           error.message?.includes('508') ||
-                           error.message?.includes('Too Many Requests');
-        
+        const isQuotaError = error.message?.includes('quota') ||
+          error.message?.includes('429') ||
+          error.message?.includes('508') ||
+          error.message?.includes('Too Many Requests');
+
         // Son deneme ise hata fırlat
         if (attempt === maxRetries) {
           if (isQuotaError) {
@@ -736,18 +935,18 @@ class AIHandler {
           }
           throw error;
         }
-        
+
         // Quota hatalarında çok daha uzun bekleme
         let delay;
         if (isQuotaError) {
           delay = baseDelay * (3 + attempt) * 3; // 24s, 36s, 48s gibi uzun süreler
-          console.log(`🔄 [${modelName}] Rate limit koruması - ${Math.round(delay/1000)}s bekleniyor... (${attempt}/${maxRetries})`);
+          console.log(`🔄 [${modelName}] Rate limit koruması - ${Math.round(delay / 1000)}s bekleniyor... (${attempt}/${maxRetries})`);
         } else {
           // Normal exponential backoff
           delay = baseDelay * Math.pow(2, attempt - 1);
-          console.log(`⏳ [${modelName}] Yeniden deneme - ${Math.round(delay/1000)}s bekleniyor... (${attempt}/${maxRetries})`);
+          console.log(`⏳ [${modelName}] Yeniden deneme - ${Math.round(delay / 1000)}s bekleniyor... (${attempt}/${maxRetries})`);
         }
-        
+
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -778,7 +977,7 @@ class AIHandler {
           threshold: "BLOCK_LOW_AND_ABOVE"
         },
         {
-          category: "HARM_CATEGORY_HATE_SPEECH", 
+          category: "HARM_CATEGORY_HATE_SPEECH",
           threshold: "BLOCK_LOW_AND_ABOVE"
         },
         {
@@ -810,10 +1009,10 @@ class AIHandler {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        
+
         // Özel hata mesajları
         let errorMessage = `HTTP ${response.status}: ${errorData.error?.message || response.statusText}`;
-        
+
         if (response.status === 429) {
           errorMessage = `🔄 Rate limit koruması aktif - İstekler yavaşlatılıyor. Normal bir durumdur.`;
         } else if (response.status === 508) {
@@ -821,7 +1020,7 @@ class AIHandler {
         } else if (errorData.error?.message?.includes('quota')) {
           errorMessage = `⚠️ API quota limitine ulaşıldı. Daha az sıklıkla istek gönderin.`;
         }
-        
+
         throw new Error(errorMessage);
       }
 
@@ -846,36 +1045,36 @@ class AIHandler {
         message: error.message,
         name: error.name
       });
-      
+
       // HTTP hata kodlarını kontrol et
       if (error.message.includes('HTTP 429') || error.message.includes('quota')) {
         throw new Error(`Gemini API kullanım limitine ulaşıldı. Lütfen birkaç dakika bekleyip tekrar deneyin veya API anahtarınızı kontrol edin.`);
       }
-      
+
       if (error.message.includes('HTTP 401')) {
         throw new Error(`Gemini API anahtarı geçersiz. Lütfen API anahtarınızı kontrol edin.`);
       }
-      
+
       if (error.message.includes('HTTP 403')) {
         throw new Error(`Gemini API erişim izni yok. API anahtarı yetkilerini kontrol edin.`);
       }
-      
+
       // Timeout/Abort hatalarını özel olarak işle
       if (error.name === 'AbortError') {
         throw new Error(`Gemini 3 Pro API zaman aşımı: İstek çok uzun sürdü (5+ dakika). Lütfen daha kısa bir metin deneyin veya tekrar deneyin.`);
       }
-      
+
       // Network hatalarını işle
       if (error.name === 'TypeError' && error.message.includes('fetch')) {
         throw new Error(`Gemini 3 Pro API'ye bağlanılamıyor: ${error.message}`);
       }
-      
+
       throw new Error(`Gemini 3 Pro API Hatası: ${error.message || 'Bilinmeyen hata'}`);
     }
   }
 
   async callLocalAI(systemPrompt, userPrompt, temperature, maxTokens) {
-    const endpoint = this.localEndpoint.endsWith('/') 
+    const endpoint = this.localEndpoint.endsWith('/')
       ? this.localEndpoint + "api/generate"
       : this.localEndpoint + "/api/generate";
 
@@ -911,7 +1110,7 @@ class AIHandler {
    */
   async analyzeWithCustomPrompt(text, options = {}) {
     console.log('✅ analyzeWithCustomPrompt called!', { textLength: text?.length, options });
-    
+
     const {
       systemPrompt = 'Sen bir senaryo analiz uzmanısın.',
       userPrompt = '',
@@ -923,23 +1122,23 @@ class AIHandler {
     if (!useChunking && text.length < 15000) {
       // Direct analysis for shorter texts
       const fullPrompt = userPrompt.replace(/\{\{text\}\}/g, text);
-      
+
       if (onProgress) {
         onProgress({ message: 'Analiz yapılıyor...', progress: 50 });
       }
-      
+
       const result = await this.generateText(systemPrompt, fullPrompt);
-      
+
       if (onProgress) {
         onProgress({ message: 'Tamamlandı', progress: 100 });
       }
-      
+
       return result;
     }
 
     // Use chunking for long texts or when explicitly requested
     console.log(`📝 Script length: ${text.length} characters - Using chunking for complete analysis`);
-    
+
     // Get optimal chunk size for current Gemini model
     const chunkOptions = getOptimalChunkSize('gemini', this.model || 'gemini-2.5-flash');
     const chunks = splitTextForAnalysis(text, {
@@ -948,7 +1147,7 @@ class AIHandler {
       overlapTokens: 600, // Proportional overlap
       preserveScenes: true // Maintain screenplay structure
     });
-    
+
     const totalChunks = chunks.length;
     console.log(`🔄 Script split into ${totalChunks} chunks for complete analysis`);
 
@@ -976,17 +1175,17 @@ class AIHandler {
       console.log(`🔍 Analyzing chunk ${chunkNumber}/${totalChunks}: ${chunk.wordCount} words, ${chunk.scenes?.length || 0} scenes`);
 
       // Create chunk-specific prompt with context
-      const chunkContext = chunk.scenes?.length > 0 ? 
+      const chunkContext = chunk.scenes?.length > 0 ?
         `\n\nBU BÖLÜM HAKKİNDA:\n- Bölüm ${chunkNumber}/${totalChunks}\n- ${chunk.scenes.length} sahne içeriyor\n- ${chunk.type === 'scene-based' ? 'Sahne sınırları korundu' : 'Paragraf bazlı bölümleme'}\n` :
         `\n\nBU BÖLÜM HAKKİNDA:\n- Bölüm ${chunkNumber}/${totalChunks}\n- ${chunk.wordCount} kelime\n`;
-      
+
       const chunkPrompt = userPrompt.replace(/\{\{text\}\}/g, chunk.text) + chunkContext;
-      
+
       try {
         console.log(`⏳ Starting analysis for chunk ${chunkNumber} (${chunk.tokenEstimate} tokens estimated)`);
-        
+
         const chunkResult = await this.generateText(systemPrompt, chunkPrompt);
-        
+
         chunkResults.push({
           chunkIndex: i,
           chunkNumber,
@@ -996,19 +1195,19 @@ class AIHandler {
           tokenEstimate: chunk.tokenEstimate,
           type: chunk.type
         });
-        
+
         console.log(`✅ Chunk ${chunkNumber} completed: ${chunkResult.length} characters`);
       } catch (error) {
         console.error(`❌ Error analyzing chunk ${chunkNumber}:`, error);
-        
+
         // Daha detaylı hata tanımları
         const isTimeoutError = error.message?.includes('timeout') || error.code === 'ECONNABORTED';
         const isQuotaError = error.message?.includes('quota') || error.message?.includes('429') || error.message?.includes('508');
         const isRateLimit = error.message?.includes('Too Many Requests');
         const isAPIError = error.response?.status >= 400;
-        
+
         let errorMessage = `Bölüm ${chunkNumber} analiz hatası`;
-        
+
         if (isQuotaError) {
           errorMessage += ' (API quota limiti aşıldı - birkaç dakika bekleyin)';
         } else if (isRateLimit) {
@@ -1020,7 +1219,7 @@ class AIHandler {
         } else {
           errorMessage += `: ${error.message}`;
         }
-        
+
         chunkResults.push({
           chunkIndex: i,
           chunkNumber,
@@ -1043,42 +1242,47 @@ class AIHandler {
     }
 
     console.log(`🎯 Synthesizing ${chunkResults.length} chunk analyses into final result`);
-    
+
     // Filter out invalid chunks and check for meaningful content
     const successfulChunks = chunkResults.filter(cr => {
       if (cr.error) return false;
-      
+
       // Skip chunks with only synthesis prompts or template text
       const result = cr.result.toLowerCase();
-      if (result.includes('bölüm analiz sonuçları') || 
-          result.includes('***') ||
-          result.includes('lütfen yukarıdaki') ||
-          result.length < 50) {
+      if (result.includes('bölüm analiz sonuçları') ||
+        result.includes('***') ||
+        result.includes('lütfen yukarıdaki') ||
+        result.length < 50) {
         console.warn(`Skipping invalid chunk ${cr.chunkNumber}: contains template text`);
         return false;
       }
       return true;
     });
-    
+
     const errorCount = chunkResults.length - successfulChunks.length;
-    
+
     // If no valid chunks, return fallback
     if (successfulChunks.length === 0) {
       console.warn('No valid chunks found, returning error message');
       return 'Analiz sırasında teknik bir sorun oluştu. Lütfen daha kısa bir metin ile tekrar deneyin.';
     }
-    
-    const synthesisPrompt = `Bu senaryonun ${successfulChunks.length} farklı parçada yapılan analizlerini tek kapsamlı analiz haline getir:
 
-${successfulChunks.map((chunk, idx) => 
-  `${idx + 1}. PARÇA ANALİZİ:\n${chunk.result.substring(0, 1000)}${chunk.result.length > 1000 ? '...' : ''}\n`
-).join('\n')}\n\nYukarıdaki parça analizlerini birleştirerek tek final analiz oluştur:`;
+    // 🔄 AKILLI BİRLEŞTİRME: Parçalı sonuçları kontrol et ve birleştir
+    console.log('🔍 Parçalı sonuç kontrolü yapılıyor...');
+    const mergedChunks = this.mergePartialResults(successfulChunks);
+    console.log(`✅ ${successfulChunks.length} parça -> ${mergedChunks.length} birleştirilmiş sonuç`);
+
+    const synthesisPrompt = `Bu senaryonun ${mergedChunks.length} farklı parçada yapılan analizlerini tek kapsamlı analiz haline getir:
+
+${mergedChunks.map((chunk, idx) =>
+      `${idx + 1}. PARÇA ANALİZİ:\n${chunk.result.substring(0, 1000)}${chunk.result.length > 1000 ? '...' : ''}\n`
+    ).join('\n')}\n\nYukarıdaki parça analizlerini birleştirerek tek final analiz oluştur:`;
 
     // Additional safety check for synthesis prompt length
     if (synthesisPrompt.length > 20000) {
       console.warn('Synthesis prompt too long, using fallback concatenation');
-      const fallbackResult = successfulChunks.map(chunk => chunk.result).join('\n\n---\n\n');
-      
+      const fallbackResult = mergedChunks.map(chunk => chunk.result).join('\n\n---\n\n');
+
       if (onProgress) {
         onProgress({
           message: 'Analiz tamamlandı (parça birleştirme)',
@@ -1086,8 +1290,8 @@ ${successfulChunks.map((chunk, idx) =>
           phase: 'completed-fallback'
         });
       }
-      
-      return `KAPSAMLI ANALİZ (${successfulChunks.length}/${totalChunks} parça):\n\n` + fallbackResult;
+
+      return fallbackResult;
     }
 
     try {
@@ -1095,16 +1299,16 @@ ${successfulChunks.map((chunk, idx) =>
         'Sen uzman bir analiz editörüsün. Parça analizlerini tek tutarlı analiz haline getirirsin.',
         synthesisPrompt
       );
-      
+
       // Check if result contains synthesis prompt artifacts
       const resultLower = finalResult.toLowerCase();
-      if (resultLower.includes('parça analizi') || 
-          resultLower.includes('yukarıdaki') ||
-          resultLower.includes('birleştir')) {
+      if (resultLower.includes('parça analizi') ||
+        resultLower.includes('yukarıdaki') ||
+        resultLower.includes('birleştir')) {
         console.warn('Synthesis result contains prompt artifacts, using fallback');
         throw new Error('Synthesis returned prompt text');
       }
-      
+
       if (onProgress) {
         onProgress({
           message: 'Kapsamlı analiz tamamlandı!',
@@ -1115,17 +1319,17 @@ ${successfulChunks.map((chunk, idx) =>
           errors: errorCount
         });
       }
-      
+
       console.log(`✅ Complete script analysis finished: ${successfulChunks.length}/${totalChunks} chunks successful`);
-      
+
       return finalResult;
-      
+
     } catch (synthesisError) {
       console.error('❌ Synthesis error:', synthesisError);
-      
+
       // Fallback: return concatenated results
       const fallbackResult = successfulChunks.map(chunk => chunk.result).join('\n\n---\n\n');
-      
+
       if (onProgress) {
         onProgress({
           message: 'Analiz tamamlandı (sentez hatası, ham sonuçlar döndürüldü)',
@@ -1133,7 +1337,7 @@ ${successfulChunks.map((chunk, idx) =>
           phase: 'completed-fallback'
         });
       }
-      
+
       return `KAPSAMLI ANALİZ (${successfulChunks.length}/${totalChunks} bölüm):\n\n` + fallbackResult;
     }
   }
@@ -1143,7 +1347,7 @@ ${successfulChunks.map((chunk, idx) =>
    * Supports reference images (up to 14 images)
    * Updated to match official Gemini 3 Pro Image Preview API format (November 2025)
    */
-  async generateImage(prompt, options = {}) {
+  async _deprecated_generateImage(prompt, options = {}) {
     // Only support Gemini for image generation currently
     if (this.provider !== AI_PROVIDERS.GEMINI) {
       throw new Error('Görsel üretme sadece Gemini provider ile desteklenmektedir');
@@ -1159,10 +1363,10 @@ ${successfulChunks.map((chunk, idx) =>
 
     try {
       console.log('🎨 Generating image with Gemini 3 Pro Image Preview...');
-      
+
       // Use the exact model name from Google documentation
       const imageModel = 'gemini-3-pro-image-preview';
-      
+
       // Prepare request body for Gemini 3 Pro Image Preview API
       // Based on official Google documentation format
       const requestBody = {
@@ -1188,12 +1392,12 @@ ${successfulChunks.map((chunk, idx) =>
       // Add image configuration if specified (CORRECT PLACEMENT in generationConfig)
       if (options.aspectRatio || options.imageSize) {
         requestBody.generationConfig.image_config = {};
-        
+
         if (options.aspectRatio) {
           // Valid values: "1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"
           requestBody.generationConfig.image_config.aspect_ratio = options.aspectRatio;
         }
-        
+
         if (options.imageSize) {
           // Valid values: "1K", "2K", "4K" (note: capital K required)
           requestBody.generationConfig.image_config.image_size = options.imageSize;
@@ -1208,17 +1412,17 @@ ${successfulChunks.map((chunk, idx) =>
       // Add reference images if provided (up to 14 images as per Gemini 3 Pro spec)
       if (options.referenceImages && Array.isArray(options.referenceImages)) {
         const maxImages = Math.min(options.referenceImages.length, 14);
-        
+
         for (let i = 0; i < maxImages; i++) {
           const refImage = options.referenceImages[i];
           if (refImage && refImage.data && refImage.mimeType) {
             let base64Data = refImage.data;
-            
+
             // Remove data URL prefix if present (data:image/png;base64,)
             if (base64Data.includes(',')) {
               base64Data = base64Data.split(',')[1];
             }
-            
+
             requestBody.contents[0].parts.push({
               inline_data: {
                 mime_type: refImage.mimeType,
@@ -1227,7 +1431,7 @@ ${successfulChunks.map((chunk, idx) =>
             });
           }
         }
-        
+
         console.log(`📸 Added ${maxImages} reference image(s) to Gemini 3 Pro Image request`);
       }
 
@@ -1289,14 +1493,14 @@ ${successfulChunks.map((chunk, idx) =>
                 timestamp: new Date().toISOString()
               };
             }
-            
+
             // Also check for thought_signature which might contain image data
             if (part.thought_signature) {
               console.log('🤔 Found thought signature (thinking process)');
               // This might be part of the thinking process, continue checking
             }
           }
-          
+
           // Log all parts for debugging
           console.log('🔍 Response parts analysis:');
           candidate.content.parts.forEach((part, index) => {
@@ -1327,7 +1531,7 @@ ${successfulChunks.map((chunk, idx) =>
       if (error.response) {
         const status = error.response.status;
         const errorData = error.response.data;
-        
+
         if (status === 400) {
           const errorMsg = errorData?.error?.message || 'API isteği hatalı';
           throw new Error(`🚫 Geçersiz istek (400): ${errorMsg}`);

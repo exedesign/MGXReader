@@ -710,7 +710,8 @@ function isChapterLine(line) {
     // 🔥 YENİ: Daha esnek pattern'ler
     /^\d+\s*[-\.\s]\s*(?:BÖLÜM|bölüm|CHAPTER|chapter|EPISODE|episode|PART|part)/i,
     /(?:BÖLÜM|bölüm|CHAPTER|chapter|EPISODE|episode|PART|part)\s*[-\.\s]\s*\d+/i,
-    /^(?:SCENE|scene|SAHNE|sahne)\s*\d+$/i
+    // Çoklu dil sahne desteği (boşluklu veya boşluksuz): SAHNE1, SCENE1, SZENE1, vb.
+    /^(?:SCENE|scene|SAHNE|sahne|SZENE|szene|SCÈNE|scène|ESCENA|escena|SCENA|scena|CENA|cena)\s*\d+$/i
   ];
   
   return chapterPatterns.some(pattern => pattern.test(line.trim()));

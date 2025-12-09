@@ -14,6 +14,7 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
     const [error, setError] = useState(null);
     const [prompt, setPrompt] = useState('Professional character portrait');
     const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+    const [fileInputKey, setFileInputKey] = useState(Date.now()); // Key to force input reset
     const fileInputRef = useRef(null);
 
     // Auto-generate prompt from character data
@@ -121,6 +122,10 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                 setError('Lütfen geçerli görsel dosyaları seçin (JPG, PNG, etc.)');
             }
         });
+        
+        // CRITICAL: Reset input to allow selecting same/new files again
+        event.target.value = '';
+        setFileInputKey(Date.now()); // Force input re-render
     };
 
     const removeReferenceImage = (imageId) => {
@@ -155,22 +160,19 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
             console.log('🎨 Generating character image for:', character?.name || 'Unknown');
             console.log('📝 Prompt:', prompt);
 
-            // Build image generation options
             let imageOptions = {
                 character: character?.name || 'character',
-                style: 'cinematic character portrait',
-                aspectRatio: '3:4', // Portrait orientation for characters
-                imageSize: '2K' // High quality
+                style: 'cinematic character portrait'
             };
 
-            // Add reference images if available
+            // Add reference images if available (max 14 for Gemini)
             if (referenceImages.length > 0) {
-                imageOptions.referenceImages = referenceImages.map(refImage => ({
+                imageOptions.referenceImages = referenceImages.slice(0, 14).map(refImage => ({
                     data: refImage.data,
                     mimeType: refImage.type || 'image/png',
                     instruction: 'Create a character similar to this reference image'
                 }));
-                console.log('🖼️ Including reference images:', referenceImages.length, 'images');
+                console.log('🖼️ Including reference images:', imageOptions.referenceImages.length, 'images');
             }
 
             // Use the store's generateImage method which handles provider fallback
@@ -301,6 +303,7 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                 ) : (
                     <div className="border-2 border-dashed border-cinema-gray rounded-lg p-6 text-center">
                         <input
+                            key={fileInputKey}
                             type="file"
                             ref={fileInputRef}
                             onChange={handleReferenceUpload}

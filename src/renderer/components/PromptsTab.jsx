@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAIStore } from '../store/aiStore';
 
 export default function PromptsTab({
@@ -9,7 +9,11 @@ export default function PromptsTab({
   deleteCustomPrompt = () => {},
   setActivePrompt = () => {},
   activePrompts = {},
-  defaultPrompts = {}
+  defaultPrompts = {},
+  exportAllPrompts = () => {},
+  exportCategory = () => {},
+  importPrompts = () => {},
+  getCategories = () => ({})
 }) {
   const { provider } = useAIStore(); // Provider bilgisini al
   const [selectedCategory, setSelectedCategory] = useState('analysis');
@@ -19,13 +23,24 @@ export default function PromptsTab({
   const [newPromptData, setNewPromptData] = useState({
     name: '',
     system: '',
-    user: ''
+    user: '',
+    usedBy: [],
+    category: 'custom'
   });
+  const [showImportExport, setShowImportExport] = useState(false);
+  const [importMode, setImportMode] = useState('merge');
+  const fileInputRef = useRef(null);
 
-  const categories = {
-    analysis: { name: 'Senaryo Analizi', icon: '🎬', desc: 'Karakter, hikaye, LED Volume analizi' },
-    storyboard: { name: 'Storyboard Üretimi', icon: '🎯', desc: 'Profesyonel storyboard ve görsel analiz' }
-  };
+  // Kategorileri store'dan al
+  const categories = getCategories() || {};
+  
+  // Eğer kategoriler boşsa veya selectedCategory yoksa, varsayılana dön
+  if (!categories[selectedCategory]) {
+    const firstCategory = Object.keys(categories)[0];
+    if (firstCategory && selectedCategory !== firstCategory) {
+      setSelectedCategory(firstCategory);
+    }
+  }
 
   // Provider'a göre prompt'ları sırala - Gemini 3 optimize olanları önce göster
   const sortPromptsByProvider = (promptTypes) => {
@@ -57,27 +72,65 @@ export default function PromptsTab({
 
   const handleEditPrompt = (category, type) => {
     const prompt = getPrompt(category, type);
-    setEditingPrompt({ category, type, ...prompt });
+    // usedBy yoksa veya boşsa, kategori bazlı varsayılan değer ata
+    let defaultUsedBy = [];
+    if (category === 'analysis') {
+      defaultUsedBy = ['analysis_panel'];
+    } else if (category === 'storyboard') {
+      defaultUsedBy = ['storyboard'];
+    } else if (category === 'speed_reading') {
+      defaultUsedBy = ['speed_reader'];
+    } else if (category === 'grammar') {
+      defaultUsedBy = ['analysis_panel'];
+    } else if (category === 'cinematography' || category === 'production') {
+      defaultUsedBy = ['storyboard', 'analysis_panel'];
+    }
+    
+    setEditingPrompt({ 
+      category, 
+      type, 
+      ...prompt,
+      usedBy: prompt.usedBy && prompt.usedBy.length > 0 ? prompt.usedBy : defaultUsedBy
+    });
     setSelectedType(type);
   };
 
   const handleSavePrompt = () => {
-    if (editingPrompt) {
-      saveCustomPrompt(editingPrompt.category, selectedType, {
+    if (editingPrompt && editingPrompt.usedBy?.length > 0) {
+      saveCustomPrompt(editingPrompt.category || selectedCategory, selectedType, {
         name: editingPrompt.name,
         system: editingPrompt.system,
-        user: editingPrompt.user
+        user: editingPrompt.user,
+        usedBy: editingPrompt.usedBy,
+        category: editingPrompt.category || selectedCategory
       });
       setEditingPrompt(null);
+    } else if (!editingPrompt.usedBy?.length) {
+      alert('⚠️ Lütfen en az bir modül seçin');
     }
   };
 
   const handleCreatePrompt = () => {
-    if (newPromptData.name && newPromptData.system && newPromptData.user) {
+    if (newPromptData.name && newPromptData.system && newPromptData.user && newPromptData.usedBy?.length > 0) {
       const key = newPromptData.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      saveCustomPrompt(selectedCategory, key, newPromptData);
-      setNewPromptData({ name: '', system: '', user: '' });
+      const targetCategory = selectedCategory;
+      saveCustomPrompt(targetCategory, key, {
+        name: newPromptData.name,
+        system: newPromptData.system,
+        user: newPromptData.user,
+        usedBy: newPromptData.usedBy,
+        category: targetCategory
+      });
+      setNewPromptData({ 
+        name: '', 
+        system: '', 
+        user: '', 
+        usedBy: [],
+        category: 'custom' 
+      });
       setIsCreating(false);
+    } else if (!newPromptData.usedBy?.length) {
+      alert('⚠️ Lütfen en az bir modül seçin');
     }
   };
 
@@ -95,7 +148,22 @@ export default function PromptsTab({
     setActivePrompt(category, type);
   };
 
-  const promptTypes = sortPromptsByProvider(getPromptTypes(selectedCategory));
+  // Prompt listesini al ve filtrele
+  let promptTypes = sortPromptsByProvider(getPromptTypes(selectedCategory));
+  
+  // Llama promptlarını sadece local/mlx provider'da göster
+  promptTypes = promptTypes.filter(promptType => {
+    const prompt = getPrompt(selectedCategory, promptType.key);
+    const isLlamaPrompt = promptType.key.includes('llama') || prompt?.optimizedFor === 'llama';
+    
+    // Eğer llama promptu ise, sadece local veya mlx provider'da göster
+    if (isLlamaPrompt) {
+      return provider === 'local' || provider === 'mlx';
+    }
+    
+    return true;
+  });
+  
   const selectedPrompt = selectedType ? getPrompt(selectedCategory, selectedType) : null;
   const isDefault = selectedPrompt && defaultPrompts[selectedCategory]?.[selectedType];
 
@@ -113,28 +181,148 @@ export default function PromptsTab({
         </div>
       </div>
 
-      {/* Categories */}
-      <div className="grid grid-cols-3 gap-4">
-        {Object.entries(categories).map(([key, cat]) => (
+      {/* Export/Import Section - Single Line */}
+      <div className="bg-cinema-bg border border-cinema-gray rounded-lg p-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-cinema-text-dim">💾</span>
+          
           <button
-            key={key}
             onClick={() => {
-              setSelectedCategory(key);
-              setSelectedType(null);
-              setEditingPrompt(null);
-              setIsCreating(false);
+              try {
+                console.log('🚀 Export butonu tıklandı');
+                const result = exportAllPrompts();
+                console.log('📦 Export sonucu:', result);
+                alert('✅ Tüm promptlar başarıyla dışa aktarıldı!\n\n' + 
+                      `Toplam: ${result.metadata.totalPrompts} prompt\n` +
+                      `Default: ${result.metadata.defaultPrompts}\n` +
+                      `Custom: ${result.metadata.customPrompts}`);
+              } catch (error) {
+                console.error('❌ Export hatası:', error);
+                alert('❌ Dışa aktarma hatası: ' + error.message);
+              }
             }}
-            className={`p-5 rounded-lg border-2 transition-all text-left ${
-              selectedCategory === key
-                ? 'border-cinema-accent bg-cinema-accent/10'
-                : 'border-cinema-gray hover:border-cinema-gray-light bg-cinema-gray/20'
-            }`}
+            className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs transition-colors flex items-center gap-1"
           >
-            <div className="text-3xl mb-2">{cat.icon}</div>
-            <div className="text-base font-semibold text-cinema-text mb-1">{cat.name}</div>
-            <div className="text-xs text-cinema-text-dim">{cat.desc}</div>
+            <span>📤</span>
+            <span>Tümünü Dışa Aktar</span>
           </button>
-        ))}
+          
+          <span className="text-xs text-cinema-text-dim">|</span>
+          
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                try {
+                  console.log('📂 JSON dosyası okunuyor...');
+                  const jsonData = JSON.parse(event.target.result);
+                  console.log('✓ JSON parse başarılı:', {
+                    version: jsonData.version,
+                    hasPrompts: !!jsonData.prompts,
+                    hasCustomPrompts: !!jsonData.customPrompts,
+                    keys: Object.keys(jsonData)
+                  });
+                  
+                  const result = importPrompts(jsonData, {
+                    merge: importMode === 'merge',
+                    overwrite: importMode === 'replace'
+                  });
+
+                  console.log('📊 Import sonucu:', result);
+
+                  if (result.success) {
+                    const mode = importMode === 'merge' ? 'Birleştirme' : 'Değiştirme';
+                    alert(`✅ ${result.imported} prompt başarıyla içe aktarıldı!\n\nMod: ${mode}\nSayfa yeniden yüklenecek...`);
+                    
+                    // localStorage'ın flush olması için kısa gecikme
+                    setTimeout(() => {
+                      window.location.reload();
+                    }, 100);
+                  } else {
+                    alert(`❌ İçe aktarma hatası:\n\n${result.error}\n\nKonsolu (F12) kontrol edin.`);
+                  }
+                } catch (error) {
+                  console.error('❌ JSON parse hatası:', error);
+                  alert('❌ JSON dosyası okunamadı:\n\n' + error.message + '\n\nDosya formatını kontrol edin.');
+                }
+              };
+              reader.readAsText(file);
+              e.target.value = '';
+            }}
+            className="hidden"
+          />
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs transition-colors flex items-center gap-1"
+          >
+            <span>📥</span>
+            <span>İçe Aktar</span>
+          </button>
+          
+          <label className="flex items-center gap-1 text-xs text-cinema-text-dim cursor-pointer">
+            <input
+              type="radio"
+              name="importMode"
+              value="merge"
+              checked={importMode === 'merge'}
+              onChange={(e) => setImportMode(e.target.value)}
+              className="accent-cinema-accent"
+            />
+            <span>Birleştir</span>
+          </label>
+          <label className="flex items-center gap-1 text-xs text-cinema-text-dim cursor-pointer">
+            <input
+              type="radio"
+              name="importMode"
+              value="replace"
+              checked={importMode === 'replace'}
+              onChange={(e) => setImportMode(e.target.value)}
+              className="accent-cinema-accent"
+            />
+            <span>Değiştir</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Categories */}
+      <div className="grid grid-cols-4 gap-3">
+        {Object.entries(categories).map(([key, cat]) => {
+          const promptCount = getPromptTypes(key).length;
+          return (
+            <button
+              key={key}
+              onClick={() => {
+                setSelectedCategory(key);
+                setSelectedType(null);
+                setEditingPrompt(null);
+                setIsCreating(false);
+              }}
+              className={`p-4 rounded-lg border-2 transition-all text-left relative ${
+                selectedCategory === key
+                  ? 'border-cinema-accent bg-cinema-accent/10'
+                  : 'border-cinema-gray hover:border-cinema-gray-light bg-cinema-gray/20'
+              }`}
+              style={{
+                borderLeftColor: cat.color,
+                borderLeftWidth: '4px'
+              }}
+            >
+              <div className="text-2xl mb-1">{cat.icon}</div>
+              <div className="text-sm font-semibold text-cinema-text mb-1">{cat.name}</div>
+              <div className="text-xs text-cinema-text-dim line-clamp-2">{cat.description}</div>
+              <div className="absolute top-2 right-2 bg-cinema-accent/20 text-cinema-accent text-xs px-2 py-0.5 rounded-full">
+                {promptCount}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -142,7 +330,7 @@ export default function PromptsTab({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="text-lg font-semibold text-cinema-text">
-              {categories[selectedCategory].name} Komutları
+              {categories[selectedCategory]?.name || 'Prompt'} Komutları
             </h4>
             <button
               onClick={() => {
@@ -157,85 +345,106 @@ export default function PromptsTab({
           </div>
 
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {promptTypes.map(({ key, name, isCustom }) => (
-              <div
-                key={key}
-                className={`p-3 rounded-lg border transition-all cursor-pointer ${
-                  selectedType === key
-                    ? 'border-cinema-accent bg-cinema-accent/10'
-                    : 'border-cinema-gray hover:border-cinema-gray-light bg-cinema-gray/20'
-                }`}
-                onClick={() => {
-                  setSelectedType(key);
-                  setEditingPrompt(null);
-                  setIsCreating(false);
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-cinema-text">{name}</span>
-                      {(key.includes('gemini3') || key.includes('g3')) && provider === 'gemini' && (
-                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">
-                          🟣 Gemini 3
-                        </span>
+            {promptTypes.map(({ key, name, isCustom, id }) => {
+              const prompt = getPrompt(selectedCategory, key);
+              const tags = prompt?.tags || [];
+              const usedBy = prompt?.usedBy || [];
+              
+              return (
+                <div
+                  key={key}
+                  className={`p-3 rounded-lg border transition-all cursor-pointer ${
+                    selectedType === key
+                      ? 'border-cinema-accent bg-cinema-accent/10'
+                      : 'border-cinema-gray hover:border-cinema-gray-light bg-cinema-gray/20'
+                  }`}
+                  onClick={() => {
+                    setSelectedType(key);
+                    setEditingPrompt(null);
+                    setIsCreating(false);
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-2">
+                        <span className="font-medium text-cinema-text">{name}</span>
+                        {(key.includes('gemini3') || key.includes('g3')) && provider === 'gemini' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs font-medium">
+                            <span className="text-[10px]">🟣</span> Gemini 3
+                          </span>
+                        )}
+                        {key.includes('llama') && (provider === 'local' || provider === 'mlx') && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs font-medium">
+                            <span className="text-[10px]">🦙</span> Optimize
+                          </span>
+                        )}
+                        {isCustom && (
+                          <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">
+                            Özel
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Tags */}
+                      {tags.length > 0 && (
+                        <div className="flex items-center gap-1 mb-1.5 flex-wrap">
+                          {tags.map(tag => (
+                            <span key={tag} className="px-1.5 py-0.5 bg-cinema-gray-light/20 text-cinema-text-dim rounded text-[11px]">
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
                       )}
-                      {key.includes('llama') && (provider === 'local' || provider === 'mlx') && (
-                        <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs">
-                          🦙 Optimize
-                        </span>
+                      
+                      {/* Used By */}
+                      {usedBy.length > 0 && (
+                        <div className="inline-flex items-center gap-1.5 text-[11px] text-cinema-text-dim">
+                          <span className="text-xs">📍</span>
+                          <span>
+                            {usedBy.map((module, idx) => (
+                              <span key={module}>
+                                {module === 'analysis_panel' && 'Analiz'}
+                                {module === 'storyboard' && 'Storyboard'}
+                                {module === 'speed_reader' && 'Hızlı Okuma'}
+                                {idx < usedBy.length - 1 && ' · '}
+                              </span>
+                            ))}
+                          </span>
+                        </div>
                       )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditPrompt(selectedCategory, key);
+                        }}
+                        className="p-1.5 hover:bg-cinema-gray rounded transition-colors text-cinema-text-dim hover:text-white"
+                        title="Düzenle"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
                       {isCustom && (
-                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs">
-                          Özel
-                        </span>
-                      )}
-                      {activePrompts[selectedCategory] === key && (
-                        <span className="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs">
-                          Aktif
-                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeletePrompt(selectedCategory, key);
+                          }}
+                          className="p-1.5 hover:bg-red-600/20 rounded transition-colors text-cinema-text-dim hover:text-red-400"
+                          title="Sil"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    {activePrompts[selectedCategory] !== key && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSetActive(selectedCategory, key);
-                        }}
-                        className="p-1 hover:bg-cinema-gray rounded text-xs text-cinema-text-dim hover:text-white"
-                        title="Aktif yap"
-                      >
-                        ⭐
-                      </button>
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEditPrompt(selectedCategory, key);
-                      }}
-                      className="p-1 hover:bg-cinema-gray rounded text-xs text-cinema-text-dim hover:text-white"
-                      title="Düzenle"
-                    >
-                      ✏️
-                    </button>
-                    {isCustom && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeletePrompt(selectedCategory, key);
-                        }}
-                        className="p-1 hover:bg-red-600 rounded text-xs text-cinema-text-dim hover:text-white"
-                        title="Sil"
-                      >
-                        🗑️
-                      </button>
-                    )}
-                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -254,6 +463,40 @@ export default function PromptsTab({
                   placeholder="Örn: Gelişmiş Karakter Analizi"
                   className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
                 />
+              </div>
+              
+              <div>
+                <label className="text-cinema-text font-medium block mb-2">
+                  Kullanılacağı Modüller <span className="text-xs text-cinema-text-dim">(en az bir modül seçin)</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['analysis_panel', 'storyboard', 'speed_reader'].map(module => (
+                    <label key={module} className="flex items-center gap-2 p-2 bg-cinema-gray/20 rounded border border-cinema-gray-light hover:border-cinema-accent transition-colors cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newPromptData.usedBy?.includes(module) || false}
+                        onChange={(e) => {
+                          const usedBy = newPromptData.usedBy || [];
+                          setNewPromptData({
+                            ...newPromptData,
+                            usedBy: e.target.checked
+                              ? [...usedBy, module]
+                              : usedBy.filter(m => m !== module)
+                          });
+                        }}
+                        className="accent-cinema-accent"
+                      />
+                      <span className="text-sm text-cinema-text">
+                        {module === 'analysis_panel' && '🎬 Analiz Paneli'}
+                        {module === 'storyboard' && '🎯 Storyboard'}
+                        {module === 'speed_reader' && '⚡ Hızlı Okuma'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-cinema-text-dim mt-2">
+                  💡 Seçilen modüllerde bu prompt kullanılabilir olacaktır
+                </p>
               </div>
 
               <div>
@@ -327,6 +570,40 @@ export default function PromptsTab({
                   className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
                 />
               </div>
+              
+              <div>
+                <label className="text-cinema-text font-medium block mb-2">
+                  Kullanılacağı Modüller <span className="text-xs text-cinema-text-dim">(en az bir modül seçin)</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['analysis_panel', 'storyboard', 'speed_reader'].map(module => (
+                    <label key={module} className="flex items-center gap-2 p-2 bg-cinema-gray/20 rounded border border-cinema-gray-light hover:border-cinema-accent transition-colors cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editingPrompt.usedBy?.includes(module) || false}
+                        onChange={(e) => {
+                          const usedBy = editingPrompt.usedBy || [];
+                          setEditingPrompt({
+                            ...editingPrompt,
+                            usedBy: e.target.checked
+                              ? [...usedBy, module]
+                              : usedBy.filter(m => m !== module)
+                          });
+                        }}
+                        className="accent-cinema-accent"
+                      />
+                      <span className="text-sm text-cinema-text">
+                        {module === 'analysis_panel' && '🎬 Analiz Paneli'}
+                        {module === 'storyboard' && '🎯 Storyboard'}
+                        {module === 'speed_reader' && '⚡ Hızlı Okuma'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-cinema-text-dim mt-2">
+                  💡 Seçilen modüllerde bu prompt kullanılabilir olacaktır
+                </p>
+              </div>
 
               <div>
                 <label className="text-cinema-text font-medium block mb-2">
@@ -385,14 +662,6 @@ export default function PromptsTab({
                   )}
                 </div>
                 <div className="flex gap-2">
-                  {activePrompts[selectedCategory] !== selectedType && (
-                    <button
-                      onClick={() => handleSetActive(selectedCategory, selectedType)}
-                      className="px-3 py-1 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
-                    >
-                      ⭐ Aktif Yap
-                    </button>
-                  )}
                   <button
                     onClick={() => handleEditPrompt(selectedCategory, selectedType)}
                     className="px-3 py-1 bg-cinema-accent text-black rounded-lg text-sm hover:bg-cinema-accent-light transition-colors"

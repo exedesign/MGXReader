@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AI_PROVIDERS, OPENAI_MODELS, GEMINI_MODELS, GEMINI_PREVIEW_MODELS, MLX_MODELS, GEMINI_IMAGE_MODELS, OPENAI_IMAGE_MODELS } from '../utils/aiHandler';
+import { AI_PROVIDERS, OPENAI_MODELS, GEMINI_MODELS, MLX_MODELS, GEMINI_IMAGE_MODELS, GEMINI_IMAGE_UNDERSTANDING_MODELS, OPENAI_IMAGE_MODELS } from '../utils/aiHandler';
 import { useAIStore } from '../store/aiStore';
 
 export default function ProvidersTab({
@@ -24,7 +24,13 @@ export default function ProvidersTab({
     setCustomEndpoint,
     setCustomModel,
     setCustomTemperature,
-    setMLXConfig
+    setMLXConfig,
+    geminiImageSize,
+    geminiAspectRatio,
+    openaiImageSize,
+    openaiImageQuality,
+    setGeminiImageSettings,
+    setOpenAIImageSettings
   } = useAIStore();
 
   // Get current config
@@ -36,10 +42,16 @@ export default function ProvidersTab({
   const [localOpenAIImageModel, setLocalOpenAIImageModel] = useState(config?.openai?.imageModel || 'dall-e-3');
   const [localGeminiKey, setLocalGeminiKey] = useState(config?.gemini?.apiKey || '');
   const [localGeminiModel, setLocalGeminiModel] = useState(config?.gemini?.model || 'gemini-3-pro-preview');
-  const [localGeminiImageModel, setLocalGeminiImageModel] = useState(config?.gemini?.imageModel || 'imagen-4.0-generate-001');
+  const [localGeminiImageModel, setLocalGeminiImageModel] = useState(config?.gemini?.imageModel || 'gemini-2.5-flash-image');
   const [localEndpointInput, setLocalEndpointInput] = useState(config?.local?.endpoint || '');
   const [localModelInput, setLocalModelInput] = useState(config?.local?.model || '');
   const [localTempInput, setLocalTempInput] = useState(config?.local?.temperature || 0.7);
+  
+  // Local state for image generation settings
+  const [localGeminiImageSize, setLocalGeminiImageSize] = useState(geminiImageSize || '1K');
+  const [localGeminiAspectRatio, setLocalGeminiAspectRatio] = useState(geminiAspectRatio || '1:1');
+  const [localOpenAIImageSize, setLocalOpenAIImageSize] = useState(openaiImageSize || '1024x1024');
+  const [localOpenAIImageQuality, setLocalOpenAIImageQuality] = useState(openaiImageQuality || 'standard');
   
   // MLX state
   const [mlxTempInput, setMlxTempInput] = useState(config?.mlx?.temperature || 0.7);
@@ -260,30 +272,41 @@ export default function ProvidersTab({
       
       // Check and reset invalid Gemini text models
       const geminiModel = currentConfig.gemini?.model;
-      const validGeminiModels = ['gemini-3-pro-preview', 'gemini-2.0-flash-exp', 'gemini-1.5-flash-latest', 'gemini-1.5-pro-latest'];
+      const validGeminiModels = [
+        'gemini-3-pro-preview',
+        'gemini-2.5-flash',
+        'gemini-2.5-pro',
+        'gemini-2.5-flash-lite',
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-lite'
+      ];
       if (geminiModel && !validGeminiModels.includes(geminiModel)) {
-        console.log('🔧 Resetting invalid Gemini text model:', geminiModel, '→ gemini-1.5-flash-latest');
-        setLocalGeminiModel('gemini-1.5-flash-latest');
-        setGeminiModel('gemini-1.5-flash-latest');
+        console.log('🔧 Resetting invalid Gemini text model:', geminiModel, '→ gemini-3-pro-preview');
+        setLocalGeminiModel('gemini-3-pro-preview');
+        setGeminiModel('gemini-3-pro-preview');
       } else {
-        setLocalGeminiModel(geminiModel || 'gemini-1.5-flash-latest');
+        setLocalGeminiModel(geminiModel || 'gemini-3-pro-preview');
       }
       
-      // Force reset deprecated/placeholder models to Gemini 3 Pro Image
+      // Force reset deprecated/placeholder models to Gemini 2.5 Flash Image
       const geminiImageModel = currentConfig.gemini?.imageModel;
       const invalidImageModels = [
         'text-to-description',
         'imagen-2.1-generate-001',
         'imagen-3.0-fast-generate-001',
+        'imagen-3.0-generate-001', // Deprecated Imagen 3.0
+        'imagen-4.0-generate-001', // Deprecated Imagen 4.0
+        'imagen-4.0-fast-generate-001', // Deprecated Imagen 4.0 Fast
+        'imagen-4.0-ultra-generate-001', // Deprecated Imagen 4.0 Ultra
         'gemini-2.0-flash-visual',
         'gemini-2.0-flash-exp', // Text model wrongly used for images
         'placeholder-generator'
       ];
       
       if (!geminiImageModel || invalidImageModels.includes(geminiImageModel)) {
-        console.log('🔧 Resetting invalid/deprecated image model from', geminiImageModel, 'to gemini-3-pro-image-preview');
-        setLocalGeminiImageModel('gemini-3-pro-image-preview');
-        setGeminiImageModel('gemini-3-pro-image-preview'); // Force update store
+        console.log('🔧 Resetting invalid/deprecated image model from', geminiImageModel, 'to gemini-2.5-flash-image');
+        setLocalGeminiImageModel('gemini-2.5-flash-image');
+        setGeminiImageModel('gemini-2.5-flash-image'); // Force update store
       } else {
         setLocalGeminiImageModel(geminiImageModel);
       }
@@ -393,7 +416,8 @@ export default function ProvidersTab({
                   setOpenAIModel(selectedModel);
                   console.log('🤖 OpenAI text model changed to:', selectedModel);
                 }}
-                className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
+                className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors cursor-pointer"
+                style={{ pointerEvents: 'auto' }}
               >
                 {OPENAI_MODELS.map(model => (
                   <option key={model.id} value={model.id}>
@@ -414,7 +438,8 @@ export default function ProvidersTab({
                   setOpenAIImageModel(selectedModel);
                   console.log('🎨 OpenAI image model changed to:', selectedModel);
                 }}
-                className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
+                className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors cursor-pointer"
+                style={{ pointerEvents: 'auto' }}
               >
                 {OPENAI_IMAGE_MODELS.map(model => (
                   <option key={model.id} value={model.id}>
@@ -424,6 +449,48 @@ export default function ProvidersTab({
               </select>
               <p className="text-xs text-cinema-text-dim mt-1">Storyboard görsel üretimi için kullanılır</p>
             </div>
+
+            {/* OpenAI Image Generation Settings */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-cinema-text font-medium block mb-2">
+                  Image Size
+                </label>
+                <select
+                  value={localOpenAIImageSize}
+                  onChange={(e) => {
+                    const newSize = e.target.value;
+                    setLocalOpenAIImageSize(newSize);
+                    setOpenAIImageSettings(newSize, localOpenAIImageQuality);
+                    console.log('📐 OpenAI image size changed to:', newSize);
+                  }}
+                  className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
+                >
+                  <option value="1024x1024">1024x1024 Square</option>
+                  <option value="1024x1792">1024x1792 Portrait</option>
+                  <option value="1792x1024">1792x1024 Landscape</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-cinema-text font-medium block mb-2">
+                  Image Quality
+                </label>
+                <select
+                  value={localOpenAIImageQuality}
+                  onChange={(e) => {
+                    const newQuality = e.target.value;
+                    setLocalOpenAIImageQuality(newQuality);
+                    setOpenAIImageSettings(localOpenAIImageSize, newQuality);
+                    console.log('✨ OpenAI image quality changed to:', newQuality);
+                  }}
+                  className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
+                >
+                  <option value="standard">Standard</option>
+                  <option value="hd">HD (Higher cost)</option>
+                </select>
+              </div>
+            </div>
+
             <div className="flex gap-2">
               <button
                 onClick={() => {
@@ -552,12 +619,23 @@ export default function ProvidersTab({
               <select
                 value={localGeminiModel}
                 onChange={(e) => {
+                  e.stopPropagation();
                   const selectedModel = e.target.value;
+                  console.log('✅ Model selection:', selectedModel);
                   setLocalGeminiModel(selectedModel);
                   setGeminiModel(selectedModel);
                   console.log('🔄 Gemini text model changed to:', selectedModel);
                 }}
-                className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.log('🖱️ Select clicked');
+                }}
+                className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors cursor-pointer"
+                style={{ 
+                  pointerEvents: 'auto',
+                  position: 'relative',
+                  zIndex: 10
+                }}
               >
                 <optgroup label="🟢 Stable Models (Recommended)">
                   {GEMINI_MODELS.filter(model => !model.deprecated).map(model => (
@@ -567,15 +645,6 @@ export default function ProvidersTab({
                     </option>
                   ))}
                 </optgroup>
-                {GEMINI_PREVIEW_MODELS.length > 0 && (
-                  <optgroup label="🔶 Preview Models (May not be available)">
-                    {GEMINI_PREVIEW_MODELS.map(model => (
-                      <option key={model.id} value={model.id}>
-                        {model.name} 
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
               </select>
               <p className="text-xs text-cinema-text-dim mt-2">
                 💡 Use stable models for production. Preview models may not work for all API keys.
@@ -593,14 +662,24 @@ export default function ProvidersTab({
                   setGeminiImageModel(selectedModel);
                   console.log('🎨 Gemini image model changed to:', selectedModel);
                 }}
-                className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
+                className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors cursor-pointer"
+                style={{ pointerEvents: 'auto' }}
               >
-                {GEMINI_IMAGE_MODELS.map(model => (
-                  <option key={model.id} value={model.id}>
-                    {model.name} {model.recommended && '⭐ Recommended'} 
-                    {model.fast && ' ⚡ Fast'}
-                  </option>
-                ))}
+                <optgroup label="🟢 Active Models (Recommended)">
+                  {GEMINI_IMAGE_MODELS.filter(model => !model.deprecated).map(model => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} {model.recommended && '⭐ Recommended'} 
+                      {model.fast && ' ⚡ Fast'}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="⚠️ Deprecated Models (Not Working)">
+                  {GEMINI_IMAGE_MODELS.filter(model => model.deprecated).map(model => (
+                    <option key={model.id} value={model.id} disabled={model.disabled}>
+                      {model.name}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
               <p className="text-xs text-cinema-text-dim mt-1">
                 🎨 Imagen 4.0: AI görsel üretim modeli (Aktif)
@@ -609,6 +688,60 @@ export default function ProvidersTab({
                 ✨ Kasım 2025 guncel - Gercek gorsel uretimi aktif
               </p>
             </div>
+
+            {/* Image Generation Settings */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-cinema-text font-medium block mb-2">
+                  Image Resolution
+                </label>
+                <select
+                  value={localGeminiImageSize}
+                  onChange={(e) => {
+                    const newSize = e.target.value;
+                    setLocalGeminiImageSize(newSize);
+                    setGeminiImageSettings(newSize, localGeminiAspectRatio);
+                    console.log('📐 Gemini image size changed to:', newSize);
+                  }}
+                  className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
+                >
+                  <option value="1K">1K (1024x1024) - All models</option>
+                  {localGeminiImageModel === 'gemini-3-pro-image-preview' && (
+                    <>
+                      <option value="2K">2K (2048x2048) - Pro only</option>
+                      <option value="4K">4K (4096x4096) - Pro only</option>
+                    </>
+                  )}
+                </select>
+                <p className="text-xs text-cinema-text-dim mt-1">
+                  {localGeminiImageModel === 'gemini-3-pro-image-preview' 
+                    ? '🎨 Pro: 1K, 2K, 4K available'
+                    : '⚡ Flash: 1K only'}
+                </p>
+              </div>
+              <div>
+                <label className="text-cinema-text font-medium block mb-2">
+                  Aspect Ratio
+                </label>
+                <select
+                  value={localGeminiAspectRatio}
+                  onChange={(e) => {
+                    const newRatio = e.target.value;
+                    setLocalGeminiAspectRatio(newRatio);
+                    setGeminiImageSettings(localGeminiImageSize, newRatio);
+                    console.log('📐 Gemini aspect ratio changed to:', newRatio);
+                  }}
+                  className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
+                >
+                  <option value="1:1">1:1 Square</option>
+                  <option value="16:9">16:9 Landscape</option>
+                  <option value="9:16">9:16 Portrait</option>
+                  <option value="4:3">4:3 Classic</option>
+                  <option value="3:4">3:4 Portrait</option>
+                </select>
+              </div>
+            </div>
+
             <button
               onClick={() => {
                 console.log('🔄 Manual Gemini save triggered');

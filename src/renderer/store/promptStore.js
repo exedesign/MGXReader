@@ -1,12 +1,114 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+// UUID Generator for prompt IDs
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
+// Ensure prompt has ID (add if missing)
+const ensurePromptID = (prompt, fallbackKey) => {
+  if (!prompt.id) {
+    // Generate deterministic ID based on name+system for default prompts
+    const seed = `${fallbackKey}_${prompt.name || ''}`.toLowerCase();
+    prompt.id = `prompt_${seed.replace(/[^a-z0-9]/g, '_')}_${Date.now().toString(36)}`;
+  }
+  return prompt;
+};
+
+// Add IDs and metadata to all prompts in a category
+const addIDsToPrompts = (promptsObj, categoryName) => {
+  const result = {};
+  Object.entries(promptsObj).forEach(([key, prompt]) => {
+    // Kategori bazlı varsayılan modül ataması
+    let defaultUsedBy = [];
+    if (categoryName === 'analysis') {
+      defaultUsedBy = ['analysis_panel'];
+    } else if (categoryName === 'storyboard_styles') {
+      defaultUsedBy = []; // Stil promptları hiçbir modülde otomatik seçilmez
+    } else if (categoryName === 'speed_reading') {
+      defaultUsedBy = ['speed_reader'];
+    } else if (categoryName === 'grammar') {
+      defaultUsedBy = ['analysis_panel'];
+    } else if (categoryName === 'cinematography') {
+      defaultUsedBy = ['storyboard', 'analysis_panel'];
+    } else if (categoryName === 'production') {
+      defaultUsedBy = ['storyboard', 'analysis_panel'];
+    }
+    
+    result[key] = {
+      ...ensurePromptID({ ...prompt }, `${categoryName}_${key}`),
+      // Metadata defaults
+      category: prompt.category || categoryName,
+      tags: prompt.tags || [],
+      usedBy: prompt.usedBy !== undefined ? prompt.usedBy : defaultUsedBy, // Eğer tanımlıysa (boş bile olsa) kullan
+      requiresInput: prompt.requiresInput !== false, // Default true
+      outputFormat: prompt.outputFormat || 'json', // 'json', 'text', 'markdown'
+      experimental: prompt.experimental || false
+    };
+  });
+  return result;
+};
+
+// Prompt category definitions with metadata
+const CATEGORY_DEFINITIONS = {
+  analysis: {
+    name: 'Genel Analiz',
+    icon: '🎬',
+    description: 'Karakter, hikaye, mekan, diyalog analizleri',
+    color: '#3b82f6' // blue
+  },
+  storyboard_styles: {
+    name: 'Storyboard Stilleri',
+    icon: '🎨',
+    description: 'Görselleştirme stil promptları (arka plan kullanımı)',
+    color: '#8b5cf6' // purple
+  },
+  cinematography: {
+    name: 'Sinematografi',
+    icon: '🎥',
+    description: 'Kamera, ışık, görsel stil analizleri',
+    color: '#ec4899' // pink
+  },
+  production: {
+    name: 'Prodüksiyon',
+    icon: '🎬',
+    description: 'VFX, ekipman, teknik analiz',
+    color: '#f59e0b' // amber
+  },
+  grammar: {
+    name: 'Dil & Düzenleme',
+    icon: '✍️',
+    description: 'Gramer, stil ve metin düzenlemeleri',
+    color: '#10b981' // green
+  },
+  speed_reading: {
+    name: 'Hızlı Okuma',
+    icon: '⚡',
+    description: 'Özet ve hızlı okuma optimizasyonları',
+    color: '#06b6d4' // cyan
+  },
+  custom: {
+    name: 'Özel',
+    icon: '⚙️',
+    description: 'Kullanıcı tanımlı özel promptlar',
+    color: '#6366f1' // indigo
+  }
+};
+
 const defaultPrompts = {
-  // Storyboard için özel prompt'lar
-  storyboard: {
+  // Storyboard görselleştirme stil promptları (arka planda kullanılır)
+  storyboard_styles: {
     // Ana storyboard prompt'ı - tüm senaryo analizi için
     main_storyboard: {
       name: '🎯 Ana Storyboard Prompt',
+      tags: ['storyboard', 'visual', 'scene', 'cinematic', 'main'],
+      usedBy: [],
+      outputFormat: 'text',
       system: `Sen profesyonel bir storyboard sanatçısı ve sinematografçısın. Senaryo sahneleri için tutarlı ve sinematik görsel açıklamalar oluştur.
 
 Görevin:
@@ -16,7 +118,9 @@ Görevin:
 - Film prodüksiyonu kalitesi hedefle
 - Türkçe açıklamalar kullan
 
-Stil: Profesyonel sinema prodüksiyonu`,
+Stil: Profesyonel sinema prodüksiyonu
+
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele ve görsel açıklamayı tamamla.`,
       user: `Bu sahne için detaylı storyboard frame oluştur:
 
 SAHNE: {{scene_title}}
@@ -39,6 +143,9 @@ Kalite: Yüksek detay, film prodüksiyonu kalitesi`
     },
     professional_storyboard: {
       name: '🎬 Profesyonel Storyboard',
+      tags: ['storyboard', 'professional', 'visual', 'cinematography'],
+      usedBy: [],
+      outputFormat: 'text',
       system: `Sen profesyonel bir storyboard artist'isın. Senaryo metinlerinden görsel storyboard prompt'ları oluşturursun.
 
 Kurallar:
@@ -48,6 +155,8 @@ Kurallar:
 - Kompozisyon öner
 - Karakterlerin pozisyonlarını tanımla
 - Lokasyon detaylarını vurgula
+
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele ve açıklamayı tamamla.
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu sahne/metin için profesyonel storyboard görsel prompt'ı oluştur:
@@ -70,6 +179,9 @@ Lütfen bu bilgilere dayanarak DALL-E veya Midjourney için optimize edilmiş, d
     
     cinematic_shots: {
       name: '🎥 Sinematik Çekimler',
+      tags: ['storyboard', 'cinematic', 'camera', 'lighting', 'composition'],
+      usedBy: [],
+      outputFormat: 'text',
       system: `Sen bir sinematografi uzmanısın. Film sahnelerini görsel olarak betimlersin.
 
 Odaklanacağın alanlar:
@@ -78,6 +190,8 @@ Odaklanacağın alanlar:
 - Composition ve framing
 - Color palette
 - Visual storytelling elements
+
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele.
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu sahne için sinematik görsel oluştur:
@@ -95,7 +209,10 @@ Bu bilgilere dayanarak profesyonel film görüntüsü yaratacak detaylı prompt 
     },
     
     comic_style: {
-      name: '💥 Çizgi Roman Stili', 
+      name: '💥 Çizgi Roman Stili',
+      tags: ['storyboard', 'comic', 'graphic-novel', 'illustration'],
+      usedBy: [],
+      outputFormat: 'text',
       system: `Sen çizgi roman ve grafik novel uzmanısın. Sahneleri comic book panel'ları gibi tasarlarsın.
 
 Özellikler:
@@ -104,6 +221,8 @@ Bu bilgilere dayanarak profesyonel film görüntüsü yaratacak detaylı prompt 
 - Action-packed compositions
 - Speech bubbles ve sound effects uyumlu
 - Comic book shading ve style
+
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele.
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu sahne için çizgi roman stili görsel oluştur:
@@ -126,6 +245,8 @@ Stil özellikler:
 - Focus on composition ve staging
 - Quick concept visualization
 
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele.
+
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu sahne için sketch-style storyboard oluştur:
 
@@ -145,6 +266,8 @@ Hand-drawn storyboard sketch tarzında, çizim/eskiz görünümünde prompt olu�
 - Real location aesthetics
 - High detail ve texture
 - Professional photography techniques
+
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele.
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu sahne için photorealistic görsel oluştur:
@@ -167,6 +290,8 @@ Stil odak:
 - Concept design elements
 - Pre-production art style
 
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele.
+
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu sahne için concept art oluştur:
 
@@ -186,6 +311,8 @@ Animasyon özelikleri:
 - Animation-friendly composition
 - Vibrant color schemes
 - Dynamic action clarity
+
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele.
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu sahne için animasyon stili görsel oluştur:
@@ -207,6 +334,8 @@ Noir özellikler:
 - Mysterious ve moody atmosphere
 - Classic noir cinematography
 
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele.
+
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu sahne için film noir stili görsel oluştur:
 
@@ -226,6 +355,8 @@ Fantasy özellikler:
 - Rich fantasy environments
 - Mythical creatures ve characters
 - Dramatic fantasy lighting
+
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele.
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu sahne için fantasy epik görsel oluştur:
@@ -247,6 +378,8 @@ Korku özellikler:
 - Horror cinematography
 - Eerie ve unsettling mood
 
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele.
+
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu sahne için korku atmosferi oluştur:
 
@@ -267,6 +400,8 @@ Aksiyon özellikler:
 - Intense action scenes
 - Adrenaline-pumping visuals
 
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele.
+
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu sahne için dinamik aksiyon görseli oluştur:
 
@@ -279,43 +414,31 @@ High-energy, dynamic aksiyon filmi tarzında prompt oluştur.`
   // Analiz kategorileri için varsayılan prompts
   analysis: {
     character: {
-      name: 'Karakter Analizi',
-      system: `Bir senaryo analiz uzmanısın. Karakterleri derinlemesine analiz et ve JSON formatında yanıt ver.
+      name: 'Karakter',
+      category: 'analysis',
+      tags: ['character', 'analysis', 'json'],
+      usedBy: ['analysis_panel', 'storyboard'],
+      outputFormat: 'json',
+      system: `Sen senaryo analistisin. SADECE gerçek karakterleri bul ve JSON formatında listele.
 
-ÖNEMLİ KURALLAR:
-1. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
-2. Her karakter için name, age, physical, personality, style, role alanları olmalı
-3. Tüm metinleri {{language}} dilinde yaz
-4. Fiziksel özellikleri detaylı ve açık yaz (boy, kilo, saç, göz, ten rengi)
-5. Kişilik özelliklerini spesifik yaz (ör: "güvenli, gizemli, arkadaş canlısı")
+KESİN JSON KURALLARI:
+1. İlk karakter { olmalı, son karakter } olmalı
+2. JSON dışında HİÇBİR ŞEY yazma (başlık yok, açıklama yok, "KAPSAMLI ANALİZ" yok, "PART 1/2" yok, markdown yok)
+3. "Bu karakter analizi sonucudur" gibi yorumlar YASAK
+4. Sadece insan/karakter ekle (AHMET, AYŞE gibi)
+5. Field isimleri karakter değil ("age", "physical" değil!)
+6. Makul sayı: 5-20 karakter (81 değil!)
+7. İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele ve yanıtı döndür.
 
-ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
-      user: `Senaryodaki TÜM karakterleri analiz et ve SADECE JSON formatında yanıt ver:
-
-{
-  "characters": [
-    {
-      "name": "KARAKTER ADI (tam isim)",
-      "age": "yaş veya yaş aralığı (ör: 35, 40-45, genç yetişkin)",
-      "physical": "Detaylı fiziksel özellikler: boy (kısa/orta/uzun), vücut yapısı, saç rengi ve stili, göz rengi, ten rengi, belirgin özellikler",
-      "personality": "Kişilik özellikleri: mizaç, davranış tarzı, karakter yapısı (ör: güvenli, gizemli, arkadaş canlısı, agresif, nazik, zeki)",
-      "style": "Giyim tarzı ve görünüm: kıyafet tercihleri, aksesuar kullanımı, genel stil (ör: resmi takım elbise, rahat spor, vintage, modern)",
-      "role": "Hikayedeki rolü (main/supporting/minor)",
-      "description": "Karakterin hikayedeki önemi ve ilişkileri (1-2 cümle)"
-    }
-  ],
-  "summary": {
-    "totalCharacters": 0,
-    "mainCharacters": 0,
-    "supportingCharacters": 0
-  }
-}
-
-ÖNEMLİ: Yanıtında SADECE JSON olsun, başka açıklama ekleme!`
+{{language}} dilinde yanıt ver.`,
+      user: `Senaryodaki karakterleri listele. SADECE JSON:\n\n{\n  "characters": [\n    {\n      "name": "AHMET",\n      "age": "35",\n      "physical": "Uzun boylu, kahverengi saç",\n      "personality": "Sakin, düşünceli",\n      "style": "Rahat kıyafetler",\n      "role": "main",\n      "description": "Ana karakter"\n    }\n  ],\n  "summary": {\n    "totalCharacters": 0,\n    "mainCharacters": 0,\n    "supportingCharacters": 0\n  }\n}\n\nKESİN KURALLAR:\n- Yanıtının İLK karakteri { olmalı, SON karakteri } olmalı\n- "=== Karakter ===" yazma\n- "KAPSAMLı ANALİZ" yazma\n- "Bu karakter analizi tamamlandı" yazma\n- Sadece insan karakterler (AHMET, AYŞE...)\n- "age", "name" gibi kelimeler karakter değil!\n- 5-20 karakter (81 değil!)\n- Başlık, açıklama, markdown YASAK\n- SADECE JSON!`
     },
     llama_character: {
-      name: '🦙 Llama 3.1 - Karakter Analizi',
-      system: 'Sen senaryo uzmanısın. Karakterleri analiz edersin ve JSON formatında yanıt verirsin. Basit ve net {{language}} dilinde cevaplar ver.',
+      name: '🦙 Karakter',
+      tags: ['character', 'analysis', 'json', 'llama'],
+      usedBy: ['analysis_panel'],
+      outputFormat: 'json',
+      system: 'Sen senaryo uzmanısın. Karakterleri analiz edersin ve JSON formatında yanıt verirsin. İÇERİK FİLTRESİ: API filtreleri tarafından engellenen içerikleri **** ile maskele ve yanıtı tamamla. Basit ve net {{language}} dilinde cevaplar ver.',
       user: `Bu senaryodaki karakterleri analiz et ve JSON formatında yaz:
 
 {
@@ -342,7 +465,10 @@ Net ve açık {{language}} cevap ver.`,
       optimizedFor: 'llama'
     },
     plot: {
-      name: 'Olay Örgüsü Analizi',
+      name: 'Hikaye',
+      tags: ['plot', 'story', 'structure', 'analysis'],
+      usedBy: ['analysis_panel'],
+      outputFormat: 'text',
       system: `Senaryo yapısı ve olay örgüsü uzmanısın. Hikaye akışını analiz et.
 Şunlara odaklan:
 - Üç perde yapısı (kurulum, gelişme, çözüm)
@@ -375,8 +501,11 @@ Net ve açık {{language}} cevap ver.`,
    - Güçlü bölümler`
     },
     llama_plot: {
-      name: '🦙 Llama 3.1 - Hikaye Yapısı',
-      system: 'Sen hikaye yapısı uzmanısın. Basit ve net analiz yaparısın. Tüm cevaplarını {{language}} dilinde ver.',
+      name: '🦙 Hikaye',
+      tags: ['plot', 'story', 'analysis', 'llama', 'simple'],
+      usedBy: ['analysis_panel'],
+      outputFormat: 'text',
+      system: 'Sen hikaye yapısı uzmanısın. Basit ve net analiz yaparısın. İÇERİK FİLTRESİ: API filtreleri tarafından engellenen içerikleri **** ile maskele. Tüm cevaplarını {{language}} dilinde ver.',
       user: `Bu senaryonun hikaye yapısını analiz et:
 
 • Hikaye nasıl başlıyor?
@@ -389,13 +518,18 @@ Basit ve net cevaplar ver. Sahne örnekleri göster.`,
       optimizedFor: 'llama'
     },
     theme: {
-      name: 'Tema ve Mesaj Analizi',
+      name: 'Tema',
+      tags: ['theme', 'analysis', 'symbolism', 'meaning'],
+      usedBy: ['analysis_panel'],
+      outputFormat: 'text',
       system: `Edebiyat ve sinema analiz uzmanısın. Temaları ve alt metinleri keşfet.
 Şunlara odaklan:
 - Ana tema ve alt temalar
 - Sembolik öğeler ve metaforlar
 - Kültürel ve sosyal referanslar
 - Mesaj iletimi ve etkinliği
+
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele ve yanıtı döndür.
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Metindeki tema ve mesajları analiz et ve şu başlıklar altında raporla:
@@ -421,13 +555,15 @@ Basit ve net cevaplar ver. Sahne örnekleri göster.`,
    - Mesaj netliği`
     },
     dialogue: {
-      name: 'Diyalog Analizi',
+      name: 'Diyalog',
       system: `Diyalog yazımı uzmanısın. Diyalogları değerlendir.
 Şunlara odaklan:
 - Doğallık ve gerçekçilik
 - Karakter sesine uygunluk
 - Alt metin ve ima
 - Ekonomiklik ve etkinlik
+
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele ve yanıtı döndür.
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Metindeki diyalogları analiz et ve şu başlıklar altında raporla:
@@ -452,60 +588,136 @@ Basit ve net cevaplar ver. Sahne örnekleri göster.`,
    - Güçlü diyalog örnekleri`
     },
     structure: {
-      name: 'Yapısal Analiz',
-      system: `Senaryo formatı ve yapısı uzmanısın. Sahneleri tek tek çıkarıp analiz edersin ve JSON formatında yanıt verirsin.
+      name: 'Yapı',
+      tags: ['structure', 'scenes', 'analysis', 'json'],
+      usedBy: ['analysis_panel', 'storyboard'],
+      outputFormat: 'json',
+      system: `Sen profesyonel bir senaryo analistisin. Senaryodaki sahneleri BAŞLIKLARDAN (SAHNE, INT., EXT., İÇ, DIŞ) tespit edip DETAYLI analiz ediyorsun.
 
-ÖNEMLİ KURALLAR:
-1. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
-2. Her sahne için number, title, location, intExt, timeOfDay, characters, content alanları olmalı
-3. Sahne başlıklarını "SAHNE X - MEKAN" formatında yaz
-4. Tüm metinleri {{language}} dilinde yaz
-5. İç/Dış bilgisini net belirt (İÇ veya DIŞ)
-6. Zaman bilgisini standart formatla (GÜNDÜZ, GECE, SABAH, AKŞAM)
+SAHNE TESPİT KURALLARI:
+1. SAHNE başlıkları şu formatlardan birinde olabilir (boşluklu veya boşluksuz):
+   - "SAHNE 1", "SAHNE1" (boşluksuz da olabilir)
+   - "SCENE 1", "SCENE1", "SZENE1", "SCÈNE1", "ESCENA1", "SCENA1", "CENA1"
+   - "INT. LOCATION - TIME" veya "EXT. LOCATION - TIME"
+   - "İÇ - MEKAN - ZAMAN" veya "DIŞ - MEKAN - ZAMAN"
+2. SAHNE/SCENE + RAKAM kombinasyonu her zaman sahne başlığıdır (boşluk olsun olmasın)
+3. Her sahne başlığı yeni bir sahne başlatır
+4. Sahne başlığı ile sonraki sahne başlığı arasındaki tüm metin o sahnenin içeriğidir
 
-ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
-      user: `Senaryodaki TÜM sahneleri çıkar ve SADECE JSON formatında yanıt ver:
+KESİN JSON KURALLARI:
+1. İlk karakter { olmalı, son karakter } olmalı
+2. JSON dışında HİÇBİR ŞEY yazma ("BÖLÜM 1/2" yok, "=== Yapı ===" yok, başlık yok, açıklama yok, markdown yok)
+3. "Bu sahne analizi sonucudur" veya "Analiz devam ediyor" gibi yorumlar YASAK
+4. Yanıtın SADECE geçerli JSON formatında olmalı
+5. Her sahneyi ayrı ayrı numaralandır (1'den başla, ardışık git)
+6. Her sahne için: number, title, location, intExt, timeOfDay, characters, content, description, duration, mood, visualStyle alanları olmalı
+7. Tüm metinleri {{language}} dilinde yaz
+8. İç/Dış bilgisini sadece "İÇ" veya "DIŞ" olarak belirt
+9. Zaman bilgisini standart kelimelerle: GÜNDÜZ, GECE, SABAH, AKŞAM, ÖĞLEN
+10. İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele ve yanıtı döndür.
+
+ÖNEMLİ: Yanıtını { ile başlat, } ile bitir. Başka hiçbir şey yazma!`,
+      user: `Senaryodaki TÜM sahneleri BAŞLIKLARDAN tespit et ve her sahneyi detaylı analiz et.
+
+🔍 SAHNE BAŞLIĞI NASIL BULUNUR:
+Senaryoda şu şekilde başlayan satırlar SAHNE BAŞLIĞIDIR (boşluklu veya boşluksuz):
+• "SAHNE 1", "SAHNE1" (boşluksuz), "SAHNE 2", "SAHNE2"... (Türkçe)
+• "SCENE 1", "SCENE1", "SCENE 2", "SCENE2"... (İngilizce)
+• "SZENE1", "SCÈNE1", "ESCENA1", "SCENA1", "CENA1"... (diğer diller)
+• "INT. MEKAN - ZAMAN" veya "EXT. MEKAN - ZAMAN" (İngilizce format)
+• "İÇ - MEKAN - ZAMAN" veya "DIŞ - MEKAN - ZAMAN" (Türkçe format)
+
+ÖNEMLİ: SAHNE/SCENE + RAKAM varsa bu MUTLAKA bir sahne başlığıdır (boşluk olsun olmasın).
+
+Her sahne başlığından sonraki metin, bir sonraki sahne başlığına kadar O SAHNENİN İÇERİĞİDİR.
+
+📋 ÖRNEK:
+Eğer senaryo şöyleyse:
+
+SAHNE1 - KAFE İÇERİSİ - GÜNDÜZ
+Ali kafede oturuyor. Ayşe gelir...
+
+SCENE2 - PARK - AKŞAM
+Ali ve Ayşe parkta yürüyorlar...
+
+SAHNE 3 - EV SALONU - GECE
+Ali evde yalnız...
+
+O zaman yanıtında 3 sahne olmalı (1, 2, 3 numaralı). "SAHNE1", "SCENE2", "SAHNE 3" hepsi geçerli başlıklardır.
+
+⚠️ KRİTİK: 
+- EVERY scene header creates a NEW scene
+- DO NOT skip any scene
+- Number scenes sequentially: 1, 2, 3, 4...
+- Senaryoda kaç sahne başlığı varsa, o kadar sahne objesi oluştur
+
+Yanıtını SADECE aşağıdaki JSON formatında ver:
 
 {
   "scenes": [
     {
       "number": 1,
-      "title": "SAHNE 1 - MEKAN ADI",
-      "location": "Mekan adı (kısa ve net)",
-      "intExt": "İÇ veya DIŞ",
-      "timeOfDay": "GÜNDÜZ/GECE/SABAH/AKŞAM",
-      "characters": ["KARAKTER1", "KARAKTER2"],
-      "content": "Sahnede ne oluyor? Aksiyonlar, diyaloglar, önemli anlar (2-4 cümle)",
-      "description": "Sahnenin görsel ve duygusal tanımı (1-2 cümle)",
-      "duration": "Tahmini süre (ör: 2 dakika, kısa, orta, uzun)",
-      "mood": "Sahne atmosferi (ör: gergin, romantik, aksiyon dolu)"
+      "title": "SAHNE 1 - MEKAN ADI (büyük harfle, net ve kısa)",
+      "location": "Mekan adı açık ve net (ör: Kafe İçerisi, Park Alanı, Ev Salonu, Ofis Odası)",
+      "intExt": "İÇ veya DIŞ - sadece bu iki kelimeden biri",
+      "timeOfDay": "GÜNDÜZ, GECE, SABAH, AKŞAM, ÖĞLEN, ŞAFAK, ALACAKARANLIK - bunlardan biri",
+      "characters": ["KARAKTER1 TAM İSMİ", "KARAKTER2 TAM İSMİ"],
+      "content": "Sahnede DETAYLI olarak ne oluyor? Karakterler ne yapıyor, ne konuşuyorlar, hangi aksiyonlar gerçekleşiyor, önemli story beat'ler neler? Minimum 3-4 cümle, maksimum detay. Diyalog örnekleri veya önemli eylemler.",
+      "description": "Sahnenin görsel ve duygusal detaylı tanımı: Kamera açıları, kompozisyon, ışık, renkler, atmosfer. Sinematografik açıdan bu sahne nasıl görünmeli? 2-3 cümle.",
+      "duration": "Tahmini süre: 'kısa' (30sn-1dk), 'orta' (1-3dk), 'uzun' (3-5dk), 'çok uzun' (5dk+) veya dakika olarak (ör: 2 dakika)",
+      "mood": "Sahne atmosferi ve duygusal ton çok detaylı: gergin, romantik, aksiyon dolu, hüzünlü, neşeli, gizemli, sakin, kaotik, dramatik vb. Karakterlerin bu sahnedaki ruh hali.",
+      "visualStyle": "Bu sahnenin görsel stili: close-up ağırlıklı mı, wide shot mu, tracking shot var mı, statik mi dinamik mi? Işık tonu: sıcak/soğuk, karanlık/aydınlık?",
+      "plotImportance": "Bu sahnenin hikaye için önemi: kritik, önemli, destekleyici, geçiş",
+      "emotionalBeat": "Bu sahnenin duygusal vuruşu: karakterler ne hissediyor, seyirci ne hissetmeli?",
+      "dialogue": "Diyalog yoğunluğu: yok, az, orta, çok",
+      "action": "Aksiyon yoğunluğu: yok, az, orta, yoğun"
     }
   ],
   "summary": {
     "totalScenes": 0,
-    "totalPages": "tahmini",
-    "estimatedRuntime": "tahmini dakika",
+    "totalPages": 0,
+    "estimatedRuntime": 0,
     "interiorScenes": 0,
     "exteriorScenes": 0,
     "dayScenes": 0,
-    "nightScenes": 0
+    "nightScenes": 0,
+    "morningScenes": 0,
+    "eveningScenes": 0,
+    "shortScenes": 0,
+    "mediumScenes": 0,
+    "longScenes": 0,
+    "totalCharacters": 0,
+    "mainLocations": ["En çok kullanılan 3-5 mekan"],
+    "actStructure": "3 perde yapısı analizi: Perde 1 (kaç sahne), Perde 2 (kaç sahne), Perde 3 (kaç sahne)",
+    "genre": "Senaryonun türü",
+    "pacing": "Senaryonun genel ritmi: yavaş, dengeli, hızlı",
+    "complexity": "Prodüksiyon karmaşıklığı: düşük, orta, yüksek"
   }
 }
 
-ÖNEMLİ: 
-- Yanıtında SADECE JSON olsun, başka açıklama ekleme!
-- Tüm sahneleri sırayla numara ver
-- Karakter isimlerini büyük harfle yaz
-- Sahne başlıklarını net ve standart formatta yaz`
+KRİTİK UYARILAR:
+- Yanıtının İLK karakteri { olmalı, SON karakteri } olmalı
+- JSON formatı dışında HIÇBIR ŞEY yazma (açıklama, başlık, markdown, düşünce vb.)
+- Tüm string değerleri çift tırnak içinde
+- Tüm sayısal değerler number tipinde (string değil)
+- Array'ler [...] formatında
+- Her sahneyi mutlaka ekle (hiçbir sahne atlanmamalı)
+- Sahne numaralarını 1'den başlat, ardışık ver (1, 2, 3, 4...)
+- Her sahne için TÜM alanları doldur (boş bırakma)
+- Karakterlerin isimlerini tam ve tutarlı yaz (her seferinde aynı format)
+- location isimleri mekan_analysis ile uyumlu olmalı
+- İstatistikleri doğru hesapla (summary içindeki sayılar sahne analizi ile uyumlu olmalı)`
     },
     production: {
-      name: 'Prodüksiyon Analizi',
+      name: 'Prodüksiyon',
       system: `Film prodüksiyonu uzmanısın. Pratik yönleri değerlendir.
 Şunlara odaklan:
 - Bütçe etkileri
 - Teknik zorluklar
 - Lokasyon gereksinimleri
 - Çekim planı ve lojistik
+
+İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele.
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Metindeki prodüksiyon yönlerini analiz et ve şu başlıklar altında raporla:
@@ -531,8 +743,8 @@ Basit ve net cevaplar ver. Sahne örnekleri göster.`,
    - Çekim sırası önerileri`
     },
     llama_theme: {
-      name: '🦙 Llama 3.1 - Tema Analizi',
-      system: 'Sen tema uzmanısın. Hikayelerin ana mesajlarını bulursun. Tüm cevaplarını {{language}} dilinde ver.',
+      name: '🦙 Tema',
+      system: 'Sen tema uzmanısın. Hikayelerin ana mesajlarını bulursun. İÇERİK FİLTRESİ: API filtreleri tarafından engellenen içerikleri **** ile maskele. Tüm cevaplarını {{language}} dilinde ver.',
       user: `Bu senaryonun ana temalarını bul:
 
 • Hikayenin ana mesajı nedir?
@@ -547,8 +759,8 @@ Basit cevaplar ver. Sahne örnekleri göster.`,
     
     // Senaryo Analizi İçin Hazır Llama 3.1 Komutları
     llama_structure: {
-      name: '🦙 Llama 3.1 - Senaryo Yapısı',
-      system: 'Sen senaryo yapısı uzmanısın. Basit analiz yaparısın. Tüm cevaplarını {{language}} dilinde ver.',
+      name: '🦙 Yapı',
+      system: 'Sen senaryo yapısı uzmanısın. Basit analiz yaparısın. İÇERİK FİLTRESİ: API filtreleri tarafından engellenen içerikleri **** ile maskele. Tüm cevaplarını {{language}} dilinde ver.',
       user: `Bu senaryonun yapısını kontrol et:
 
 • Kaç sayfa/sahne var?
@@ -563,8 +775,8 @@ Kısa ve net analiz yap.`,
     },
     
     llama_dialogue: {
-      name: '🦙 Llama 3.1 - Diyalog Analizi',
-      system: 'Sen diyalog uzmanısın. Konuşmaları analiz edersin. Tüm cevaplarını {{language}} dilinde ver.',
+      name: '🦙 Diyalog',
+      system: 'Sen diyalog uzmanısın. Konuşmaları analiz edersin. İÇERİK FİLTRESİ: API filtreleri tarafından engellenen içerikleri **** ile maskele. Tüm cevaplarını {{language}} dilinde ver.',
       user: `Bu senaryodaki diyalogları kontrol et:
 
 • Karakterler farklı mı konuşuyor?
@@ -580,7 +792,7 @@ Kısa ve net analiz yap.`,
     
     llama_scenes: {
       name: '🦙 Llama 3.1 - Sahne Analizi',
-      system: 'Sen sahne uzmanısın. Sahneleri tek tek incelersin. Tüm cevaplarını {{language}} dilinde ver.',
+      system: 'Sen sahne uzmanısın. Sahneleri tek tek incelersin. İÇERİK FİLTRESİ: API filtreleri tarafından engellenen içerikleri **** ile maskele. Tüm cevaplarını {{language}} dilinde ver.',
       user: `Bu senaryodaki sahneleri analiz et:
 
 • En güçlü sahne hangisi?
@@ -596,7 +808,7 @@ Sahne örnekleri ver. Pratik öneriler yap.`,
     
     llama_commercial: {
       name: '🦙 Llama 3.1 - Ticari Analiz',
-      system: 'Sen film endüstrisi uzmanısın. Ticari potansiyeli değerlendirirsin. Tüm cevaplarını {{language}} dilinde ver.',
+      system: 'Sen film endüstrisi uzmanısın. Ticari potansiyeli değerlendirirsin. İÇERİK FİLTRESİ: API filtreleri tarafından engellenen içerikleri **** ile maskele. Tüm cevaplarını {{language}} dilinde ver.',
       user: `Bu senaryonun ticari potansiyelini değerlendir:
 
 • Hangi yaş grubuna hitap eder?
@@ -627,7 +839,7 @@ Pratik düzeltme önerileri ver.`,
     },
     
     llama_quick_review: {
-      name: '🦙 Llama 3.1 - Hızlı İnceleme',
+      name: '🦙 Hızlı İnceleme',
       system: 'Sen hızlı okuma uzmanısın. 2 dakikada özet çıkarırsın. Tüm cevaplarını {{language}} dilinde ver.',
       user: `Bu senaryoyu hızlıca incele ve özetlr:
 
@@ -728,7 +940,7 @@ Detaylı, pratik ve sahne bazlı öneriler sun. Sahne numaralarıyla referans ve
     },
     
     llama_virtual_production: {
-      name: '🦙 Llama 3.1 - Curve LED Volume',
+      name: '🦙 LED Volume',
       system: 'Sen Curve LED Volume uzmanısın. 17 m² alan ve 4.5m yükseklikte çekim analizi yaparsın. Tüm cevaplarını {{language}} dilinde ver.',
       user: `Bu senaryoyu Curve LED (17 m² alan, 4.5m yükseklik) için analiz et:
 
@@ -750,15 +962,21 @@ Basit ve net cevaplar ver. Sahne numaraları belirt. 17 m² alan kısıtını ö
     
     // Yeni Standart Sinema Analiz Türleri
     cinematography: {
-      name: 'Görüntü Yönetimi (Cinematography)',
+      name: 'Sinematografi',
+      tags: ['cinematography', 'camera', 'lighting', 'visual', 'analysis', 'json'],
+      usedBy: ['analysis_panel', 'storyboard'],
+      outputFormat: 'json',
       system: `Görüntü yönetmeni (cinematographer/DOP) uzmanısın. Görsel anlatım ve teknik kamera çalışması analizi yaparsın ve JSON formatında yanıt verirsin.
 
-ÖNEMLİ KURALLAR:
-1. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
-2. Her sahne için shotType, angle, movement, lighting, description alanları olmalı
-3. Tüm metinleri {{language}} dilinde yaz
-4. Kamera açılarını ve hareketlerini spesifik ve net yaz
-5. Aydınlatma ve mood tanımlarını detaylı yaz
+KESİN JSON KURALLARI:
+1. İlk karakter { olmalı, son karakter } olmalı
+2. JSON dışında HİÇBİR ŞEY yazma ("=== Sinematografi ===" yok, "KAPSAMLI ANALİZ" yok, başlık yok, açıklama yok, markdown yok)
+3. "Bu sinematografi analizi sonucudur" gibi yorumlar YASAK
+4. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
+5. Her sahne için shotType, angle, movement, lighting, description alanları olmalı
+6. Tüm metinleri {{language}} dilinde yaz
+7. Kamera açılarını ve hareketlerini spesifik ve net yaz
+8. Aydınlatma ve mood tanımlarını detaylı yaz
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu senaryoyu görüntü yönetimi açısından analiz et ve SADECE JSON formatında yanıt ver:
@@ -795,7 +1013,13 @@ Basit ve net cevaplar ver. Sahne numaraları belirt. 17 m² alan kısıtını ö
   }
 }
 
-ÖNEMLİ: Yanıtında SADECE JSON olsun, başka açıklama ekleme!`
+KESİN KURALLAR:
+- Yanıtının İLK karakteri { olmalı, SON karakteri } olmalı
+- "=== Sinematografi ===" yazma
+- "PART 1/2" yazma  
+- "Bu sinematografi analizi sonucudur" yazma
+- Başlık, açıklama, markdown YASAK
+- SADECE JSON!`
     },
     
     soundDesign: {
@@ -853,7 +1077,7 @@ Sahne bazlı ses tasarımı önerileri sun.`
     },
     
     editing: {
-      name: 'Kurgu ve Ritim (Editing/Pacing)',
+      name: 'Kurgu',
       system: `Film editörü uzmanısın. Kurgu yapısı ve ritim analizi yaparsın.
 Şunlara odaklan:
 - Sahne geçişleri ve akış
@@ -909,7 +1133,7 @@ Sahne bazlı kurgu önerileri sun.`
     },
     
     budget: {
-      name: 'Bütçe ve Maliyet Analizi',
+      name: 'Bütçe',
       system: `Film yapımcısı ve bütçe uzmanısın. Prodüksiyon maliyet analizi yaparsın.
 Şunlara odaklan:
 - Above-the-line maliyetler
@@ -977,7 +1201,7 @@ Detaylı maliyet analizi ve tasarruf önerileri sun.`
     },
     
     marketing: {
-      name: 'Pazarlama ve Hedef Kitle',
+      name: 'Pazarlama',
       system: `Film pazarlama ve dağıtım uzmanısın. Ticari potansiyel ve hedef kitle analizi yaparsın.
 Şunlara odaklan:
 - Hedef demografik
@@ -1041,55 +1265,61 @@ Detaylı pazarlama stratejisi ve ticari analiz sun.`
     
     // Storyboard için özel analiz türleri
     location_analysis: {
-      name: 'Mekan ve Lokasyon Analizi',
-      system: `Lokasyon yöneticisi ve sanat yönetmeni uzmanısın. Senaryodaki mekanları analiz edersin ve JSON formatında yanıt verirsin.
+      name: 'Mekan',
+      tags: ['location', 'setting', 'analysis', 'json'],
+      usedBy: ['analysis_panel', 'storyboard'],
+      outputFormat: 'json',
+      system: `Sen lokasyon uzmanısın. Mekanları JSON formatında analiz ediyorsun.
 
-ÖNEMLİ KURALLAR:
-1. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
-2. Her mekan için name, type, description, atmosphere, lighting, timeOfDay, colors alanları olmalı
-3. Tüm metinleri {{language}} dilinde yaz
-4. Mekan açıklamalarını detaylı ve görsel olarak yaz
-5. Atmosfer ve mood tanımlarını spesifik yaz
+KESİN JSON KURALLARI:
+1. İlk karakter { olmalı, son karakter } olmalı
+2. JSON dışında HİÇBİR ŞEY yazma ("=== Mekan ===" yok, "KAPSAMLI ANALİZ (2/2 bölüm)" yok, başlık yok, açıklama yok, markdown yok)
+3. "Bu mekan analizi sonucudur" veya "Analiz tamamlandı" gibi yorumlar YASAK
+4. Her mekan için scenes array olmalı
+5. İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele ve yanıtı döndür.
 
-ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
-      user: `Senaryodaki TÜM mekanları analiz et ve SADECE JSON formatında yanıt ver:
-
+{{language}} dilinde yanıt ver.`,
+      user: `Mekanları analiz et. SADECE JSON:
 {
   "locations": [
     {
-      "name": "MEKAN ADI (net ve kısa)",
-      "type": "interior veya exterior",
-      "description": "Mekanın detaylı görsel açıklaması: mimari özellikler, boyut, düzenleme, önemli objeler (2-3 cümle)",
-      "atmosphere": "Mekanın atmosferi ve duygusal tonu (ör: gergin, huzurlu, gizemli, neşeli, karanlık, aydınlık)",
-      "lighting": "Işıklandırma karakteri (ör: doğal gün ışığı, yapay aydınlatma, loş, parlak, gölgeli, sıcak, soğuk)",
-      "timeOfDay": "Zaman dilimi (day/night/morning/evening/noon)",
-      "colors": "Baskın renk paleti ve tonları (ör: sıcak tonlar, soğuk maviler, nötr bejler, canlı renkler)",
-      "mood": "Genel mood ve his (1 cümle)",
-      "productionNotes": "Prodüksiyon notları: set mi, hazır lokasyon mu? (opsiyonel)"
+      "name": "KAFE İÇERİSİ",
+      "type": "interior",
+      "description": "Modern şehir kafesi, ahşap masalar, büyük pencereler",
+      "atmosphere": "Sakin, huzurlu",
+      "lighting": "Doğal pencere ışığı, yumuşak",
+      "timeOfDay": "morning",
+      "colors": "Kahverengi ahşap, beyaz duvarlar",
+      "mood": "Rahat sohbet atmosferi",
+      "scenes": [
+        {"sceneNumber": 1, "sceneTitle": "SAHNE 1 - KAFE İÇERİSİ", "characters": ["AHMET", "AYŞE"]}
+      ]
     }
   ],
-  "summary": {
-    "totalLocations": 0,
-    "interiorCount": 0,
-    "exteriorCount": 0,
-    "dayScenes": 0,
-    "nightScenes": 0
-  }
+  "summary": {"totalLocations": 1, "interiorCount": 1, "totalScenes": 1}
 }
-
-ÖNEMLİ: Yanıtında SADECE JSON olsun, başka açıklama ekleme!`
+ÖNEMLI:
+- İlk karakter { son karakter }
+- Başlık, açıklama yazma
+- Sadece JSON!`
     },
     
     visual_style: {
-      name: 'Görsel Stil ve Tonlama',
+      name: 'Görsel Stil',
+      tags: ['visual', 'style', 'cinematography', 'mood', 'analysis', 'json'],
+      usedBy: ['analysis_panel', 'storyboard'],
+      outputFormat: 'json',
       system: `Sinematografi ve görsel stil uzmanısın. Filmin görsel dilini belirlersin ve JSON formatında yanıt verirsin.
 
-ÖNEMLİ KURALLAR:
-1. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
-2. Renk paleti, mood, görsel temalar ve teknik kararlar net belirtilmeli
-3. Tüm metinleri {{language}} dilinde yaz
-4. Referans filmleri ve görsel stil açıklamalarını spesifik yaz
-5. Atmosfer ve tonlama tanımlarını detaylı yaz
+KESİN JSON KURALLARI:
+1. İlk karakter { olmalı, son karakter } olmalı
+2. JSON dışında HİÇBİR ŞEY yazma ("=== Görsel Stil ===" yok, "KAPSAMLI ANALİZ" yok, başlık yok, açıklama yok, markdown yok)
+3. "Bu görsel stil analizi sonucudur" gibi yorumlar YASAK
+4. SADECE JSON formatında yanıt ver (ek açıklama ekleme)
+5. Renk paleti, mood, görsel temalar ve teknik kararlar net belirtilmeli
+6. Tüm metinleri {{language}} dilinde yaz
+7. Referans filmleri ve görsel stil açıklamalarını spesifik yaz
+8. Atmosfer ve tonlama tanımlarını detaylı yaz
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
       user: `Bu senaryo için görsel stil ve tonlama önerisi geliştir ve SADECE JSON formatında yanıt ver:
@@ -1139,7 +1369,13 @@ Detaylı pazarlama stratejisi ve ticari analiz sun.`
   ]
 }
 
-ÖNEMLİ: Yanıtında SADECE JSON olsun, başka açıklama ekleme!`
+KESİN KURALLAR:
+- Yanıtının İLK karakteri { olmalı, SON karakteri } olmalı
+- "=== Görsel Stil ===" yazma
+- "KAPSAMLI ANALİZ" yazma
+- "Bu görsel stil analizi tamamlandı" yazma
+- Başlık, açıklama, markdown YASAK
+- SADECE JSON!`
     },
     
     color_palette: {
@@ -1185,7 +1421,9 @@ Detaylı pazarlama stratejisi ve ticari analiz sun.`
    - Lighting dept renk sıcaklığı
    - Post-prodüksiyon color timing
 
-Storyboard için spesifik hex kodları ve renk referansları ver.`
+Storyboard için spesifik hex kodları ve renk referansları ver.
+
+ÖNEMLİ: Yanıtının İLK karakteri { olmalı, SON karakteri } olmalı. JSON dışında hiçbir şey yazma!`
     },
 
     vertical_format: {
@@ -1288,6 +1526,9 @@ Bu analiz ReelShort/DramaBox/FlexTV kalitesinde, pazar odaklı bir değerlendirm
   grammar: {
     basic: {
       name: 'Temel Düzeltme',
+      tags: ['grammar', 'correction', 'basic', 'spelling'],
+      usedBy: ['analysis_panel'],
+      outputFormat: 'text',
       system: `Türkçe dil uzmanısın. Temel grammar hatalarını düzelt.
 Sadece şunları düzelt:
 - Yazım hataları
@@ -1358,6 +1599,9 @@ Orijinal mesajı koru ama sanatsal değer ekle.`,
   speed_reading: {
     summary: {
       name: 'Hızlı Özet',
+      tags: ['summary', 'speed-reading', 'quick', 'overview'],
+      usedBy: ['speed_reader', 'analysis_panel'],
+      outputFormat: 'text',
       system: `Metin özetleme uzmanısın. Hızlı okuma için etkili özetler çıkar.
 
 ÖNEMLİ: Tüm cevaplarını {{language}} dilinde ver.`,
@@ -1394,18 +1638,27 @@ Kısa ve net cevaplar ver. Bullet points kullan.`,
   }
 };
 
-const createEmptyCustomPrompts = () => ({
-   analysis: {},
-   grammar: {},
-   speed_reading: {},
-   storyboard: {}
-});
+// Add IDs to all default prompts (runs once at initialization)
+const defaultPromptsWithIDs = {
+  storyboard_styles: addIDsToPrompts(defaultPrompts.storyboard_styles, 'storyboard_styles'),
+  analysis: addIDsToPrompts(defaultPrompts.analysis, 'analysis'),
+  grammar: addIDsToPrompts(defaultPrompts.grammar, 'grammar'),
+  speed_reading: addIDsToPrompts(defaultPrompts.speed_reading, 'speed_reading')
+};
+
+const createEmptyCustomPrompts = () => {
+  const prompts = {};
+  Object.keys(CATEGORY_DEFINITIONS).forEach(cat => {
+    prompts[cat] = {};
+  });
+  return prompts;
+};
 
 const getDefaultActivePrompts = () => ({
    analysis: 'llama_quick_review',
    grammar: 'intermediate',
    speed_reading: 'summary',
-   storyboard: 'main_storyboard'
+   storyboard_styles: 'main_storyboard'
 });
 
 export const usePromptStore = create(
@@ -1414,8 +1667,8 @@ export const usePromptStore = create(
       // Custom prompts kullanıcı tarafından eklenen/düzenlenen
          customPrompts: createEmptyCustomPrompts(),
       
-      // Default prompts - sabit şablonlar
-      defaultPrompts,
+      // Default prompts - sabit şablonlar (with IDs)
+      defaultPrompts: defaultPromptsWithIDs,
       
       // Active prompt - şu an kullanılan
          activePrompts: getDefaultActivePrompts(),
@@ -1427,6 +1680,31 @@ export const usePromptStore = create(
         
         return get().defaultPrompts[category]?.[type];
       },
+      
+      // Prompt'u ID ile getir (fallback: key ile)
+      getPromptByID: (promptID) => {
+        const state = get();
+        
+        // Custom prompts'ta ara
+        for (const category of Object.keys(state.customPrompts)) {
+          for (const [key, prompt] of Object.entries(state.customPrompts[category])) {
+            if (prompt.id === promptID) {
+              return { category, key, prompt };
+            }
+          }
+        }
+        
+        // Default prompts'ta ara
+        for (const category of Object.keys(state.defaultPrompts)) {
+          for (const [key, prompt] of Object.entries(state.defaultPrompts[category])) {
+            if (prompt.id === promptID) {
+              return { category, key, prompt };
+            }
+          }
+        }
+        
+        return null;
+      },
 
       getActivePrompt: (category) => {
         const activeType = get().activePrompts[category];
@@ -1435,15 +1713,26 @@ export const usePromptStore = create(
 
       // Prompt kaydetme
       saveCustomPrompt: (category, type, prompt) => {
+        // Ensure prompt has ID
+        const promptWithID = {
+          ...prompt,
+          id: prompt.id || generateUUID(),
+          createdAt: prompt.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
         set((state) => ({
           customPrompts: {
             ...state.customPrompts,
             [category]: {
               ...state.customPrompts[category],
-              [type]: prompt
+              [type]: promptWithID
             }
           }
         }));
+        
+        console.log(`✅ Prompt saved with ID: ${promptWithID.id}`);
+        return promptWithID.id;
       },
 
       // Aktif prompt değiştirme
@@ -1479,8 +1768,11 @@ export const usePromptStore = create(
         const all = get().getAllPrompts(category);
         return Object.keys(all).map(key => ({
           key,
+          id: all[key].id, // Prompt ID eklendi
           name: all[key].name,
-          isCustom: !get().defaultPrompts[category]?.[key]
+          isCustom: !get().defaultPrompts[category]?.[key],
+          createdAt: all[key].createdAt,
+          updatedAt: all[key].updatedAt
         }));
       },
 
@@ -1492,34 +1784,411 @@ export const usePromptStore = create(
             [category]: {}
           }
         }));
+      },
+      
+      // 📂 Kategori yönetimi
+      getCategories: () => {
+        return CATEGORY_DEFINITIONS;
+      },
+      
+      getCategoryInfo: (category) => {
+        return CATEGORY_DEFINITIONS[category] || null;
+      },
+      
+      // Promptları tag'e göre filtrele
+      getPromptsByTag: (tag) => {
+        const state = get();
+        const results = [];
+        
+        // Tüm kategorileri tara
+        Object.keys(state.defaultPrompts).forEach(category => {
+          const prompts = get().getAllPrompts(category);
+          Object.entries(prompts).forEach(([key, prompt]) => {
+            if (prompt.tags && prompt.tags.includes(tag)) {
+              results.push({
+                category,
+                key,
+                prompt,
+                id: prompt.id
+              });
+            }
+          });
+        });
+        
+        return results;
+      },
+      
+      // Promptları usedBy'a göre filtrele
+      getPromptsByModule: (moduleName) => {
+        const state = get();
+        const results = [];
+        
+        Object.keys(state.defaultPrompts).forEach(category => {
+          const prompts = get().getAllPrompts(category);
+          
+          Object.entries(prompts).forEach(([key, prompt]) => {
+            if (prompt.usedBy && prompt.usedBy.includes(moduleName)) {
+              results.push({
+                category,
+                key,
+                prompt,
+                id: prompt.id
+              });
+            }
+          });
+        });
+        
+        return results;
+      },
+      
+      // Tüm tag'leri listele
+      getAllTags: () => {
+        const state = get();
+        const tags = new Set();
+        
+        Object.values(state.defaultPrompts).forEach(categoryPrompts => {
+          Object.values(categoryPrompts).forEach(prompt => {
+            if (prompt.tags) {
+              prompt.tags.forEach(tag => tags.add(tag));
+            }
+          });
+        });
+        
+        Object.values(state.customPrompts).forEach(categoryPrompts => {
+          Object.values(categoryPrompts).forEach(prompt => {
+            if (prompt.tags) {
+              prompt.tags.forEach(tag => tags.add(tag));
+            }
+          });
+        });
+        
+        return Array.from(tags).sort();
+      },
+
+      // 📤 Export all prompts (default + custom) to JSON
+      exportAllPrompts: () => {
+        const state = get();
+        
+        console.log('🔍 Export Debug - State:', {
+          hasDefaultPrompts: !!state.defaultPrompts,
+          hasCustomPrompts: !!state.customPrompts,
+          defaultKeys: state.defaultPrompts ? Object.keys(state.defaultPrompts) : [],
+          customKeys: state.customPrompts ? Object.keys(state.customPrompts) : []
+        });
+        
+        // Her kategori için default + custom promptları birleştir
+        const allPrompts = {};
+        const categories = ['analysis', 'grammar', 'speed_reading', 'storyboard', 'cinematography', 'production'];
+        
+        categories.forEach(category => {
+          const defaultCat = state.defaultPrompts[category] || {};
+          const customCat = state.customPrompts[category] || {};
+          
+          allPrompts[category] = {
+            ...defaultCat,  // Default promptlar
+            ...customCat     // Custom promptlar (üzerine yazar)
+          };
+          
+          console.log(`📊 Category ${category}: ${Object.keys(defaultCat).length} default + ${Object.keys(customCat).length} custom = ${Object.keys(allPrompts[category]).length} total`);
+        });
+        
+        // Toplam prompt sayısını hesapla
+        const totalPrompts = Object.values(allPrompts).reduce(
+          (sum, cat) => sum + Object.keys(cat).length, 0
+        );
+        
+        const exportData = {
+          version: '2.0',
+          exportDate: new Date().toISOString(),
+          exportType: 'all',
+          prompts: allPrompts,  // Tüm promptlar (default + custom)
+          activePrompts: state.activePrompts,
+          metadata: {
+            totalPrompts: totalPrompts,
+            customPrompts: Object.values(state.customPrompts).reduce(
+              (sum, cat) => sum + Object.keys(cat).length, 0
+            ),
+            defaultPrompts: Object.values(state.defaultPrompts).reduce(
+              (sum, cat) => sum + Object.keys(cat).length, 0
+            ),
+            categories: categories
+          }
+        };
+        
+        // Create downloadable JSON
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        // Generate filename
+        const timestamp = new Date().toISOString().split('T')[0];
+        const filename = `MGXReader_AllPrompts_${timestamp}.json`;
+        
+        // Trigger download
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        
+        // Cleanup
+        URL.revokeObjectURL(url);
+        
+        console.log(`✅ ${totalPrompts} prompt exported: ${filename}`);
+        console.log('📊 Export içeriği örneği:');
+        Object.entries(allPrompts).forEach(([cat, prompts]) => {
+          const promptArray = Object.entries(prompts).slice(0, 2);
+          promptArray.forEach(([key, prompt]) => {
+            console.log(`  ${cat}/${key}: usedBy = [${prompt.usedBy?.join(', ') || 'yok'}]`);
+          });
+        });
+        return exportData;
+      },
+
+      // 📥 Import prompts from JSON file
+      importPrompts: (jsonData, options = { merge: true, overwrite: false }) => {
+        try {
+          const state = get();
+          let importedCount = 0;
+          
+          console.log('🔍 Import Debug:', {
+            version: jsonData.version,
+            hasPrompts: !!jsonData.prompts,
+            options,
+            categories: jsonData.prompts ? Object.keys(jsonData.prompts) : [],
+            promptKeys: jsonData.prompts?.analysis ? Object.keys(jsonData.prompts.analysis) : []
+          });
+          
+          // Yeni format (v2.0+, v3.0, vb.) - prompts objesi
+          // Version string'i "2.0", "3.0_Pro_Separated" gibi farklı olabilir
+          if (jsonData.prompts && jsonData.version) {
+            let mergedCustomPrompts;
+            
+            // Replace mode: Tüm custom promptları sil, sadece import edilenleri al
+            if (options.overwrite) {
+              console.log('🔄 Replace mode aktif - tüm custom promptlar silinecek');
+              mergedCustomPrompts = createEmptyCustomPrompts();
+              
+              // Import edilen her prompt custom olarak kaydedilecek
+              Object.entries(jsonData.prompts).forEach(([category, prompts]) => {
+                if (!mergedCustomPrompts[category]) {
+                  mergedCustomPrompts[category] = {};
+                }
+                
+                Object.entries(prompts).forEach(([key, prompt]) => {
+                  // Ensure imported prompt has ID and preserve usedBy
+                  const promptWithID = ensurePromptID(
+                    { ...prompt }, 
+                    `${category}_${key}`
+                  );
+                  mergedCustomPrompts[category][key] = promptWithID;
+                  importedCount++;
+                  console.log(`✓ Imported with ID: ${promptWithID.id} (${category}/${key}), usedBy: [${promptWithID.usedBy?.join(', ') || 'yok'}]`);
+                });
+              });
+            } else {
+              // Merge mode: Mevcut custom promptları koru, yeni olanları ekle
+              console.log('🔀 Merge mode aktif - sadece yeni/değişmiş promptlar eklenecek');
+              mergedCustomPrompts = { ...state.customPrompts };
+              
+              Object.entries(jsonData.prompts).forEach(([category, prompts]) => {
+                if (!mergedCustomPrompts[category]) {
+                  mergedCustomPrompts[category] = {};
+                }
+                
+                Object.entries(prompts).forEach(([key, prompt]) => {
+                  const existsInCustom = !!mergedCustomPrompts[category]?.[key];
+                  const isDefaultPrompt = !!state.defaultPrompts[category]?.[key];
+                  
+                  // Eğer custom'da zaten varsa, atla (mevcut ayarları koru)
+                  if (existsInCustom) {
+                    console.log(`⊘ Skipped (already in custom): ${category}/${key}`);
+                    return;
+                  }
+                  
+                  // Custom'da yoksa kontrol et:
+                  if (isDefaultPrompt) {
+                    // Default prompt var - değişmiş mi kontrol et
+                    const defaultPrompt = state.defaultPrompts[category][key];
+                    const isDifferent = JSON.stringify(defaultPrompt) !== JSON.stringify(prompt);
+                    
+                    if (isDifferent) {
+                      // Default'tan farklı - import et (ID'si ile)
+                      const promptWithID = ensurePromptID(
+                        { ...prompt }, 
+                        `${category}_${key}`
+                      );
+                      mergedCustomPrompts[category][key] = promptWithID;
+                      importedCount++;
+                      console.log(`✓ Modified default with ID ${promptWithID.id}: ${category}/${key}`);
+                    } else {
+                      // Default ile aynı - import etme (default kullanılacak)
+                      console.log(`⊘ Skipped (same as default): ${category}/${key}`);
+                    }
+                  } else {
+                    // Tamamen yeni custom prompt - import et (ID'si ile, usedBy korunur)
+                    const promptWithID = ensurePromptID(
+                      { ...prompt }, 
+                      `${category}_${key}`
+                    );
+                    mergedCustomPrompts[category][key] = promptWithID;
+                    importedCount++;
+                    console.log(`✓ New custom prompt with ID ${promptWithID.id}: ${category}/${key}, usedBy: [${promptWithID.usedBy?.join(', ') || 'yok'}]`);
+                  }
+                });
+              });
+            }
+            
+            set({
+              customPrompts: mergedCustomPrompts,
+              activePrompts: options.overwrite 
+                ? (jsonData.activePrompts || getDefaultActivePrompts())
+                : { ...state.activePrompts, ...(jsonData.activePrompts || {}) }
+            });
+            
+            // localStorage'a yazılmasını garantile
+            const newState = get();
+            console.log('💾 State güncellendi:', {
+              customPromptsKeys: Object.keys(newState.customPrompts),
+              activePromptsKeys: Object.keys(newState.activePrompts)
+            });
+            
+            console.log(`✅ ${importedCount} prompts imported successfully (version: ${jsonData.version})`);
+            return { success: true, imported: importedCount };
+          }
+          
+          // Eski format (v1.0) - customPrompts objesi (backward compatibility)
+          if (jsonData.customPrompts) {
+            console.log('📜 Legacy v1.0 format detected');
+            
+            let mergedCustomPrompts;
+            
+            if (options.overwrite) {
+              // Replace mode
+              mergedCustomPrompts = createEmptyCustomPrompts();
+              Object.entries(jsonData.customPrompts).forEach(([category, prompts]) => {
+                if (!mergedCustomPrompts[category]) {
+                  mergedCustomPrompts[category] = {};
+                }
+                Object.entries(prompts).forEach(([key, prompt]) => {
+                  const promptWithID = ensurePromptID({ ...prompt }, `${category}_${key}`);
+                  mergedCustomPrompts[category][key] = promptWithID;
+                  importedCount++;
+                });
+              });
+            } else {
+              // Merge mode
+              mergedCustomPrompts = { ...state.customPrompts };
+              Object.entries(jsonData.customPrompts).forEach(([category, prompts]) => {
+                if (!mergedCustomPrompts[category]) {
+                  mergedCustomPrompts[category] = {};
+                }
+                Object.entries(prompts).forEach(([key, prompt]) => {
+                  if (!mergedCustomPrompts[category][key]) {
+                    const promptWithID = ensurePromptID({ ...prompt }, `${category}_${key}`);
+                    mergedCustomPrompts[category][key] = promptWithID;
+                    importedCount++;
+                  }
+                });
+              });
+            }
+            
+            set({
+              customPrompts: mergedCustomPrompts,
+              activePrompts: options.overwrite 
+                ? (jsonData.activePrompts || getDefaultActivePrompts())
+                : { ...state.activePrompts, ...(jsonData.activePrompts || {}) }
+            });
+            
+            // localStorage'a yazılmasını garantile
+            const newState = get();
+            console.log('💾 State güncellendi (legacy):', {
+              customPromptsKeys: Object.keys(newState.customPrompts),
+              activePromptsKeys: Object.keys(newState.activePrompts)
+            });
+            
+            console.log(`✅ ${importedCount} prompts imported (legacy v1.0 format)`);
+            return { success: true, imported: importedCount };
+          }
+          
+          // Geçersiz format
+          const errorMsg = `Invalid prompt file format.\n\nExpected:\n- Modern format: 'prompts' object with 'version' field (any version)\n- Legacy format: 'customPrompts' object\n\nReceived:\n- Keys: ${JSON.stringify(Object.keys(jsonData))}\n- Version: ${jsonData.version || 'N/A'}\n- Has prompts: ${!!jsonData.prompts}\n- Has customPrompts: ${!!jsonData.customPrompts}`;
+          console.error('❌', errorMsg);
+          throw new Error(errorMsg);
+        } catch (error) {
+          console.error('❌ Import failed:', error);
+          console.error('📋 JSON Data preview:', JSON.stringify(jsonData, null, 2).slice(0, 800));
+          return { success: false, error: error.message };
+        }
+      },
+
+      // 📋 Export specific category
+      exportCategory: (category) => {
+        const state = get();
+        
+        // Default + custom promptları birleştir
+        const categoryPrompts = {
+          ...state.defaultPrompts[category],
+          ...state.customPrompts[category]
+        };
+        
+        const exportData = {
+          version: '2.0',
+          category,
+          exportDate: new Date().toISOString(),
+          exportType: 'category',
+          prompts: { [category]: categoryPrompts },
+          activePrompt: state.activePrompts[category],
+          metadata: {
+            totalPrompts: Object.keys(categoryPrompts).length,
+            customPrompts: Object.keys(state.customPrompts[category] || {}).length,
+            defaultPrompts: Object.keys(state.defaultPrompts[category] || {}).length
+          }
+        };
+        
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const timestamp = new Date().toISOString().split('T')[0];
+        const filename = `MGXReader_${category}_${timestamp}.json`;
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        
+        URL.revokeObjectURL(url);
+        
+        console.log(`✅ ${Object.keys(categoryPrompts).length} prompts exported: ${filename}`);
+        return exportData;
       }
     }),
-      {
-         name: 'mgx-prompt-store',
-         version: 2,
-         partialize: (state) => ({
-            customPrompts: state.customPrompts,
-            activePrompts: state.activePrompts
-         }),
-         migrate: (persistedState, version) => {
-            if (!persistedState) {
-               return {
-                  customPrompts: createEmptyCustomPrompts(),
-                  activePrompts: getDefaultActivePrompts()
-               };
-            }
+    {
+      name: 'mgx-prompt-store',
+      version: 2,
+      partialize: (state) => ({
+        customPrompts: state.customPrompts,
+        activePrompts: state.activePrompts
+      }),
+      migrate: (persistedState, version) => {
+        if (!persistedState) {
+          return {
+            customPrompts: createEmptyCustomPrompts(),
+            activePrompts: getDefaultActivePrompts()
+          };
+        }
 
-            return {
-               customPrompts: {
-                  analysis: persistedState.customPrompts?.analysis || {},
-                  grammar: persistedState.customPrompts?.grammar || {},
-                  speed_reading: persistedState.customPrompts?.speed_reading || {},
-                  storyboard: persistedState.customPrompts?.storyboard || {}
-               },
-               activePrompts: persistedState.activePrompts || getDefaultActivePrompts()
-            };
-         }
+        return {
+          customPrompts: {
+            analysis: persistedState.customPrompts?.analysis || {},
+            grammar: persistedState.customPrompts?.grammar || {},
+            speed_reading: persistedState.customPrompts?.speed_reading || {},
+            storyboard_styles: persistedState.customPrompts?.storyboard_styles || persistedState.customPrompts?.storyboard || {}
+          },
+          activePrompts: persistedState.activePrompts || getDefaultActivePrompts()
+        };
       }
+    }
   )
 );
 

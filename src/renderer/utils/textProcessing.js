@@ -109,7 +109,8 @@ export function parseScenes(text) {
   if (!text) return [];
 
   const scenes = [];
-  const sceneHeaderRegex = /^(INT\.|EXT\.|INT\/EXT\.|I\/E\.)\s+(.+?)\s*-\s*(DAY|NIGHT|MORNING|AFTERNOON|EVENING|DUSK|DAWN|LATER|CONTINUOUS)/gim;
+  // Çoklu format sahne başlığı desteği: INT./EXT. + çoklu dil SAHNE/SCENE/SZENE/SCÈNE/ESCENA/SCENA/CENA + rakam (boşluklu/boşluksuz)
+  const sceneHeaderRegex = /^(?:(INT\.|EXT\.|INT\/EXT\.|I\/E\.)\s+(.+?)\s*-\s*(DAY|NIGHT|MORNING|AFTERNOON|EVENING|DUSK|DAWN|LATER|CONTINUOUS|GÜNDÜZ|GECE|SABAH|AKŞAM|ÖĞLEN)|(?:SAHNE|SCENE|SZENE|SCÈNE|ESCENA|SCENA|CENA)\s*(\d+))/gim;
 
   const lines = text.split('\n');
   let currentScene = null;
@@ -126,15 +127,32 @@ export function parseScenes(text) {
         scenes.push(currentScene);
       }
 
+      // Parse scene info based on which group matched
+      let intExt = 'UNKNOWN';
+      let location = '';
+      let timeOfDay = '';
+
+      if (match[1]) {
+        // INT./EXT. format matched (groups 1, 2, 3)
+        intExt = match[1].replace('.', '');
+        location = match[2] ? match[2].trim() : '';
+        timeOfDay = match[3] || '';
+      } else if (match[4]) {
+        // SAHNE/SCENE + number format matched (group 4)
+        intExt = 'SCENE';
+        location = `Scene ${match[4]}`;
+        timeOfDay = '';
+      }
+
       // Start new scene
       currentScene = {
         sceneNumber: scenes.length + 1,
         header: line.trim(),
         startLine: lineIndex,
         endLine: null,
-        intExt: match[1].replace('.', ''),
-        location: match[2].trim(),
-        timeOfDay: match[3],
+        intExt: intExt,
+        location: location,
+        timeOfDay: timeOfDay,
         text: '',
       };
     }

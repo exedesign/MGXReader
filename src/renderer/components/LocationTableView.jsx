@@ -20,6 +20,8 @@ const LocationTableView = ({
     search: ''
   });
   const [expandedLocationRow, setExpandedLocationRow] = useState(null);
+  const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
 
   // Apply filters
   const getFilteredLocations = () => {
@@ -179,9 +181,80 @@ const LocationTableView = ({
           )}
         </div>
         
-        {/* Results Count */}
-        <div className="mt-2 text-xs text-cinema-text-dim">
-          {filteredLocations.length} mekan gösteriliyor {filteredLocations.length !== locations.length && `(toplam ${locations.length})`}
+        {/* Results Count & Bulk Actions */}
+        <div className="mt-2 flex items-center justify-between">
+          <div className="text-xs text-cinema-text-dim">
+            {filteredLocations.length} mekan gösteriliyor {filteredLocations.length !== locations.length && `(toplam ${locations.length})`}
+          </div>
+          
+          {/* Bulk Generate Button */}
+          {!bulkGenerating && filteredLocations.some(({loc: location}) => {
+            const locName = typeof location === 'string' ? location : (location.name || location);
+            return !locationApprovals[locName]?.image;
+          }) && (
+            <button
+              onClick={() => {
+                const locationsToGenerate = filteredLocations.filter(({loc: location}) => {
+                  const locName = typeof location === 'string' ? location : (location.name || location);
+                  return !locationApprovals[locName]?.image;
+                });
+                
+                if (locationsToGenerate.length === 0) {
+                  alert('Tüm mekanların görseli zaten oluşturulmuş!');
+                  return;
+                }
+                
+                const confirmMsg = `${locationsToGenerate.length} mekan için toplu görsel üretimi başlatılacak.\n\n⚠️ ÖNEMLİ:\n• Bu işlem uzun sürecek (mekan başına ~30-60 saniye)\n• API kotanızı kullanacak\n• İşlem sırasında diğer işlemler yapabilirsiniz\n\nDevam etmek istiyor musunuz?`;
+                
+                if (!confirm(confirmMsg)) return;
+                
+                setBulkGenerating(true);
+                setBulkProgress({ current: 0, total: locationsToGenerate.length });
+                
+                // İlk mekanı aç
+                if (locationsToGenerate.length > 0) {
+                  setExpandedLocationRow(locationsToGenerate[0].originalIndex);
+                }
+              }}
+              className="px-4 py-2 bg-cinema-accent hover:bg-cinema-accent-dark text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2 shadow-lg"
+              title="Görseli olmayan tüm mekanları toplu üret"
+            >
+              <span>🎨</span>
+              <span>Tüm Mekanları Toplu Üret</span>
+              <span className="bg-white/20 px-2 py-0.5 rounded text-xs font-bold">
+                {filteredLocations.filter(({loc: location}) => {
+                  const locName = typeof location === 'string' ? location : (location.name || location);
+                  return !locationApprovals[locName]?.image;
+                }).length}
+              </span>
+            </button>
+          )}
+          
+          {/* Bulk Generation Progress */}
+          {bulkGenerating && (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <div className="animate-spin text-cinema-accent text-xl">⟳</div>
+                <div className="text-sm text-cinema-text">
+                  <span className="font-bold text-cinema-accent">{bulkProgress.current}</span>
+                  <span className="text-cinema-text-dim"> / {bulkProgress.total}</span>
+                  <span className="text-cinema-text-dim ml-1">mekan üretiliyor...</span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm('Toplu üretimi durdurmak istiyor musunuz?\n\nŞu ana kadar üretilen görseller kaydedilecek.')) {
+                    setBulkGenerating(false);
+                    setBulkProgress({ current: 0, total: 0 });
+                    setExpandedLocationRow(null);
+                  }
+                }}
+                className="px-3 py-1 bg-red-600/80 hover:bg-red-600 text-white rounded text-xs transition-colors"
+              >
+                ⏸️ Durdur
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -281,35 +354,63 @@ const LocationTableView = ({
                     
                     {/* Characters */}
                     <td className="px-4 py-3">
-                      {charactersInLocation.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {charactersInLocation.slice(0, 2).map(charRef => (
-                            <span key={charRef.name} className="text-xs bg-cinema-accent/20 text-cinema-accent px-2 py-0.5 rounded">
-                              {charRef.name}
-                            </span>
-                          ))}
-                          {charactersInLocation.length > 2 && (
-                            <span className="text-xs text-cinema-text-dim">+{charactersInLocation.length - 2}</span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-cinema-text-dim">—</span>
-                      )}
+                      {(() => {
+                        // Önce location objesinden mainCharacters'ı dene
+                        const mainChars = typeof location === 'object' && location.mainCharacters ? location.mainCharacters : [];
+                        // Sonra extractedScenes'den karakterleri al
+                        const sceneChars = getCharactersForLocation(locName);
+                        
+                        // İki kaynağı birleştir ve unique yap
+                        const allChars = [...new Set([...mainChars, ...sceneChars.map(c => c.name)])];
+                        
+                        return allChars.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {allChars.slice(0, 3).map(charName => (
+                              <span key={charName} className="text-xs bg-cinema-accent/20 text-cinema-accent px-2 py-0.5 rounded font-medium">
+                                🎭 {charName}
+                              </span>
+                            ))}
+                            {allChars.length > 3 && (
+                              <span className="text-xs text-cinema-accent font-bold">+{allChars.length - 3}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-cinema-text-dim">—</span>
+                        );
+                      })()}
                     </td>
                     
                     {/* Scene Count */}
                     <td className="px-4 py-3">
                       {(() => {
-                        const scenes = getScenesForLocation(locName);
-                        return scenes.length > 0 ? (
+                        // Önce location objesinden scenes'i dene
+                        const locScenes = typeof location === 'object' && location.scenes ? location.scenes : [];
+                        // Sonra extractedScenes'den sahne listesi al
+                        const extractedScenesList = getScenesForLocation(locName);
+                        
+                        // İki kaynağı birleştir
+                        const allScenes = locScenes.length > 0 ? locScenes : extractedScenesList;
+                        
+                        return allScenes.length > 0 ? (
                           <div className="space-y-1">
-                            {scenes.slice(0, 3).map(scene => (
-                              <div key={scene.number} className="text-xs bg-cinema-accent/10 text-cinema-accent px-2 py-0.5 rounded">
-                                Sahne {scene.number}
+                            {allScenes.slice(0, 2).map((scene, idx) => (
+                              <div 
+                                key={scene.sceneNumber || scene.number || idx} 
+                                className="text-xs bg-purple-600/20 text-purple-400 px-2 py-0.5 rounded font-medium"
+                                title={scene.sceneTitle || scene.title || scene.action || ''}
+                              >
+                                🎬 Sahne {scene.sceneNumber || scene.number}
+                                {scene.characters && scene.characters.length > 0 && (
+                                  <span className="text-purple-300/70 ml-1">
+                                    ({scene.characters.length})
+                                  </span>
+                                )}
                               </div>
                             ))}
-                            {scenes.length > 3 && (
-                              <div className="text-xs text-cinema-text-dim">+{scenes.length - 3} daha</div>
+                            {allScenes.length > 2 && (
+                              <div className="text-xs text-purple-400 font-bold">
+                                +{allScenes.length - 2} sahne daha
+                              </div>
                             )}
                           </div>
                         ) : (
@@ -353,9 +454,8 @@ const LocationTableView = ({
                           <>
                             <button
                               onClick={() => {
-                                if (onLocationDetailClick) {
-                                  onLocationDetailClick(location);
-                                }
+                                // Görsel üretim panelini aç
+                                setExpandedLocationRow(index);
                               }}
                               className="p-1.5 bg-cinema-accent hover:bg-cinema-accent-dark text-white rounded text-xs transition-colors"
                               title="AI ile görsel üret"
@@ -419,9 +519,20 @@ const LocationTableView = ({
               🎨 {typeof locations[expandedLocationRow] === 'string' 
                 ? locations[expandedLocationRow] 
                 : locations[expandedLocationRow].name} - Görsel Üretimi
+              {bulkGenerating && (
+                <span className="ml-3 text-sm text-cinema-text-dim">
+                  ({bulkProgress.current + 1} / {bulkProgress.total})
+                </span>
+              )}
             </h4>
             <button
-              onClick={() => setExpandedLocationRow(null)}
+              onClick={() => {
+                setExpandedLocationRow(null);
+                if (bulkGenerating) {
+                  setBulkGenerating(false);
+                  setBulkProgress({ current: 0, total: 0 });
+                }
+              }}
               className="text-cinema-text-dim hover:text-cinema-text text-xl"
             >
               ✕
@@ -433,7 +544,34 @@ const LocationTableView = ({
               : locations[expandedLocationRow]}
             onImageGenerated={(name, imageData) => {
               onImageGenerated(name, imageData);
-              setExpandedLocationRow(null);
+              
+              // Toplu üretim modundaysak
+              if (bulkGenerating) {
+                const newCurrent = bulkProgress.current + 1;
+                setBulkProgress({ ...bulkProgress, current: newCurrent });
+                
+                // Bir sonraki görseli olmayan mekanı bul
+                const locationsToGenerate = filteredLocations.filter(({loc: location}) => {
+                  const locName = typeof location === 'string' ? location : (location.name || location);
+                  return !locationApprovals[locName]?.image;
+                });
+                
+                // Eğer başka mekan varsa devam et
+                if (newCurrent < bulkProgress.total && locationsToGenerate.length > newCurrent) {
+                  setTimeout(() => {
+                    setExpandedLocationRow(locationsToGenerate[newCurrent].originalIndex);
+                  }, 1000); // 1 saniye ara ver
+                } else {
+                  // Tamamlandı
+                  setBulkGenerating(false);
+                  setBulkProgress({ current: 0, total: 0 });
+                  setExpandedLocationRow(null);
+                  alert(`✅ Toplu üretim tamamlandı!\n\n${newCurrent} mekan görseli başarıyla oluşturuldu.`);
+                }
+              } else {
+                // Normal mod - sadece kapat
+                setExpandedLocationRow(null);
+              }
             }}
             characterReferences={getCharactersForLocation(
               typeof locations[expandedLocationRow] === 'string' 

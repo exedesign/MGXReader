@@ -330,7 +330,7 @@ export default function CharacterVisualization({
                         <span className="text-cinema-text-dim font-semibold">İlişkiler:</span>
                         <ul className="text-cinema-text text-xs mt-1 space-y-1 list-disc list-inside">
                           {Array.isArray(char.relationships) 
-                            ? char.relationships.map((rel, i) => <li key={i}>{rel}</li>)
+                            ? char.relationships.map((rel, i) => <li key={`rel-${char.name || char.id}-${i}`}>{rel}</li>)
                             : <li>{char.relationships}</li>
                           }
                         </ul>

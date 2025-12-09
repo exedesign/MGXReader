@@ -9,20 +9,13 @@ import AIHandler from '../utils/aiHandler';
 import PDFExportService from '../utils/pdfExportService';
 import { analysisStorageService } from '../utils/analysisStorageService';
 import { parseCharacterAnalysis, optimizeForStoryboard, generateCharacterSummary } from '../utils/characterAnalysisParser';
-
-// Storyboard için gerekli analiz türleri - sadece görsel hikaye anlatımı için gerekli olanlar
-export const STORYBOARD_REQUIRED_ANALYSIS = [
-  'character',          // Karakter analizi - karakterlerin görsel tanımları ve özellikler için
-  'location_analysis',  // Mekan analizi - lokasyonların görsel karakteri ve atmosferi için
-  'cinematography',     // Görüntü yönetimi - kamera açıları, kompozisyon ve çerçeveleme için
-  'visual_style',       // Görsel stil - tonlama, atmosfer ve genel görsel yaklaşım için
-  'structure'           // Yapısal analiz - sahne akışı ve sekans organizasyonu için
-];
+import DynamicDataTable from './DynamicDataTable';
+// jsonValidator kaldırıldı - artık AI'dan gelen JSON'a müdahale edilmiyor
 
 export default function AnalysisPanel() {
   const { cleanedText, scriptText, analysisData, setAnalysisData, isAnalyzing, analysisProgress, setAnalysisProgress, setIsAnalyzing, clearAnalysisProgress, setAnalysisAbortController, cancelAnalysis, isStoryboardProcessing, storyboardProgress } = useScriptStore();
   const { isConfigured, provider, getAIHandler } = useAIStore();
-  const { getActivePrompt, getPromptTypes, activePrompts, getPrompt } = usePromptStore();
+  const { getActivePrompt, getPromptTypes, activePrompts, getPrompt, getPromptsByModule } = usePromptStore();
   const { blacklist } = useReaderStore();
   const { t } = useTranslation();
   
@@ -55,17 +48,42 @@ export default function AnalysisPanel() {
   const [savedAnalyses, setSavedAnalyses] = useState([]);
   const [loadingSavedAnalyses, setLoadingSavedAnalyses] = useState(false);
   
-  // Multi-analysis selection - Dynamically initialize with all available types
+  // Multi-analysis selection - Başlangıçta HİÇBİRİ seçili değil
   const [selectedAnalysisTypes, setSelectedAnalysisTypes] = useState(() => {
     const allTypes = {};
-    // Get all available analysis types
-    const types = getPromptTypes('analysis');
-    types.forEach(({ key }) => {
-      // Default selection: main analysis types are selected, llama variants are unselected
-      allTypes[key] = !key.includes('llama');
+    // Get prompts assigned to analysis_panel module
+    const analysisPanelPrompts = getPromptsByModule('analysis_panel');
+    
+    analysisPanelPrompts.forEach(({ key }) => {
+      // Başlangıçta hiçbiri seçili değil
+      allTypes[key] = false;
     });
+    
+    console.log('📊 Analysis Panel başlatıldı:', analysisPanelPrompts.length, 'analiz mevcut (hiçbiri seçili değil)');
     return allTypes;
   });
+  
+  // PromptStore değişikliklerini dinle ve selectedAnalysisTypes'ı güncelle
+  useEffect(() => {
+    const analysisPanelPrompts = getPromptsByModule('analysis_panel');
+    const newTypes = {};
+    
+    analysisPanelPrompts.forEach(({ key }) => {
+      // Mevcut seçimi koru, yoksa default (non-llama seçili)
+      newTypes[key] = selectedAnalysisTypes[key] !== undefined 
+        ? selectedAnalysisTypes[key] 
+        : !key.includes('llama');
+    });
+    
+    // Sadece değişiklik varsa güncelle
+    const currentKeys = Object.keys(selectedAnalysisTypes).sort();
+    const newKeys = Object.keys(newTypes).sort();
+    
+    if (JSON.stringify(currentKeys) !== JSON.stringify(newKeys)) {
+      console.log('📊 Analysis Panel seçimleri güncellendi:', newKeys.length, 'analiz türü');
+      setSelectedAnalysisTypes(newTypes);
+    }
+  }, [getPromptsByModule]);
 
   // Track current script and load existing analysis data
   useEffect(() => {
@@ -135,18 +153,32 @@ export default function AnalysisPanel() {
       if (window.storyboardRequestedAnalysis) {
         console.log('🎬 Storyboard için gerekli analizler otomatik seçiliyor...');
         
-        // Sadece storyboard için gerekli analizleri seç
-        const newSelection = {};
-        const types = getPromptTypes('analysis');
-        types.forEach(({ key }) => {
-          // Sadece STORYBOARD_REQUIRED_ANALYSIS'deki analizleri seç
-          newSelection[key] = STORYBOARD_REQUIRED_ANALYSIS.includes(key);
+        // Storyboard modülü için tanımlanmış promptları al
+        const storyboardPrompts = getPromptsByModule('storyboard');
+        const storyboardKeys = storyboardPrompts.map(p => p.key);
+        
+        console.log('🎯 Storyboard için gerekli analizler:', storyboardKeys);
+        console.log('📊 Toplam:', storyboardKeys.length, 'analiz seçilecek');
+        
+        // Mevcut seçimleri koru, sadece storyboard analizlerini güncelle
+        setSelectedAnalysisTypes(prevSelection => {
+          const newSelection = { ...prevSelection };
+          
+          // Önce TÜM analizleri false yap
+          Object.keys(newSelection).forEach(key => {
+            newSelection[key] = false;
+          });
+          
+          // Sadece storyboard için gerekli olanları true yap
+          storyboardKeys.forEach(key => {
+            newSelection[key] = true;
+          });
+          
+          console.log('✅ Seçilen analizler:', Object.keys(newSelection).filter(k => newSelection[k]));
+          console.log('📋 Toplam seçim sayısı:', Object.keys(newSelection).filter(k => newSelection[k]).length);
+          
+          return newSelection;
         });
-        
-        console.log('📋 Seçilen analizler:', Object.keys(newSelection).filter(k => newSelection[k]));
-        console.log('🎯 Storyboard için gerekli analizler:', STORYBOARD_REQUIRED_ANALYSIS);
-        
-        setSelectedAnalysisTypes(newSelection);
         
         // Flag'i temizle ve otomatik başlatma flag'ini set et
         window.storyboardRequestedAnalysis = false;
@@ -298,7 +330,7 @@ export default function AnalysisPanel() {
             tempAnalysisData,
             { 
               isPartialAnalysis: true,
-              projectName: scriptFileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+              projectName: `${scriptFileName.replace(/\.(pdf|txt|fountain)$/i, '')}_${analysisType}`,
               analysisType: `partial_${completed + 1}of${totalAnalyses}`,
               originalFileName: currentScript?.originalFileName || scriptFileName,
               fileType: currentScript?.fileType || 'unknown',
@@ -345,9 +377,11 @@ export default function AnalysisPanel() {
     try {
       const scriptFileName = currentScript?.fileName || currentScript?.name || 'Unknown_Script';
       if (currentScript && scriptFileName) {
+        // Tüm tamamlanan analiz tiplerini dosya adına ekle
+        const completedTypes = Object.keys(multiResults).join('_');
         await analysisStorageService.saveAnalysis(text, scriptFileName, finalAnalysisData, {
           fileName: scriptFileName,
-          projectName: scriptFileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+          projectName: `${scriptFileName.replace(/\.(pdf|txt|fountain)$/i, '')}_${completedTypes}`,
           analysisType: 'full',
           originalFileName: currentScript?.originalFileName || scriptFileName,
           fileType: currentScript?.fileType || 'unknown',
@@ -649,7 +683,7 @@ export default function AnalysisPanel() {
               tempAnalysisData,
               { 
                 isPartialAnalysis: true,
-                projectName: scriptFileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+                projectName: `${scriptFileName.replace(/\.(pdf|txt|fountain)$/i, '')}_${analysisType}`,
                 analysisType: `partial_${completed}of${totalAnalyses}`,
                 originalFileName: currentScript?.originalFileName || scriptFileName,
                 fileType: currentScript?.fileType || 'script',
@@ -736,7 +770,7 @@ export default function AnalysisPanel() {
               { 
                 isPartialAnalysis: true, 
                 hasErrors: true,
-                projectName: scriptFileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+                projectName: `${scriptFileName.replace(/\.(pdf|txt|fountain)$/i, '')}_${analysisType}`,
                 analysisType: `partial_error_${completed}of${totalAnalyses}`,
                 originalFileName: currentScript?.originalFileName || scriptFileName,
                 fileType: currentScript?.fileType || 'script',
@@ -835,6 +869,9 @@ export default function AnalysisPanel() {
           analysisLanguage: currentLanguage
         };
         
+        // Tüm tamamlanan analiz tiplerini dosya adına ekle
+        const completedTypes = Object.keys(multiResults).join('_');
+        scriptMetadata.projectName = `${fileName.replace(/\.(pdf|txt|fountain)$/i, '')}_${completedTypes}`;
         await analysisStorageService.saveAnalysis(text, fileName, result, scriptMetadata);
         console.log('✅ Analysis saved to storage with metadata');
         
@@ -1164,8 +1201,10 @@ export default function AnalysisPanel() {
       const currentScript = useScriptStore.getState().getCurrentScript();
       const scriptFileName = currentScript?.fileName || currentScript?.name || 'Unknown_Script';
       const scriptText = currentScript?.cleanedText || currentScript?.scriptText || text;
+      // Tüm tamamlanan analiz tiplerini dosya adına ekle
+      const completedTypes = Object.keys(multiResults).join('_');
       await analysisStorageService.saveAnalysis(scriptText, scriptFileName, finalResults, {
-        projectName: scriptFileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+        projectName: `${scriptFileName.replace(/\.(pdf|txt|fountain)$/i, '')}_${completedTypes}`,
         analysisType: 'full',
         fileName: scriptFileName,
         originalFileName: currentScript?.originalFileName || scriptFileName,
@@ -1538,7 +1577,25 @@ export default function AnalysisPanel() {
                       📝 Standart Analizler
                     </h4>
                     <div className="space-y-1">
-                      {getPromptTypes('analysis').filter(({ key }) => !key.includes('llama')).map(({ key, name }) => (
+                      {getPromptTypes('analysis').filter(({ key }) => !key.includes('llama')).sort((a, b) => {
+                        // Storyboard modülüne atananları en üste al
+                        const storyboardPrompts = getPromptsByModule('storyboard');
+                        const storyboardKeys = storyboardPrompts.map(p => p.key);
+                        
+                        const aInStoryboard = storyboardKeys.includes(a.key);
+                        const bInStoryboard = storyboardKeys.includes(b.key);
+                        
+                        // Her ikisi de storyboard'daysa, storyboard sırasına göre
+                        if (aInStoryboard && bInStoryboard) {
+                          return storyboardKeys.indexOf(a.key) - storyboardKeys.indexOf(b.key);
+                        }
+                        // Sadece a storyboard'daysa, a önce gelsin
+                        if (aInStoryboard) return -1;
+                        // Sadece b storyboard'daysa, b önce gelsin
+                        if (bInStoryboard) return 1;
+                        // İkisi de storyboard'da değilse, alfabetik sırala
+                        return a.name.localeCompare(b.name, 'tr');
+                      }).map(({ key, name }) => (
                         <label
                           key={key}
                           className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-all hover:bg-cinema-gray/50 ${
@@ -1650,8 +1707,8 @@ export default function AnalysisPanel() {
                         {analysisData.customResults ? Object.keys(analysisData.customResults).length : 0}
                       </div>
                     </div>
-                    <div className="text-sm text-cinema-text-dim">Özel Sonuçlar</div>
-                    <div className="text-xs text-cinema-accent mt-1">Analizi görmek için tıklayın</div>
+                    <div className="text-sm text-cinema-text-dim">Çoklu Analiz</div>
+                    <div className="text-xs text-cinema-accent mt-1">Tüm analizleri görmek için tıklayın</div>
                   </div>
                   <div className="bg-gradient-to-br from-cinema-dark to-cinema-gray p-5 rounded-lg border border-cinema-gray">
                     <div className="flex items-center gap-3 mb-2">
@@ -1733,20 +1790,8 @@ export default function AnalysisPanel() {
               {/* Enhanced Tab Navigation */}
               <div className="flex gap-1 mb-6 bg-cinema-gray rounded-xl p-1 overflow-x-auto">
                 {[
-                  { key: 'overview', label: t('analysis.tabs.overview'), icon: '📊', count: null, show: !analysisData.isCustomAnalysis },
-                  { key: 'scenes', label: t('analysis.tabs.scenes'), icon: '🎬', count: analysisData.scenes?.length, show: !analysisData.isCustomAnalysis },
-                  { key: 'locations', label: t('analysis.tabs.locations'), icon: '📍', count: analysisData.locations?.length, show: !analysisData.isCustomAnalysis },
-                  { key: 'characters', label: t('analysis.tabs.characters'), icon: '👥', count: analysisData.characters?.length, show: !analysisData.isCustomAnalysis },
-                  { key: 'competitive', label: t('analysis.tabs.competitive'), icon: '🏆', count: null, show: !analysisData.isCustomAnalysis && analysisData.competitiveAnalysis },
-                  { key: 'geographic', label: t('analysis.tabs.geographic'), icon: '🌍', count: null, show: !analysisData.isCustomAnalysis && analysisData.geographicAnalysis },
-                  { key: 'trend', label: t('analysis.tabs.trend'), icon: '📈', count: null, show: !analysisData.isCustomAnalysis && analysisData.trendAnalysis },
-                  { key: 'risk', label: t('analysis.tabs.risk'), icon: '⚖️', count: null, show: !analysisData.isCustomAnalysis && analysisData.riskOpportunityAnalysis },
-                  { key: 'equipment', label: t('analysis.tabs.equipment'), icon: '🎥', count: analysisData.equipment?.length, show: !analysisData.isCustomAnalysis },
-                  { key: 'vfx', label: t('analysis.tabs.vfx'), icon: '✨', count: analysisData.vfxRequirements?.length || analysisData.sfxRequirements?.length, show: !analysisData.isCustomAnalysis },
-                  { key: 'production', label: t('analysis.tabs.virtualProduction'), icon: '🎮', count: null, show: !analysisData.isCustomAnalysis },
-                  { key: 'evaluation', label: t('analysis.tabs.evaluation'), icon: '📝', count: null, show: !analysisData.isCustomAnalysis },
-                  { key: 'audience', label: t('analysis.tabs.audience'), icon: '🎯', count: null, show: !analysisData.isCustomAnalysis },
-                  { key: 'custom', label: t('analysis.tabs.customResults'), icon: '🎯', count: analysisData.customResults ? Object.keys(analysisData.customResults).length : 0, show: analysisData.isCustomAnalysis },
+                  { key: 'overview', label: 'Genel Bakış', icon: '📊', count: null, show: true },
+                  { key: 'custom', label: 'Özel Sonuçlar', icon: '🎯', count: analysisData.customResults ? Object.keys(analysisData.customResults).length : 0, show: analysisData.isCustomAnalysis },
                   { key: 'saved', label: 'Kaydedilmiş Analizler', icon: '💾', count: savedAnalyses.length, show: true }
                 ].filter(tab => tab.show !== false).map((tab) => (
                   <button
@@ -2345,13 +2390,94 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
 
   const availableResults = Object.keys(customResults);
 
+  // 🔍 JSON VALIDATION & FIXING - Tüm analizleri doğrula
+  const [validatedResults, setValidatedResults] = React.useState(customResults || {});
+  const [validationReport, setValidationReport] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!customResults || typeof customResults !== 'object') {
+      setValidatedResults({});
+      setValidationReport(null);
+      return;
+    }
+    
+    const keys = Object.keys(customResults);
+    if (keys.length === 0) {
+      setValidatedResults({});
+      setValidationReport(null);
+      return;
+    }
+    
+    // Artık validation yok - AI çıktısı olduğu gibi kullanılıyor
+    console.log(`📊 ${keys.length} analiz yüklendi (validation devre dışı)`);
+    setValidatedResults(customResults);
+    setValidationReport(null);
+  }, [customResults]);
+
+  // Analiz ismini kısalt ve düzenle
+  const shortenAnalysisName = (name) => {
+    if (!name || typeof name !== 'string') return name;
+    
+    // Türkçe karakter mapping
+    const replacements = {
+      'Senaryo Analizi': 'Senaryo',
+      'Kapsamlı Analiz': 'Analiz',
+      'Detaylı Analiz': 'Analiz',
+      'Comprehensive': '',
+      'Analysis': '',
+      'Analizi': '',
+      'İçin': '',
+      'için': ''
+    };
+    
+    let shortened = name;
+    Object.keys(replacements).forEach(key => {
+      shortened = shortened.replace(new RegExp(key, 'gi'), replacements[key]);
+    });
+    
+    // Fazla boşlukları temizle
+    shortened = shortened.replace(/\s+/g, ' ').trim();
+    
+    // Çok uzunsa kısalt (50 karakterden uzun)
+    if (shortened.length > 50) {
+      // Önemli kelimeleri koru
+      const words = shortened.split(' ');
+      if (words.length > 5) {
+        shortened = words.slice(0, 4).join(' ') + '...';
+      } else {
+        shortened = shortened.substring(0, 47) + '...';
+      }
+    }
+    
+    return shortened;
+  };
+
+  // JSON'u renkli göster
+  const formatJSON = (json) => {
+    try {
+      const jsonString = typeof json === 'string' ? json : JSON.stringify(json, null, 2);
+      
+      // Basit syntax highlighting
+      return jsonString
+        .replace(/("[\w_]+"):/g, '<span class="text-blue-400">$1</span>:')  // Keys
+        .replace(/: (".*?")/g, ': <span class="text-green-400">$1</span>')  // String values
+        .replace(/: (\d+)/g, ': <span class="text-yellow-400">$1</span>')   // Numbers
+        .replace(/: (true|false|null)/g, ': <span class="text-purple-400">$1</span>'); // Booleans/null
+    } catch (e) {
+      return json;
+    }
+  };
+
   const getAnalysisIcon = (promptKey) => {
     if (promptKey.includes('character')) return '👥';
+    if (promptKey.includes('location')) return '📍';
     if (promptKey.includes('plot') || promptKey.includes('story')) return '📖';
     if (promptKey.includes('theme')) return '🎭';
     if (promptKey.includes('dialogue')) return '💬';
     if (promptKey.includes('structure')) return '🏗️';
     if (promptKey.includes('production')) return '🎬';
+    if (promptKey.includes('cinematography')) return '🎥';
+    if (promptKey.includes('visual')) return '🎨';
     if (promptKey.includes('virtual')) return '🖥️';
     if (promptKey.includes('market')) return '📊';
     if (promptKey.includes('audience')) return '🎯';
@@ -2377,43 +2503,113 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
     <div>
       {/* Enhanced Header with Statistics */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-cinema-accent mb-2">
-          📊 Çoklu Analiz Sonuçları
+        <h3 className="text-2xl font-bold text-cinema-text mb-4 flex items-center gap-3">
+          <span className="text-3xl">📊</span>
+          <span>Çoklu Analiz Sonuçları</span>
         </h3>
-        <p className="text-cinema-text-dim text-sm mb-4">
-          {availableResults.length} farklı analiz türü sonuçlandı
-        </p>
 
-        {/* Analysis Statistics Panel */}
-        {analysisStats && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="bg-cinema-gray/30 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-cinema-accent">{analysisStats.total}</div>
-              <div className="text-xs text-cinema-text-dim">Toplam Analiz</div>
+        {/* ÖZET: Genel Değerlendirme */}
+        <div className="bg-gradient-to-r from-cinema-gray/50 to-cinema-gray/30 rounded-xl p-6 mb-6 border border-cinema-gray">
+          <h4 className="text-lg font-semibold text-cinema-accent mb-3 flex items-center gap-2">
+            <span>📋</span>
+            <span>Genel Değerlendirme</span>
+          </h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            {/* Sol Kolon: Analiz İstatistikleri */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between bg-cinema-black/30 rounded p-2">
+                <span className="text-cinema-text-dim text-sm">Toplam Analiz:</span>
+                <span className="text-cinema-accent font-bold">{analysisStats?.total || availableResults.length}</span>
+              </div>
+              <div className="flex items-center justify-between bg-cinema-black/30 rounded p-2">
+                <span className="text-cinema-text-dim text-sm">Başarılı:</span>
+                <span className="text-green-400 font-bold">{analysisStats?.completed || availableResults.length}</span>
+              </div>
+              <div className="flex items-center justify-between bg-cinema-black/30 rounded p-2">
+                <span className="text-cinema-text-dim text-sm">Başarı Oranı:</span>
+                <span className="text-cinema-accent font-bold">{analysisStats?.successRate || 100}%</span>
+              </div>
             </div>
-            <div className="bg-cinema-gray/30 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-green-400">{analysisStats.completed}</div>
-              <div className="text-xs text-cinema-text-dim">Başarılı</div>
-            </div>
-            <div className="bg-cinema-gray/30 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-cinema-accent">{analysisStats.successRate}%</div>
-              <div className="text-xs text-cinema-text-dim">Başarı Oranı</div>
-            </div>
-            <div className="bg-cinema-gray/30 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-blue-400">{Math.round(analysisStats.totalWords / 1000)}K</div>
-              <div className="text-xs text-cinema-text-dim">Kelime Sayısı</div>
+            
+            {/* Sağ Kolon: İçerik Bilgileri */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between bg-cinema-black/30 rounded p-2">
+                <span className="text-cinema-text-dim text-sm">Toplam Kelime:</span>
+                <span className="text-blue-400 font-bold">{Math.round((analysisStats?.totalWords || 0) / 1000)}K</span>
+              </div>
+              <div className="flex items-center justify-between bg-cinema-black/30 rounded p-2">
+                <span className="text-cinema-text-dim text-sm">Analiz Tarihi:</span>
+                <span className="text-cinema-text text-sm">{new Date().toLocaleDateString('tr-TR')}</span>
+              </div>
+              <div className="flex items-center justify-between bg-cinema-black/30 rounded p-2">
+                <span className="text-cinema-text-dim text-sm">Durum:</span>
+                <span className="text-green-400 font-bold">✓ Tamamlandı</span>
+              </div>
             </div>
           </div>
-        )}
+          
+          {/* Özet Açıklama */}
+          <div className="bg-cinema-black/20 rounded-lg p-4 border-l-4 border-cinema-accent">
+            <p className="text-cinema-text text-sm leading-relaxed">
+              <span className="font-semibold text-cinema-accent">{availableResults.length} farklı analiz türü</span> başarıyla tamamlandı. 
+              Aşağıda her analiz türünün detaylı sonuçlarını inceleyebilir, JSON formatında dışa aktarabilir 
+              veya başka projelerde kullanabilirsiniz.
+            </p>
+            
+            {/* Validation Status */}
+            {validationReport && validationReport.summary && (
+              <div className="mt-3 pt-3 border-t border-cinema-gray/40">
+                <div className="flex items-center gap-4 text-xs">
+                  {validationReport.summary.validCount > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-green-400">✓</span>
+                      <span className="text-cinema-text-dim">Geçerli:</span>
+                      <span className="text-green-400 font-bold">{validationReport.summary.validCount}</span>
+                    </div>
+                  )}
+                  {validationReport.summary.fixedCount > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-yellow-400">⚙️</span>
+                      <span className="text-cinema-text-dim">Düzeltildi:</span>
+                      <span className="text-yellow-400 font-bold">{validationReport.summary.fixedCount}</span>
+                    </div>
+                  )}
+                  {validationReport.summary.errorCount > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-red-400">⚠️</span>
+                      <span className="text-cinema-text-dim">Hatalı:</span>
+                      <span className="text-red-400 font-bold">{validationReport.summary.errorCount}</span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Düzeltme detayları bilgi notu */}
+                {validationReport.summary.fixedCount > 0 && (
+                  <div className="mt-2 text-xs text-yellow-400/80 bg-yellow-500/5 rounded px-2 py-1.5 border-l-2 border-yellow-400/30">
+                    <span className="font-semibold">🔧 Otomatik Düzeltmeler:</span> Parantez dengeleme, virgül düzeltme, tırnak işaretleri ve syntax hataları otomatik düzeltildi.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* All Results Display - Enhanced Grid Layout */}
       <div className="space-y-4">
         {availableResults.map((promptKey) => {
-          const resultData = customResults[promptKey];
+          const resultData = validatedResults[promptKey] || customResults[promptKey]; // Validated data kullan
           const promptName = resultData?.name || promptKey;
           const resultText = resultData?.result || resultData;
           const isExpanded = expandedResults[promptKey];
+          
+          // Validation durumunu belirle
+          const validationStatus = validationReport && validationReport.valid && validationReport.fixed && validationReport.errors ? (
+            validationReport.valid[promptKey] ? 'valid' :
+            validationReport.fixed[promptKey] ? 'fixed' :
+            validationReport.errors[promptKey] ? 'error' : null
+          ) : null;
 
           return (
             <div key={promptKey} className="bg-cinema-gray rounded-lg border border-cinema-gray-light overflow-hidden">
@@ -2429,27 +2625,53 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                   <div className="text-2xl">
                     {getAnalysisIcon(promptKey)}
                   </div>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h4 className="text-lg font-bold text-cinema-text">
-                        {promptName}
+                      <h4 className="text-lg font-bold text-cinema-text truncate" title={promptName}>
+                        {shortenAnalysisName(promptName)}
                       </h4>
-                      <span className={`text-sm ${getStatusColor(resultData)}`}>
+                      <span className={`text-sm flex-shrink-0 ${getStatusColor(resultData)}`}>
                         {getStatusIcon(resultData)}
                       </span>
+                      
+                      {/* Validation Badge */}
+                      {validationStatus === 'valid' && (
+                        <span 
+                          className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full flex-shrink-0"
+                          title="JSON yapısı doğrulandı ve geçerli"
+                        >
+                          ✓ Geçerli
+                        </span>
+                      )}
+                      {validationStatus === 'fixed' && (
+                        <span 
+                          className="px-2 py-0.5 text-xs bg-yellow-500/20 text-yellow-400 rounded-full flex-shrink-0 cursor-help" 
+                          title={`Otomatik düzeltildi:\n${(validationReport?.fixed?.[promptKey]?.errors || []).slice(0, 3).join('\n')}`}
+                        >
+                          ⚙️ Düzeltildi
+                        </span>
+                      )}
+                      {validationStatus === 'error' && (
+                        <span 
+                          className="px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded-full flex-shrink-0 cursor-help" 
+                          title={`Hatalar:\n${(validationReport?.errors?.[promptKey]?.errors || []).slice(0, 3).join('\n')}`}
+                        >
+                          ⚠️ Hata
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-cinema-text-dim">
-                      <span>
-                        {typeof resultText === 'string' ? `${resultText.substring(0, 80)}...` : 'Analiz tamamlandı'}
+                    <div className="flex items-center gap-4 text-xs text-cinema-text-dim flex-wrap">
+                      <span className="truncate max-w-md" title={typeof resultText === 'string' ? resultText.substring(0, 200) : 'Analiz tamamlandı'}>
+                        {typeof resultText === 'string' ? `${resultText.substring(0, 60)}...` : 'Analiz tamamlandı'}
                       </span>
                       {resultData.wordCount && (
-                        <span className="text-cinema-accent">
-                          {resultData.wordCount} kelime
+                        <span className="text-cinema-accent flex-shrink-0">
+                          📝 {resultData.wordCount} kelime
                         </span>
                       )}
                       {resultData.timestamp && (
-                        <span>
-                          {new Date(resultData.timestamp).toLocaleTimeString('tr-TR', { 
+                        <span className="flex-shrink-0">
+                          🕒 {new Date(resultData.timestamp).toLocaleTimeString('tr-TR', { 
                             hour: '2-digit', 
                             minute: '2-digit' 
                           })}
@@ -2537,82 +2759,192 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                     </div>
                   )}
 
-                  {/* Karakter Analizi - Yapılandırılmış Görünüm */}
-                  {promptKey === 'character' && resultData.parsed && resultData.characters && resultData.characters.length > 0 ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between mb-3">
-                        <h5 className="text-sm font-semibold text-cinema-accent">Karakterler ({resultData.characters.length})</h5>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const json = JSON.stringify(resultData.characters, null, 2);
-                            navigator.clipboard.writeText(json);
-                          }}
-                          className="text-xs px-2 py-1 bg-cinema-gray hover:bg-cinema-gray-light rounded"
-                        >
-                          📋 JSON Olarak Kopyala
-                        </button>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                        {resultData.characters.map((char, idx) => (
-                          <div key={idx} className="bg-cinema-black rounded-lg p-3 border border-cinema-gray/50 hover:border-cinema-accent/30 transition-colors">
-                            <div className="flex items-start gap-3 mb-2">
-                              <div className="text-2xl">🎭</div>
-                              <div className="flex-1">
-                                <h6 className="text-cinema-text font-bold">{char.name || char.displayName}</h6>
-                                {char.role && (
-                                  <span className="text-xs text-cinema-accent bg-cinema-accent/10 px-2 py-0.5 rounded">
-                                    {char.role}
-                                  </span>
-                                )}
-                              </div>
-                              {char.metadata?.completeness && (
-                                <div className="text-xs">
-                                  <span className={`px-2 py-1 rounded ${
-                                    char.metadata.completeness >= 70 ? 'bg-green-500/20 text-green-400' :
-                                    char.metadata.completeness >= 40 ? 'bg-yellow-500/20 text-yellow-400' :
-                                    'bg-red-500/20 text-red-400'
-                                  }`}>
-                                    %{char.metadata.completeness}
-                                  </span>
+                  {/* Analiz İçeriği - Akıllı Rendering */}
+                  {(() => {
+                    // AI'dan gelen data'yı olduğu gibi kullan - PARSE YOK
+                    let parsedData = null;
+                    
+                    // 1. Validated data varsa onu kullan
+                    if (resultData.data) {
+                      parsedData = resultData.data;
+                    } 
+                    // 2. Object ise direkt kullan
+                    else if (typeof resultText === 'object') {
+                      parsedData = resultText;
+                    } 
+                    // 3. String ise - PARSE YAPMA, olduğu gibi göster
+                    // AI ya geçerli JSON üretmiş olmalı, yoksa ham string gösterilecek
+
+                    // Karakter Analizi
+                    if ((promptKey.includes('character') || promptKey.includes('karakter')) && parsedData) {
+                      const characters = parsedData.characters || (Array.isArray(parsedData) ? parsedData : []);
+                      if (characters.length > 0) {
+                        return (
+                          <div className="space-y-3">
+                            <h5 className="text-sm font-semibold text-cinema-accent mb-3">👥 Karakterler ({characters.length})</h5>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                              {characters.map((char, idx) => (
+                                <div key={idx} className="bg-cinema-black rounded-lg p-3 border border-cinema-gray/50">
+                                  <h6 className="text-cinema-text font-bold text-sm mb-1">{char.name || 'İsimsiz'}</h6>
+                                  {char.age && <div className="text-xs text-cinema-text-dim">Yaş: {char.age}</div>}
+                                  {char.physical && <div className="text-xs text-cinema-text-dim mb-1">Fiziksel: {char.physical}</div>}
+                                  {char.personality && <div className="text-xs text-cinema-text">{char.personality}</div>}
                                 </div>
-                              )}
+                              ))}
                             </div>
-                            
-                            {char.physicalDescription && (
-                              <div className="mb-2">
-                                <div className="text-xs text-cinema-text-dim font-semibold mb-1">Fiziksel:</div>
-                                <p className="text-xs text-cinema-text line-clamp-2">{char.physicalDescription}</p>
-                              </div>
-                            )}
-                            
-                            {char.visualPrompt && (
-                              <div className="mt-2 pt-2 border-t border-cinema-gray/30">
-                                <div className="text-xs text-green-400 font-semibold mb-1">🎨 Görsel Prompt:</div>
-                                <p className="text-xs text-cinema-text-dim line-clamp-2 italic">{char.visualPrompt}</p>
-                              </div>
-                            )}
-                            
-                            {char.metadata?.readyForVisualization && (
-                              <div className="mt-2">
-                                <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded">
-                                  ✓ Görselleştirmeye Hazır
-                                </span>
-                              </div>
-                            )}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    /* Ham Analiz Sonucu */
-                    <div className="bg-cinema-black rounded-lg p-4">
-                      <div className="text-cinema-text whitespace-pre-wrap text-sm leading-relaxed">
-                        {typeof resultText === 'string' ? resultText : JSON.stringify(resultText, null, 2)}
-                      </div>
-                    </div>
-                  )}
+                        );
+                      }
+                    }
+
+                    // Mekan Analizi
+                    if ((promptKey.includes('location') || promptKey.includes('mekan')) && parsedData) {
+                      const locations = parsedData.locations || (Array.isArray(parsedData) ? parsedData : []);
+                      if (locations.length > 0) {
+                        return (
+                          <div className="space-y-3">
+                            <h5 className="text-sm font-semibold text-cinema-accent mb-3">📍 Mekanlar ({locations.length})</h5>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                              {locations.map((loc, idx) => (
+                                <div key={idx} className="bg-cinema-black rounded-lg p-3 border border-cinema-gray/50">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-lg">{loc.type === 'interior' ? '🏠' : '🌍'}</span>
+                                    <h6 className="text-cinema-text font-bold text-sm">{loc.name || 'İsimsiz Mekan'}</h6>
+                                  </div>
+                                  {loc.description && <p className="text-xs text-cinema-text-dim mb-2 line-clamp-2">{loc.description}</p>}
+                                  {loc.scenes && <div className="text-xs text-cinema-text">Sahne: {loc.scenes.length || loc.sceneCount || 0}</div>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+                    }
+
+                    // Yapı/Sahne Analizi
+                    if ((promptKey.includes('structure') || promptKey.includes('yapı') || promptKey.includes('scene')) && parsedData) {
+                      const scenes = parsedData.scenes || (Array.isArray(parsedData) ? parsedData : []);
+                      if (scenes.length > 0) {
+                        return (
+                          <div className="space-y-2">
+                            <h5 className="text-sm font-semibold text-cinema-accent mb-3">🎬 Sahneler ({scenes.length})</h5>
+                            {scenes.slice(0, 10).map((scene, idx) => (
+                              <div key={idx} className="bg-cinema-black rounded p-2 border border-cinema-gray/50 text-xs">
+                                <span className="text-cinema-accent font-bold">#{scene.number || idx + 1}</span> {scene.title || scene.location || 'Sahne'}
+                              </div>
+                            ))}
+                            {scenes.length > 10 && <div className="text-xs text-cinema-text-dim text-center">+{scenes.length - 10} sahne daha...</div>}
+                          </div>
+                        );
+                      }
+                    }
+
+                    // parsedData yoksa ham text göster
+                    if (!parsedData) {
+                      return (
+                        <div className="bg-cinema-black rounded-lg p-4">
+                          <pre className="text-cinema-text text-xs whitespace-pre-wrap font-mono overflow-x-auto">
+                            {typeof resultText === 'string' ? resultText : JSON.stringify(resultText, null, 2)}
+                          </pre>
+                        </div>
+                      );
+                    }
+
+                    // 🎯 Column Mapping - Başlıkları güzelleştir
+                    const columnMapping = {
+                      // Sahne analizi
+                      'number': 'Sahne #',
+                      'title': 'Sahne Başlığı',
+                      'location': 'Mekan',
+                      'intExt': 'İç/Dış',
+                      'timeOfDay': 'Zaman',
+                      'characters': 'Karakterler',
+                      'content': 'İçerik',
+                      'description': 'Açıklama',
+                      'duration': 'Süre',
+                      'mood': 'Atmosfer',
+                      'visualStyle': 'Görsel Stil',
+                      // Karakter analizi
+                      'name': 'İsim',
+                      'age': 'Yaş',
+                      'physical': 'Fiziksel',
+                      'personality': 'Kişilik',
+                      'style': 'Stil',
+                      'role': 'Rol',
+                      // Mekan analizi
+                      'type': 'Tip',
+                      'atmosphere': 'Atmosfer',
+                      'lighting': 'Işık',
+                      'colors': 'Renkler',
+                      'scenes': 'Sahneler',
+                      'sceneCount': 'Sahne Sayısı'
+                    };
+
+                    // Varsayılan: DynamicDataTable ile göster
+                    return (
+                      <>
+                        {/* Array ise DynamicDataTable */}
+                        {Array.isArray(parsedData) && parsedData.length > 0 && (
+                          <DynamicDataTable 
+                            data={parsedData}
+                            columnMapping={columnMapping}
+                            maxChipsPerCell={5}
+                            showRowNumbers={true}
+                            compactMode={false}
+                          />
+                        )}
+                        
+                        {/* Object ise içindeki array'leri bul ve göster */}
+                        {!Array.isArray(parsedData) && typeof parsedData === 'object' && (() => {
+                          // Ana data array'ini bul (characters, locations, scenes, vb.)
+                          const dataArrays = Object.entries(parsedData).filter(([k, v]) => Array.isArray(v) && v.length > 0);
+                          
+                          if (dataArrays.length === 0) {
+                            // Array yok, key-value göster
+                            return (
+                              <div className="bg-cinema-black rounded-lg p-4 border border-cinema-gray/30">
+                                <div className="space-y-3">
+                                  {Object.entries(parsedData).map(([key, value]) => (
+                                    <div key={key} className="flex items-start gap-3 pb-3 border-b border-cinema-gray/20 last:border-b-0">
+                                      <span className="text-cinema-accent font-semibold text-sm min-w-[120px]">
+                                        {columnMapping[key] || key}:
+                                      </span>
+                                      <span className="text-cinema-text text-sm flex-1">
+                                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          }
+                          
+                          // Array'leri DynamicDataTable ile göster
+                          return (
+                            <div className="space-y-6">
+                              {dataArrays.map(([key, array]) => (
+                                <div key={key} className="space-y-2">
+                                  <h5 className="text-sm font-semibold text-cinema-accent flex items-center gap-2">
+                                    <span>📊</span>
+                                    <span>{columnMapping[key] || key}</span>
+                                    <span className="text-cinema-text-dim text-xs">({array.length})</span>
+                                  </h5>
+                                  <DynamicDataTable 
+                                    data={array}
+                                    columnMapping={columnMapping}
+                                    maxChipsPerCell={5}
+                                    showRowNumbers={true}
+                                    compactMode={false}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </>
+                    );
+
+                  })()}
                 </div>
               )}
             </div>
@@ -3653,6 +3985,78 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
       <div className="flex justify-between items-center">
         <h3 className="text-xl font-semibold text-cinema-text">Kaydedilmiş Analizler ({savedAnalyses.length})</h3>
         <div className="flex gap-2">
+          {/* 🆕 Grup Yükleme Butonu */}
+          <button
+            onClick={async () => {
+              const currentScript = useScriptStore.getState().getCurrentScript();
+              if (!currentScript) {
+                alert('Lütfen önce bir senaryo yükleyin');
+                return;
+              }
+              
+              const fileName = currentScript.fileName || currentScript.name;
+              console.log('📂 Analiz grupları kontrol ediliyor:', fileName);
+              
+              const groups = await analysisStorageService.groupAnalysesBySession(fileName);
+              
+              if (groups.size === 0) {
+                alert('Bu dosya için henüz gruplandırılmış analiz bulunamadı');
+                return;
+              }
+              
+              // Grupları listele
+              const groupList = Array.from(groups.values())
+                .sort((a, b) => new Date(b.startTime) - new Date(a.startTime))
+                .map((g, idx) => ({
+                  ...g,
+                  displayIndex: idx + 1
+                }));
+              
+              // Kullanıcıya grup seçtir
+              const groupOptions = groupList.map((g, idx) => 
+                `${idx + 1}. Grup (${g.totalAnalyses} analiz) - ${new Date(g.startTime).toLocaleString('tr-TR')}`
+              ).join('\n');
+              
+              const selection = prompt(
+                `📚 ${groups.size} analiz grubu bulundu:\n\n${groupOptions}\n\n` +
+                `Yüklemek istediğiniz grup numarasını girin (1-${groups.size}):`
+              );
+              
+              if (!selection) return;
+              
+              const selectedIndex = parseInt(selection) - 1;
+              if (selectedIndex < 0 || selectedIndex >= groupList.length) {
+                alert('Geçersiz grup numarası');
+                return;
+              }
+              
+              const selectedGroup = groupList[selectedIndex];
+              console.log('📥 Grup yükleniyor:', selectedGroup);
+              
+              const groupData = await analysisStorageService.loadAnalysisGroup(
+                selectedGroup.groupId, 
+                selectedGroup.analyses
+              );
+              
+              if (groupData && groupData.customResults) {
+                setCustomResults(groupData.customResults);
+                setActiveTab('custom');
+                
+                alert(
+                  `✅ Grup başarıyla yüklendi!\n\n` +
+                  `📊 ${Object.keys(groupData.customResults).length} farklı analiz tipi\n` +
+                  `📁 ${selectedGroup.totalAnalyses} kayıttan birleştirildi`
+                );
+              } else {
+                alert('Grup yüklenirken hata oluştu');
+              }
+            }}
+            className="bg-cinema-accent/20 hover:bg-cinema-accent/30 text-cinema-accent px-3 py-1 rounded-lg transition-colors text-sm font-medium border border-cinema-accent/30"
+            title="Aynı anda yapılan analizleri grup olarak yükle"
+          >
+            📚 Grup Yükle
+          </button>
+          
           <button
             onClick={onRefresh}
             className="text-cinema-accent hover:text-cinema-text transition-colors px-3 py-1"
@@ -3663,17 +4067,51 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
           {savedAnalyses.length > 0 && (
             <button
               onClick={async () => {
-                if (confirm(`⚠️ ${savedAnalyses.length} adet kaydedilmiş analiz tamamen silinecek. Emin misiniz?`)) {
+                // Kısmi ve tam analizleri say
+                const partialCount = savedAnalyses.filter(a => 
+                  a.analysisType && a.analysisType !== 'full'
+                ).length;
+                const fullCount = savedAnalyses.length - partialCount;
+                
+                const confirmMessage = partialCount > 0
+                  ? `⚠️ ${savedAnalyses.length} adet analiz silinecek:\n` +
+                    `📊 ${fullCount} tam analiz\n` +
+                    `⏸️ ${partialCount} kısmi/yarım analiz\n\n` +
+                    `Bu işlem geri alınamaz. Emin misiniz?`
+                  : `⚠️ ${savedAnalyses.length} adet kaydedilmiş analiz tamamen silinecek.\n\n` +
+                    `Bu işlem geri alınamaz. Emin misiniz?`;
+                
+                if (confirm(confirmMessage)) {
                   try {
-                    await analysisStorageService.clearAll();
+                    console.log('🧹 Temizleme başlatılıyor...');
+                    
+                    // 1. FileSystem ve localStorage'dan tüm analizleri sil
+                    const clearResult = await analysisStorageService.clearAll();
+                    console.log('📁 FileSystem temizlendi:', clearResult);
+                    
+                    // 2. LocalStorage'daki tüm analiz anahtarlarını manuel temizle
+                    const keysToRemove = [];
+                    for (let i = 0; i < localStorage.length; i++) {
+                      const key = localStorage.key(i);
+                      if (key && (key.startsWith('mgx_analysis_') || key.startsWith('mgx_storyboard_'))) {
+                        keysToRemove.push(key);
+                      }
+                    }
+                    keysToRemove.forEach(key => {
+                      localStorage.removeItem(key);
+                      console.log('🗑️ Silindi:', key);
+                    });
+                    console.log(`📊 LocalStorage'dan ${keysToRemove.length} anahtar silindi`);
+                    
+                    // 3. UI state'i temizle
                     setSavedAnalyses([]);
                     
-                    // Clear current analysis state
+                    // 4. Mevcut analiz state'ini temizle
                     if (setCustomResults) {
                       setCustomResults({});
                     }
                     
-                    // Clear from script store
+                    // 5. Script store'dan analiz verilerini temizle
                     const currentScript = useScriptStore.getState().getCurrentScript();
                     if (currentScript) {
                       const { updateScript } = useScriptStore.getState();
@@ -3685,10 +4123,25 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
                       });
                     }
                     
-                    alert('✅ Tüm analizler başarıyla temizlendi!');
+                    // 6. Başarı mesajı
+                    const totalCleaned = clearResult.successCount + keysToRemove.length;
+                    alert(
+                      `✅ Temizlik tamamlandı!\n\n` +
+                      `📁 ${clearResult.successCount} dosya silindi\n` +
+                      `💾 ${keysToRemove.length} localStorage kaydı silindi\n` +
+                      `📊 Toplam ${totalCleaned} kayıt temizlendi`
+                    );
+                    
+                    // 7. Listeyi yeniden yükle
+                    setTimeout(() => onRefresh(), 100);
+                    
                   } catch (error) {
                     console.error('❌ Temizleme hatası:', error);
-                    alert('❌ Temizleme sırasında hata oluştu: ' + error.message);
+                    alert(
+                      `❌ Temizleme sırasında hata oluştu:\n\n` +
+                      `${error.message}\n\n` +
+                      `Lütfen konsolu (F12) kontrol edin veya uygulamayı yeniden başlatın.`
+                    );
                   }
                 }
               }}

@@ -14,7 +14,7 @@ import Canvas from './components/Canvas';
 
 // Lazy load heavy components
 const SpeedReader = React.lazy(() => import('./components/SpeedReader'));
-const AIStoryboard = React.lazy(() => import('./components/SimpleStoryboard'));
+
 
 function App() {
   const { currentView, scripts, currentScriptId, isAnalyzing, analysisProgress, isStoryboardProcessing, storyboardProgress, getCurrentScript } = useScriptStore();
@@ -29,14 +29,14 @@ function App() {
   useEffect(() => {
     const config = getConfig();
     const currentGeminiModel = config?.gemini?.model;
-    
-    if (currentGeminiModel === 'gemini-1.5-flash-latest' || 
-        currentGeminiModel === 'gemini-1.5-flash' || 
-        currentGeminiModel === 'gemini-1.5-pro') {
+
+    if (currentGeminiModel === 'gemini-1.5-flash-latest' ||
+      currentGeminiModel === 'gemini-1.5-flash' ||
+      currentGeminiModel === 'gemini-1.5-pro') {
       console.log('🚨 Global fix: Deprecated Gemini model detected:', currentGeminiModel);
       console.log('🔄 Auto-correcting to: gemini-3-pro-preview');
       setGeminiModel('gemini-3-pro-preview');
-      
+
       // Clear localStorage cache
       localStorage.removeItem('scriptmaster-ai-settings');
       localStorage.removeItem('ai-store');
@@ -82,21 +82,21 @@ function App() {
             <>
               {currentView === 'editor' && <TextEditor />}
               {currentView === 'analysis' && <AnalysisPanel />}
-              
+
               {/* Speed Reader - Always available */}
               {currentView === 'reader' && (
                 <Suspense fallback={<div className="flex items-center justify-center h-full text-cinema-text">Hızlı okuma yükleniyor...</div>}>
                   <SpeedReader />
                 </Suspense>
               )}
-              
+
               {/* Storyboard - Unified professional workflow */}
               {currentView === 'storyboard' && features.enable_storyboard && (
                 <ErrorBoundary>
                   <ProfessionalStoryboard />
                 </ErrorBoundary>
               )}
-              
+
               {/* Show message if trying to access disabled storyboard module */}
               {currentView === 'storyboard' && !features.enable_storyboard && (
                 <div className="flex flex-col items-center justify-center h-full text-cinema-text p-8">
@@ -122,7 +122,7 @@ function App() {
                   <Canvas />
                 </ErrorBoundary>
               )}
-              
+
               {/* Show message if trying to access disabled canvas module */}
               {currentView === 'canvas' && !features.enable_canvas && (
                 <div className="flex flex-col items-center justify-center h-full text-cinema-text p-8">
