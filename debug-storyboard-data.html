@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storyboard Data Debug</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #569cd6;
+            margin-bottom: 20px;
+        }
+        .section {
+            background: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            color: #4ec9b0;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        pre {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .key {
+            color: #9cdcfe;
+        }
+        .string {
+            color: #ce9178;
+        }
+        .number {
+            color: #b5cea8;
+        }
+        .boolean {
+            color: #569cd6;
+        }
+        .null {
+            color: #569cd6;
+        }
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+        .btn-danger {
+            background: #f48771;
+        }
+        .btn-danger:hover {
+            background: #e74c3c;
+        }
+        .warning {
+            background: #574d1c;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #1c4d3d;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        .count {
+            display: inline-block;
+            background: #0e639c;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Storyboard Data Source Debug</h1>
+        
+        <div class="section">
+            <h2>📊 localStorage Karakter Referansları <span class="count" id="charRefCount">0</span></h2>
+            <button onclick="showCharacterReferences()">Görüntüle</button>
+            <button class="btn-danger" onclick="clearCharacterReferences()">Tümünü Sil</button>
+            <pre id="charRefOutput">Tıklayın...</pre>
+        </div>
+
+        <div class="section">
+            <h2>🗺️ localStorage Mekan Referansları <span class="count" id="locRefCount">0</span></h2>
+            <button onclick="showLocationReferences()">Görüntüle</button>
+            <button class="btn-danger" onclick="clearLocationReferences()">Tümünü Sil</button>
+            <pre id="locRefOutput">Tıklayın...</pre>
+        </div>
+
+        <div class="section">
+            <h2>📝 localStorage MGX Analizleri <span class="count" id="mgxAnalysisCount">0</span></h2>
+            <button onclick="showMGXAnalyses()">Görüntüle</button>
+            <button class="btn-danger" onclick="clearMGXAnalyses()">Tümünü Sil</button>
+            <pre id="mgxAnalysisOutput">Tıklayın...</pre>
+        </div>
+
+        <div class="section">
+            <h2>📦 localStorage Storyboard Cache <span class="count" id="storyboardCount">0</span></h2>
+            <button onclick="showStoryboardCache()">Görüntüle</button>
+            <button class="btn-danger" onclick="clearStoryboardCache()">Tümünü Sil</button>
+            <pre id="storyboardOutput">Tıklayın...</pre>
+        </div>
+
+        <div class="section">
+            <h2>🎯 Tüm localStorage Anahtarları <span class="count" id="totalCount">0</span></h2>
+            <button onclick="showAllKeys()">Tümünü Görüntüle</button>
+            <button class="btn-danger" onclick="clearAll()">HEPSİNİ SİL</button>
+            <pre id="allKeysOutput">Tıklayın...</pre>
+        </div>
+    </div>
+
+    <script>
+        function updateCounts() {
+            const charRefs = Object.keys(localStorage).filter(k => k.startsWith('character_reference_'));
+            const locRefs = Object.keys(localStorage).filter(k => k.startsWith('location_reference_'));
+            const mgxAnalyses = Object.keys(localStorage).filter(k => k.startsWith('mgx_analysis_'));
+            const storyboards = Object.keys(localStorage).filter(k => k.startsWith('mgx_storyboard_'));
+            
+            document.getElementById('charRefCount').textContent = charRefs.length;
+            document.getElementById('locRefCount').textContent = locRefs.length;
+            document.getElementById('mgxAnalysisCount').textContent = mgxAnalyses.length;
+            document.getElementById('storyboardCount').textContent = storyboards.length;
+            document.getElementById('totalCount').textContent = localStorage.length;
+        }
+
+        function syntaxHighlight(json) {
+            if (typeof json !== 'string') {
+                json = JSON.stringify(json, null, 2);
+            }
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'key';
+                    } else {
+                        cls = 'string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        function showCharacterReferences() {
+            const keys = Object.keys(localStorage).filter(k => k.startsWith('character_reference_'));
+            const output = {};
+            
+            keys.forEach(key => {
+                const charName = key.replace('character_reference_', '');
+                try {
+                    const data = JSON.parse(localStorage.getItem(key));
+                    output[charName] = {
+                        count: data.length,
+                        totalSize: data.reduce((sum, img) => sum + (img.data?.length || 0), 0),
+                        images: data.map(img => ({
+                            type: img.type,
+                            size: img.data?.length || 0
+                        }))
+                    };
+                } catch (e) {
+                    output[charName] = 'Parse error: ' + e.message;
+                }
+            });
+            
+            document.getElementById('charRefOutput').innerHTML = syntaxHighlight(output);
+        }
+
+        function showLocationReferences() {
+            const keys = Object.keys(localStorage).filter(k => k.startsWith('location_reference_'));
+            const output = {};
+            
+            keys.forEach(key => {
+                const locName = key.replace('location_reference_', '');
+                try {
+                    const data = JSON.parse(localStorage.getItem(key));
+                    output[locName] = {
+                        count: data.length,
+                        totalSize: data.reduce((sum, img) => sum + (img.data?.length || 0), 0),
+                        images: data.map(img => ({
+                            type: img.type,
+                            size: img.data?.length || 0
+                        }))
+                    };
+                } catch (e) {
+                    output[locName] = 'Parse error: ' + e.message;
+                }
+            });
+            
+            document.getElementById('locRefOutput').innerHTML = syntaxHighlight(output);
+        }
+
+        function showMGXAnalyses() {
+            const keys = Object.keys(localStorage).filter(k => k.startsWith('mgx_analysis_'));
+            const output = {};
+            
+            keys.forEach(key => {
+                try {
+                    const data = JSON.parse(localStorage.getItem(key));
+                    output[key] = {
+                        timestamp: data.timestamp,
+                        fileName: data.fileName,
+                        hasCustomResults: !!data.customResults,
+                        customResultsKeys: data.customResults ? Object.keys(data.customResults) : [],
+                        hasCharacter: !!data.customResults?.character,
+                        hasLocation: !!data.customResults?.location
+                    };
+                } catch (e) {
+                    output[key] = 'Parse error: ' + e.message;
+                }
+            });
+            
+            document.getElementById('mgxAnalysisOutput').innerHTML = syntaxHighlight(output);
+        }
+
+        function showStoryboardCache() {
+            const keys = Object.keys(localStorage).filter(k => k.startsWith('mgx_storyboard_'));
+            const output = {};
+            
+            keys.forEach(key => {
+                try {
+                    const data = JSON.parse(localStorage.getItem(key));
+                    output[key] = {
+                        timestamp: data.timestamp,
+                        framesCount: data.frames?.length || 0
+                    };
+                } catch (e) {
+                    output[key] = 'Parse error: ' + e.message;
+                }
+            });
+            
+            document.getElementById('storyboardOutput').innerHTML = syntaxHighlight(output);
+        }
+
+        function showAllKeys() {
+            const allKeys = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                let size = new Blob([value]).size;
+                allKeys[key] = {
+                    size: size + ' bytes',
+                    sizeKB: (size / 1024).toFixed(2) + ' KB'
+                };
+            }
+            document.getElementById('allKeysOutput').innerHTML = syntaxHighlight(allKeys);
+        }
+
+        function clearCharacterReferences() {
+            if (!confirm('Tüm karakter referansları silinecek. Emin misiniz?')) return;
+            const keys = Object.keys(localStorage).filter(k => k.startsWith('character_reference_'));
+            keys.forEach(key => localStorage.removeItem(key));
+            alert(`✅ ${keys.length} karakter referansı silindi`);
+            updateCounts();
+            showCharacterReferences();
+        }
+
+        function clearLocationReferences() {
+            if (!confirm('Tüm mekan referansları silinecek. Emin misiniz?')) return;
+            const keys = Object.keys(localStorage).filter(k => k.startsWith('location_reference_'));
+            keys.forEach(key => localStorage.removeItem(key));
+            alert(`✅ ${keys.length} mekan referansı silindi`);
+            updateCounts();
+            showLocationReferences();
+        }
+
+        function clearMGXAnalyses() {
+            if (!confirm('Tüm MGX analizleri silinecek. Emin misiniz?')) return;
+            const keys = Object.keys(localStorage).filter(k => k.startsWith('mgx_analysis_'));
+            keys.forEach(key => localStorage.removeItem(key));
+            alert(`✅ ${keys.length} analiz silindi`);
+            updateCounts();
+            showMGXAnalyses();
+        }
+
+        function clearStoryboardCache() {
+            if (!confirm('Tüm storyboard cache silinecek. Emin misiniz?')) return;
+            const keys = Object.keys(localStorage).filter(k => k.startsWith('mgx_storyboard_'));
+            keys.forEach(key => localStorage.removeItem(key));
+            alert(`✅ ${keys.length} storyboard cache silindi`);
+            updateCounts();
+            showStoryboardCache();
+        }
+
+        function clearAll() {
+            if (!confirm('⚠️ TÜM LOCALSTORAGE SİLİNECEK! Emin misiniz?')) return;
+            const count = localStorage.length;
+            localStorage.clear();
+            alert(`✅ ${count} öğe silindi. Sayfa yenilenecek.`);
+            location.reload();
+        }
+
+        // Sayfa yüklendiğinde
+        updateCounts();
+    </script>
+</body>
+</html>

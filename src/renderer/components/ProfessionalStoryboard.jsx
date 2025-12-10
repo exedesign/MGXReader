@@ -70,10 +70,20 @@ export default function ProfessionalStoryboard() {
     // }
   });
 
+  // Scene Approval Workflow
+  const [sceneApprovals, setSceneApprovals] = useState({
+    // sceneNumber: {
+    //   approved: boolean,
+    //   sceneData: { ... },
+    //   timestamp: number
+    // }
+  });
+
   // Phase Completion Tracking
   const [phaseCompletion, setPhaseCompletion] = useState({
     character: { total: 0, approved: 0, generated: 0, complete: false },
     location: { total: 0, approved: 0, generated: 0, complete: false },
+    scene: { total: 0, approved: 0, complete: false },
     storyboard: { total: 0, generated: 0, complete: false }
   });
 
@@ -86,7 +96,6 @@ export default function ProfessionalStoryboard() {
   
   // Storyboard style settings
   const [storyboardStyle, setStoryboardStyle] = useState('realistic'); // realistic or sketch
-  const [aspectRatio, setAspectRatio] = useState('16:9'); // aspect ratio for storyboard
   const useCharacterReferences = true; // Always use character references if approved
   const useLocationReferences = true; // Always use location references if approved
 
@@ -321,8 +330,7 @@ export default function ProfessionalStoryboard() {
   const [frameRegenerateSettings, setFrameRegenerateSettings] = useState({
     useReference: true,
     customPrompt: '',
-    style: 'realistic',
-    aspectRatio: '16:9'
+    style: 'realistic'
   });
   
   // Analysis progress tracking for storyboard - dinamik olarak promptStore'dan
@@ -345,6 +353,67 @@ export default function ProfessionalStoryboard() {
       setAnalysisProgressList(newList);
     }
   }, [storyboardPrompts]);
+
+  // Listen for analysis clearing events from AnalysisPanel
+  useEffect(() => {
+    const handleAnalysisCleared = () => {
+      console.log('🗑️ Analysis cleared event received - resetting Storyboard data');
+      
+      // Clear all analysis states
+      setCharacterAnalysis(null);
+      setLocationAnalysis(null);
+      setStyleAnalysis(null);
+      setColorPalette(null);
+      setVisualLanguage(null);
+      
+      // Clear approval workflows
+      setCharacterApprovals({});
+      setLocationApprovals({});
+      setSceneApprovals({});
+      
+      // Reset phase completion
+      setPhaseCompletion({
+        character: { total: 0, approved: 0, generated: 0, complete: false },
+        location: { total: 0, approved: 0, generated: 0, complete: false },
+        scene: { total: 0, approved: 0, complete: false },
+        storyboard: { total: 0, generated: 0, complete: false }
+      });
+      
+      // Clear extracted scenes
+      setExtractedScenes([]);
+      setSceneCharacters({});
+      setSceneLocations({});
+      setSceneAnalysisData({});
+      setStoryboardFrames([]);
+      
+      // Clear script store customResults, characters, and locations
+      const currentScript = useScriptStore.getState().getCurrentScript();
+      if (currentScript) {
+        const { updateScript } = useScriptStore.getState();
+        updateScript(currentScript.id, {
+          customResults: null,
+          characters: [],
+          locations: [],
+          scenes: [],
+          analysisData: null
+        });
+        console.log('🗑️ Script store cleared: customResults, characters, locations, scenes, analysisData');
+      }
+      
+      // Reload analysis data to check if any analyses still exist
+      setTimeout(() => {
+        loadComprehensiveAnalysisData(true);
+      }, 100);
+      
+      console.log('✅ Storyboard data cleared and reloaded');
+    };
+
+    window.addEventListener('analysisCleared', handleAnalysisCleared);
+    
+    return () => {
+      window.removeEventListener('analysisCleared', handleAnalysisCleared);
+    };
+  }, []);
   
   // Location filter and table states - moved to LocationTableView component
 
@@ -1718,6 +1787,59 @@ export default function ProfessionalStoryboard() {
     updatePhaseCompletion('location');
   };
 
+  // ============= SCENE APPROVAL WORKFLOW =============
+  
+  const approveScene = (sceneNumber) => {
+    console.log('✅ Sahne onaylandı:', sceneNumber);
+    
+    const scene = extractedScenes.find(s => (s.number || s.sceneNumber) === sceneNumber);
+    
+    setSceneApprovals(prev => ({
+      ...prev,
+      [sceneNumber]: {
+        approved: true,
+        sceneData: scene,
+        timestamp: Date.now()
+      }
+    }));
+
+    // Update phase completion
+    updatePhaseCompletion('scene');
+  };
+
+  const rejectScene = (sceneNumber) => {
+    console.log('❌ Sahne reddedildi:', sceneNumber);
+    
+    setSceneApprovals(prev => ({
+      ...prev,
+      [sceneNumber]: {
+        ...prev[sceneNumber],
+        approved: false
+      }
+    }));
+
+    updatePhaseCompletion('scene');
+  };
+
+  const approveAllScenes = () => {
+    console.log('✅ Tüm sahneler onaylanıyor...');
+    
+    const newApprovals = {};
+    extractedScenes.forEach(scene => {
+      const sceneNum = scene.number || scene.sceneNumber;
+      newApprovals[sceneNum] = {
+        approved: true,
+        sceneData: scene,
+        timestamp: Date.now()
+      };
+    });
+    
+    setSceneApprovals(newApprovals);
+    updatePhaseCompletion('scene');
+    
+    console.log(`✅ ${extractedScenes.length} sahne onaylandı!`);
+  };
+
   const deleteLocation = (locationIndex) => {
     const location = locationAnalysis.locations[locationIndex];
     const locationName = typeof location === 'string' ? location : (location.name || location);
@@ -1761,6 +1883,18 @@ export default function ProfessionalStoryboard() {
         ...prev,
         location: { total, approved, generated, complete }
       }));
+    } else if (phase === 'scene') {
+      const scenes = Object.keys(sceneApprovals);
+      const total = extractedScenes.length;
+      const approved = scenes.filter(num => sceneApprovals[num]?.approved).length;
+      const complete = total > 0 && approved === total;
+
+      setPhaseCompletion(prev => ({
+        ...prev,
+        scene: { total, approved, complete }
+      }));
+      
+      console.log(`📊 Sahne durumu: ${approved}/${total} onaylı`);
     }
   };
 
@@ -1947,6 +2081,17 @@ export default function ProfessionalStoryboard() {
       
       if (!currentScript) {
         console.warn('⚠️ Current script bulunamadı');
+        
+        // Clear all analysis states when no script found
+        setCharacterAnalysis(null);
+        setLocationAnalysis(null);
+        setStyleAnalysis(null);
+        setColorPalette(null);
+        setVisualLanguage(null);
+        setExtractedScenes([]);
+        setStoryboardFrames([]);
+        console.log('🗑️ Tüm analysis state\'leri temizlendi (script yok)');
+        
         const requiredAnalysis = getStoryboardRequiredAnalysis();
         if (showRedirect) {
           setShowAnalysisRedirect(true);
@@ -1961,6 +2106,17 @@ export default function ProfessionalStoryboard() {
       
       if (!scriptText || scriptText.trim().length === 0) {
         console.warn('⚠️ Script metni boş veya bulunamadı');
+        
+        // Clear all analysis states when no script text
+        setCharacterAnalysis(null);
+        setLocationAnalysis(null);
+        setStyleAnalysis(null);
+        setColorPalette(null);
+        setVisualLanguage(null);
+        setExtractedScenes([]);
+        setStoryboardFrames([]);
+        console.log('🗑️ Tüm analysis state\'leri temizlendi (script text yok)');
+        
         const requiredAnalysis = getStoryboardRequiredAnalysis();
         if (showRedirect) {
           setShowAnalysisRedirect(true);
@@ -2041,21 +2197,37 @@ export default function ProfessionalStoryboard() {
         }
       }
       
-      // 5. Legacy: Check customResults from script store (backward compatibility)
-      if (!existingAnalysis && currentScript.customResults) {
-        console.log('📊 Script objesinde customResults mevcut (legacy)');
-        existingAnalysis = { customResults: currentScript.customResults };
-      }
+      // ⚠️ REMOVED: Legacy customResults check - causes stale data issues
+      // Script store should not cache analysis data directly
       
       console.log('🔍 Analiz kaynağı kontrolü:', {
         hasExistingAnalysis: !!existingAnalysis,
         hasCustomResults: !!existingAnalysis?.customResults,
-        customResultsKeys: existingAnalysis?.customResults ? Object.keys(existingAnalysis.customResults) : []
+        customResultsKeys: existingAnalysis?.customResults ? Object.keys(existingAnalysis.customResults) : [],
+        sources: {
+          analysisPanel: 'checked',
+          localStorage: 'checked',
+          tempFiles: 'checked',
+          fuzzyMatch: 'checked',
+          pdfMatch: 'checked',
+          scriptStore: 'DISABLED - causes stale data'
+        }
       });
       
       // 5. customResults kontrolü
       if (!existingAnalysis?.customResults) {
         console.log('ℹ️ AnalysisPanel customResults bulunamadı');
+        
+        // Clear all analysis states when no customResults found
+        setCharacterAnalysis(null);
+        setLocationAnalysis(null);
+        setStyleAnalysis(null);
+        setColorPalette(null);
+        setVisualLanguage(null);
+        setExtractedScenes([]);
+        setStoryboardFrames([]);
+        console.log('🗑️ Tüm analysis state\'leri temizlendi (customResults yok)');
+        
         const requiredAnalysis = getStoryboardRequiredAnalysis();
         const displayNames = getAnalysisDisplayNames();
         const missingNames = requiredAnalysis.map(key => displayNames[key] || key);
@@ -3194,11 +3366,13 @@ export default function ProfessionalStoryboard() {
       const characterPrompt = `
 Lütfen metindeki karakterleri analiz et ve şu başlıklar altında raporla:
 
+ÖNEMLİ: Bu senaryo belirli bir dönemde geçmektedir. Karakter özelliklerini, giyim tarzını ve fiziksel özelliklerini bu döneme uygun olarak belirt.
+
 SENARYO:
 ${scriptText}
 
 1. Ana Karakterler:
-   - İsim ve temel özellikler (yaş, fiziksel görünüm, giyim tarzı)
+   - İsim ve temel özellikler (yaş, fiziksel görünüm, giyim tarzı - döneme uygun)
    - Motivasyonlar ve hedefler
    - Karakter gelişimi
    - Karakteristik jestleri ve davranışları
@@ -3215,7 +3389,7 @@ ${scriptText}
 
 4. Fiziksel ve Görsel Özellikler:
    - Boy, kilo, saç rengi, göz rengi
-   - Giyim tarzı ve aksesuar tercihleri
+   - Giyim tarzı ve aksesuar tercihleri (dönemin modasına uygun)
    - Karakteristik fiziksel özellikleri
    - Yüz ifadeleri ve mimikler
 
@@ -3225,13 +3399,14 @@ Lütfen MUTLAKA JSON formatında yanıt ver (ek açıklama olmadan sadece JSON):
     {
       "name": "Karakter İsmi",
       "age": "yaş aralığı",
-      "physical": "detaylı fiziksel özellikler (boy, kilo, saç, göz, ten rengi, vs.)",
+      "physical": "detaylı fiziksel özellikler (boy, kilo, saç, göz, ten rengi, vs. - döneme uygun)",
       "personality": "kişilik özellikleri ve motivasyonlar",
-      "style": "giyim tarzı ve aksesuar tercihleri",
+      "style": "giyim tarzı ve aksesuar tercihleri (döneme uygun)",
       "role": "hikayedeki rolü (ana karakter/yan karakter)",
       "gestures": "karakteristik hareketler, jestler ve konuşma tarzı",
       "relationships": "diğer karakterlerle ilişkiler",
-      "development": "karakter gelişimi"
+      "development": "karakter gelişimi",
+      "period": "karakterin hangi dönemde yaşadığı"
     }
   ]
 }
@@ -3252,8 +3427,36 @@ Lütfen MUTLAKA JSON formatında yanıt ver (ek açıklama olmadan sadece JSON):
         ? scriptText.substring(0, maxTextLength) + '\n\n[Metin kısaltıldı...]'
         : scriptText;
 
+      // Extract time period/year from script for historical accuracy
+      let timePeriod = 'modern';
+      const scriptLower = scriptText.toLowerCase();
+      
+      // Check for specific years
+      const yearMatch = scriptText.match(/\b(19\d{2}|20\d{2})\b/);
+      if (yearMatch) {
+        timePeriod = yearMatch[0];
+      }
+      // Check for historical periods
+      else if (scriptLower.includes('osmanlı') || scriptLower.includes('ottoman')) {
+        timePeriod = 'Osmanlı Dönemi (1299-1922)';
+      } else if (scriptLower.includes('cumhuriyet') || scriptLower.includes('atatürk')) {
+        timePeriod = 'Erken Cumhuriyet Dönemi (1920-1940)';
+      } else if (scriptLower.includes('80\'ler') || scriptLower.includes('1980')) {
+        timePeriod = '1980\'ler';
+      } else if (scriptLower.includes('90\'lar') || scriptLower.includes('1990')) {
+        timePeriod = '1990\'lar';
+      } else if (scriptLower.includes('2000\'ler') || scriptLower.includes('milenyum')) {
+        timePeriod = '2000\'ler';
+      } else if (scriptLower.includes('gelecek') || scriptLower.includes('distopya') || scriptLower.includes('bilim kurgu')) {
+        timePeriod = 'Gelecek/Bilim Kurgu';
+      }
+      
+      console.log('📅 Tespit edilen dönem:', timePeriod);
+      
       // Kısaltılmış karakter promptı
       const shortCharacterPrompt = `Sen bir senaryo analiz uzmanısın. Aşağıdaki senaryodaki karakterleri analiz et:
+
+ÖNEMLİ: Bu senaryo "${timePeriod}" döneminde geçmektedir. Karakter özelliklerini, giyim tarzını ve fiziksel özelliklerini bu döneme uygun olarak belirt.
 
 SENARYO:
 ${textToAnalyze}
@@ -3264,9 +3467,11 @@ Lütfen JSON formatında yanıt ver:
     {
       "name": "Karakter İsmi",
       "age": "yaş aralığı",
-      "physical": "fiziksel özellikler",
+      "physical": "fiziksel özellikler (${timePeriod} dönemine uygun)",
       "personality": "kişilik özellikleri",
-      "role": "ana/yan karakter"
+      "style": "giyim tarzı ve stil (${timePeriod} dönemine uygun)",
+      "role": "ana/yan karakter",
+      "period": "${timePeriod}"
     }
   ]
 }`;
@@ -3289,6 +3494,8 @@ Lütfen JSON formatında yanıt ver:
 
       const shortLocationPrompt = `Sen bir senaryo analiz uzmanısın. Aşağıdaki senaryodaki mekanları analiz et:
 
+ÖNEMLİ: Bu senaryo "${timePeriod}" döneminde geçmektedir. Mekan tanımlarını, mimari özellikleri, dekorasyon ve atmosferi bu döneme uygun olarak belirt.
+
 SENARYO:
 ${textToAnalyze}
 
@@ -3299,9 +3506,11 @@ Lütfen JSON formatında yanıt ver:
       "name": "Mekan İsmi",
       "type": "İç/Dış Mekan",
       "time": "Gündüz/Gece",
-      "description": "detaylı açıklama",
-      "atmosphere": "atmosfer",
-      "lighting": "aydınlatma"
+      "description": "detaylı açıklama (${timePeriod} dönemine uygun mimari ve dekorasyon)",
+      "atmosphere": "atmosfer (${timePeriod} dönemine özgü)",
+      "lighting": "aydınlatma (${timePeriod} dönemine uygun)",
+      "architecture": "mimari stil (${timePeriod} dönemine özgü)",
+      "period": "${timePeriod}"
     }
   ]
 }`;
@@ -3734,10 +3943,10 @@ Focus on cinematic storytelling and professional ${storyboardStyle === 'sketch' 
                 const base64Data = charApproval.image.url.split(',')[1];
                 const mimeType = charApproval.image.url.match(/data:([^;]+);/)?.[1] || 'image/png';
                 referenceImages.push({
-                  data: `data:${mimeType};base64,${base64Data}`,
-                  mimeType: mimeType,
-                  instruction: `Character ${charName} must match this approved reference exactly for visual consistency`
+                  data: base64Data, // ✅ Sadece base64 string (data URL prefix olmadan)
+                  mimeType: mimeType
                 });
+                console.log(`✅ Karakter referansı eklendi: ${charName}`);
               }
             });
           }
@@ -3753,10 +3962,10 @@ Focus on cinematic storytelling and professional ${storyboardStyle === 'sketch' 
                   const base64Data = locApproval.image.url.split(',')[1];
                   const mimeType = locApproval.image.url.match(/data:([^;]+);/)?.[1] || 'image/png';
                   referenceImages.push({
-                    data: `data:${mimeType};base64,${base64Data}`,
-                    mimeType: mimeType,
-                    instruction: `Location ${locName} must match this approved environment reference for visual consistency`
+                    data: base64Data, // ✅ Sadece base64 string (data URL prefix olmadan)
+                    mimeType: mimeType
                   });
+                  console.log(`✅ Mekan referansı eklendi: ${locName}`);
                 }
                 
                 // Collect prompt and seed info for consistency
@@ -3771,8 +3980,7 @@ Focus on cinematic storytelling and professional ${storyboardStyle === 'sketch' 
           }
           
           const imageOptions = {
-            scene: scene.title,
-            aspectRatio: aspectRatio || '16:9'
+            scene: scene.title
           };
           
           // Add location prompt data to enhance consistency
@@ -4288,18 +4496,112 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                   console.log(`🎨 [${i + 1}/${charactersToGenerate.length}] ${character.name} için görsel oluşturuluyor...`);
                                   
                                   try {
-                                    // Generate character prompt
-                                    const characterPrompt = `Professional character portrait of ${character.name}, ${character.physicalDescription || character.description || 'detailed features'}, ${character.age || ''} years old, ${character.role || ''}, ${character.costumeNotes || ''}, cinematic portrait, professional lighting, 4K quality, detailed facial features`;
+                                    // Generate character prompt (same logic as CharacterImageGenerator)
+                                    let characterPrompt = `Professional character portrait of ${character.name || 'character'}`;
+
+                                    // Add physical description if available
+                                    if (character.physicalDescription || character.physical) {
+                                      const physicalDesc = character.physicalDescription || character.physical;
+                                      if (typeof physicalDesc === 'string' && physicalDesc.trim()) {
+                                        characterPrompt += `, ${physicalDesc}`;
+                                      }
+                                    } else if (character.description) {
+                                      if (typeof character.description === 'string' && character.description.trim()) {
+                                        characterPrompt += `, ${character.description}`;
+                                      }
+                                    }
+
+                                    // Add personality traits for visual style
+                                    if (character.personality && typeof character.personality === 'string') {
+                                      const personalityVisuals = {
+                                        'confident': 'confident posture, strong gaze',
+                                        'mysterious': 'enigmatic expression, dramatic lighting',
+                                        'friendly': 'warm smile, approachable demeanor',
+                                        'aggressive': 'intense expression, strong jaw',
+                                        'gentle': 'soft features, kind eyes',
+                                        'intelligent': 'thoughtful expression, sharp eyes'
+                                      };
+
+                                      Object.keys(personalityVisuals).forEach(trait => {
+                                        if (character.personality.toLowerCase().includes(trait)) {
+                                          characterPrompt += `, ${personalityVisuals[trait]}`;
+                                        }
+                                      });
+                                    }
+
+                                    // Add age/role context if available
+                                    if (character.age && typeof character.age === 'string' && character.age.trim()) {
+                                      characterPrompt += `, ${character.age} years old`;
+                                    }
+
+                                    if (character.role || character.occupation) {
+                                      const role = character.role || character.occupation;
+                                      if (typeof role === 'string' && role.trim()) {
+                                        characterPrompt += `, ${role}`;
+                                      }
+                                    }
+
+                                    // Add style if available
+                                    if (character.style && typeof character.style === 'string' && character.style.trim()) {
+                                      characterPrompt += `, ${character.style}`;
+                                    }
+
+                                    // Add cinematic style
+                                    characterPrompt += ', cinematic portrait, professional lighting, 4K quality, detailed facial features';
                                     
-                                    // Generate image using AI Store
-                                    const result = await generateImage(characterPrompt, {
-                                      aspectRatio: '3:4',
-                                      imageSize: '1K',
-                                      numberOfImages: 1
-                                    });
+                                    // Build image options (same as CharacterImageGenerator)
+                                    let imageOptions = {
+                                      character: character.name || 'character',
+                                      style: 'cinematic character portrait',
+                                      imageSize: '1K'
+                                    };
+
+                                    // Load reference images from localStorage if available
+                                    const storageKey = `character_reference_${character.name}`;
+                                    try {
+                                      const savedReferences = localStorage.getItem(storageKey);
+                                      if (savedReferences) {
+                                        const parsedReferences = JSON.parse(savedReferences);
+                                        if (Array.isArray(parsedReferences) && parsedReferences.length > 0) {
+                                          imageOptions.referenceImages = parsedReferences.slice(0, 14).map(refImage => {
+                                            // Extract base64 data without data URL prefix
+                                            let base64Data = refImage.data;
+                                            const originalLength = base64Data.length;
+                                            
+                                            if (base64Data.includes('base64,')) {
+                                              base64Data = base64Data.split('base64,')[1];
+                                            }
+                                            
+                                            // Validate base64
+                                            const cleanedLength = base64Data.length;
+                                            const startsCorrectly = base64Data.startsWith('/9j') || base64Data.startsWith('iVBOR');
+                                            
+                                            console.log(`🔍 [${i + 1}/${charactersToGenerate.length}] Base64 Debug:`, {
+                                              originalLength,
+                                              cleanedLength,
+                                              startsCorrectly,
+                                              prefix: base64Data.substring(0, 20),
+                                              mimeType: refImage.type
+                                            });
+                                            
+                                            return {
+                                              data: base64Data,
+                                              mimeType: refImage.type || 'image/png',
+                                              instruction: 'Create a character similar to this reference image'
+                                            };
+                                          });
+                                          console.log(`🖼️ [${i + 1}/${charactersToGenerate.length}] ${parsedReferences.length} referans görsel yüklendi`);
+                                        }
+                                      }
+                                    } catch (refError) {
+                                      console.warn('⚠️ Referans görseller yüklenemedi:', refError);
+                                    }
                                     
-                                    if (result?.success && result?.imageData) {
-                                      const imageUrl = `data:${result.mimeType || 'image/jpeg'};base64,${result.imageData}`;
+                                    // Generate image using AI Store (respects user's AI settings)
+                                    const result = await generateImage(characterPrompt, imageOptions);
+                                    
+                                    if (result && result.imageData) {
+                                      const imageUrl = `data:${result.mimeType || 'image/png'};base64,${result.imageData}`;
                                       
                                       // Update character approvals
                                       setCharacterApprovals(prev => ({
@@ -4368,9 +4670,25 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                     : `⚠️ Tüm karakterleri (${characterAnalysis.characters.length}) silmek istediğinizden emin misiniz?`;
                                   
                                   if (window.confirm(message)) {
+                                    // Clear all reference images from localStorage
+                                    let referenceCount = 0;
+                                    characterAnalysis.characters.forEach(character => {
+                                      const storageKey = `character_reference_${character.name}`;
+                                      try {
+                                        if (localStorage.getItem(storageKey)) {
+                                          localStorage.removeItem(storageKey);
+                                          referenceCount++;
+                                        }
+                                      } catch (error) {
+                                        console.warn(`⚠️ ${character.name} referans görselleri temizlenemedi:`, error);
+                                      }
+                                    });
+                                    
+                                    // Clear character data and approvals
                                     setCharacterAnalysis({ ...characterAnalysis, characters: [] });
                                     setCharacterApprovals({});
-                                    console.log(`🗑️ Tüm karakterler${imageCount > 0 ? ' ve görselleri' : ''} silindi`);
+                                    
+                                    console.log(`🗑️ Tüm karakterler${imageCount > 0 ? ' ve görselleri' : ''} silindi${referenceCount > 0 ? ` (${referenceCount} karakter referans görseli temizlendi)` : ''}`);
                                   }
                                 }}
                                 className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded-lg text-sm transition-colors border border-red-500/30"
@@ -4458,12 +4776,24 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (window.confirm(`"${character.name}" karakterini silmek istediğinizden emin misiniz?${characterApprovals[character.name]?.image ? ' Üretilen görsel de silinecek.' : ''}`)) {
+                                      // Remove character from list
                                       const updatedCharacters = characterAnalysis.characters.filter((_, i) => i !== index);
                                       setCharacterAnalysis({ ...characterAnalysis, characters: updatedCharacters });
+                                      
+                                      // Remove generated image from approvals
                                       const newApprovals = { ...characterApprovals };
                                       delete newApprovals[character.name];
                                       setCharacterApprovals(newApprovals);
-                                      console.log(`🗑️ "${character.name}" ve görseli silindi`);
+                                      
+                                      // Remove reference images from localStorage
+                                      const storageKey = `character_reference_${character.name}`;
+                                      try {
+                                        localStorage.removeItem(storageKey);
+                                        console.log(`🗑️ "${character.name}" karakteri, görseli ve referans görselleri silindi`);
+                                      } catch (error) {
+                                        console.warn('⚠️ localStorage temizleme hatası:', error);
+                                        console.log(`🗑️ "${character.name}" ve görseli silindi`);
+                                      }
                                     }
                                   }}
                                   className="absolute top-2 right-2 z-10 p-1.5 bg-red-500/80 hover:bg-red-600 rounded-full transition-all opacity-0 group-hover:opacity-100"
@@ -4573,7 +4903,6 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                             
                                             // Generate image
                                             const result = await generateImage(characterPrompt, {
-                                              aspectRatio: '3:4',
                                               imageSize: '1K'
                                             });
                                             
@@ -4684,7 +5013,6 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                   const imageOptions = {
                                     character: character.name,
                                     style: 'cinematic portrait',
-                                    aspectRatio: '3:4',
                                     imageSize: '2K'
                                   };
                                   
@@ -4787,8 +5115,44 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                             🎬 Sahne Listesi ({extractedScenes.length})
                           </h3>
                           <p className="text-sm text-cinema-text-dim">
-                            Sahnelerdeki karakterler ve mekanlar
+                            {(() => {
+                              const approved = Object.values(sceneApprovals).filter(s => s?.approved).length;
+                              const total = extractedScenes.length;
+                              return approved > 0 
+                                ? `${approved}/${total} sahne onaylandı` 
+                                : 'Sahneleri onaylayarak storyboard üretimine hazırlanın';
+                            })()}
                           </p>
+                        </div>
+                        <div className="flex gap-2">
+                          {(() => {
+                            const allApproved = extractedScenes.every(scene => {
+                              const sceneNum = scene.number || scene.sceneNumber;
+                              return sceneApprovals[sceneNum]?.approved;
+                            });
+                            
+                            return (
+                              <button
+                                onClick={() => {
+                                  if (allApproved) {
+                                    // Tümünü reddet
+                                    setSceneApprovals({});
+                                    updatePhaseCompletion('scene');
+                                  } else {
+                                    // Tümünü onayla
+                                    approveAllScenes();
+                                  }
+                                }}
+                                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                                  allApproved
+                                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                                    : 'bg-green-600 hover:bg-green-700 text-white'
+                                }`}
+                              >
+                                {allApproved ? '❌ Tümünü Reddet' : '✅ Tümünü Onayla'}
+                              </button>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -4797,6 +5161,9 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                         <table className="w-full">
                           <thead className="bg-cinema-gray/20 border-b border-cinema-gray sticky top-0">
                             <tr>
+                              <th className="px-4 py-3 text-center text-xs font-semibold text-cinema-text-dim uppercase tracking-wider w-12">
+                                ✓
+                              </th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-cinema-text-dim uppercase tracking-wider w-16">#</th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-cinema-text-dim uppercase tracking-wider">Sahne Adı</th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-cinema-text-dim uppercase tracking-wider">Karakterler</th>
@@ -4808,12 +5175,44 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                             {extractedScenes.map((scene, index) => {
                               const sceneLocations = scene.locations || [];
                               const sceneCharacters = scene.characters || [];
+                              const sceneNum = scene.number || scene.sceneNumber || index + 1;
+                              const isApproved = sceneApprovals[sceneNum]?.approved;
                               
                               return (
-                                <tr key={index} className="hover:bg-cinema-gray/10 transition-colors">
+                                <tr 
+                                  key={index} 
+                                  className={`hover:bg-cinema-gray/10 transition-colors ${
+                                    isApproved ? 'bg-green-900/10' : ''
+                                  }`}
+                                >
+                                  {/* Approval Checkbox */}
+                                  <td className="px-4 py-3 text-center">
+                                    <button
+                                      onClick={() => {
+                                        if (isApproved) {
+                                          rejectScene(sceneNum);
+                                        } else {
+                                          approveScene(sceneNum);
+                                        }
+                                      }}
+                                      className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
+                                        isApproved
+                                          ? 'bg-green-600 border-green-600'
+                                          : 'border-cinema-gray hover:border-purple-500'
+                                      }`}
+                                      title={isApproved ? 'Onayı kaldır' : 'Sahneyi onayla'}
+                                    >
+                                      {isApproved && (
+                                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                  </td>
+                                  
                                   {/* Scene Number */}
                                   <td className="px-4 py-3 text-sm text-cinema-text-dim font-mono">
-                                    {scene.number || scene.sceneNumber || index + 1}
+                                    {sceneNum}
                                   </td>
                                   
                                   {/* Scene Title */}
@@ -4947,9 +5346,26 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                     : `⚠️ Tüm mekanları (${locationAnalysis.locations.length}) silmek istediğinizden emin misiniz?`;
                                   
                                   if (window.confirm(message)) {
+                                    // Clear all reference images from localStorage
+                                    let referenceCount = 0;
+                                    locationAnalysis.locations.forEach(location => {
+                                      const locName = typeof location === 'string' ? location : location.name;
+                                      const storageKey = `location_reference_${locName}`;
+                                      try {
+                                        if (localStorage.getItem(storageKey)) {
+                                          localStorage.removeItem(storageKey);
+                                          referenceCount++;
+                                        }
+                                      } catch (error) {
+                                        console.warn(`⚠️ ${locName} referans görselleri temizlenemedi:`, error);
+                                      }
+                                    });
+                                    
+                                    // Clear location data and approvals
                                     setLocationAnalysis({ ...locationAnalysis, locations: [] });
                                     setLocationApprovals({});
-                                    console.log(`🗑️ Tüm mekanlar${imageCount > 0 ? ' ve görselleri' : ''} silindi`);
+                                    
+                                    console.log(`🗑️ Tüm mekanlar${imageCount > 0 ? ' ve görselleri' : ''} silindi${referenceCount > 0 ? ` (${referenceCount} mekan referans görseli temizlendi)` : ''}`);
                                   }
                                 }}
                                 className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded-lg text-sm transition-colors border border-red-500/30"
@@ -5088,12 +5504,24 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (window.confirm(`"${locName}" mekanını silmek istediğinizden emin misiniz?${locationApprovals[locName]?.image ? ' Üretilen görsel de silinecek.' : ''}`)) {
+                                      // Remove location from list
                                       const updatedLocations = locationAnalysis.locations.filter((_, i) => i !== index);
                                       setLocationAnalysis({ ...locationAnalysis, locations: updatedLocations });
+                                      
+                                      // Remove generated image from approvals
                                       const newApprovals = { ...locationApprovals };
                                       delete newApprovals[locName];
                                       setLocationApprovals(newApprovals);
-                                      console.log(`🗑️ "${locName}" ve görseli silindi`);
+                                      
+                                      // Remove reference images from localStorage
+                                      const storageKey = `location_reference_${locName}`;
+                                      try {
+                                        localStorage.removeItem(storageKey);
+                                        console.log(`🗑️ "${locName}" mekanı, görseli ve referans görselleri silindi`);
+                                      } catch (error) {
+                                        console.warn('⚠️ localStorage temizleme hatası:', error);
+                                        console.log(`🗑️ "${locName}" ve görseli silindi`);
+                                      }
                                     }
                                   }}
                                   className="absolute top-2 right-2 z-10 p-1.5 bg-red-500/80 hover:bg-red-600 rounded-full transition-all opacity-0 group-hover:opacity-100"
@@ -5221,7 +5649,6 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                           
                                           // Generate image
                                           const result = await generateImage(locationPrompt, {
-                                            aspectRatio: '16:9',
                                             imageSize: '1K'
                                           });
                                           
@@ -5408,27 +5835,8 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                           </button>
                         </div>
 
-                        {/* Aspect Ratio Selection */}
-                        <div className="space-y-3">
-                          <div className="text-white font-medium mb-2">📐 Çıktı Boyutu (Aspect Ratio)</div>
-                          <div className="grid grid-cols-4 gap-2">
-                            {['16:9', '9:16', '1:1', '4:3'].map(ratio => (
-                              <button
-                                key={ratio}
-                                onClick={() => setAspectRatio(ratio)}
-                                className={`px-4 py-2 rounded-lg border transition-all ${
-                                  aspectRatio === ratio
-                                    ? 'border-cinema-accent bg-cinema-accent/20 text-cinema-accent'
-                                    : 'border-cinema-gray bg-cinema-gray/30 text-cinema-text hover:border-cinema-gray-light'
-                                }`}
-                              >
-                                {ratio}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="text-xs text-cinema-text-dim mt-2">
-                            ✅ Onaylı karakter ve mekan görselleri otomatik olarak referans alınacak
-                          </div>
+                        <div className="text-xs text-cinema-text-dim mt-2">
+                          ✅ Onaylı karakter ve mekan görselleri otomatik olarak referans alınacak
                         </div>
                       </div>
 
@@ -5442,7 +5850,7 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                           {isProcessing || isStoryboardProcessing ? '🔄 Üretiliyor...' : '🎬 Profesyonel Storyboard Üret'}
                         </button>
                         <p className="mt-4 text-cinema-text-dim text-sm">
-                          {storyboardStyle === 'sketch' ? '✏️ Çizim stili' : '📸 Gerçekçi stil'} • {aspectRatio} boyut • {extractedScenes.length} sahne
+                          {storyboardStyle === 'sketch' ? '✏️ Çizim stili' : '📸 Gerçekçi stil'} • {extractedScenes.length} sahne
                           {` • ${Object.keys(characterApprovals).filter(k => characterApprovals[k].approved).length} karakter ref.`}
                           {` • ${Object.keys(locationApprovals).filter(k => locationApprovals[k].approved).length} mekan ref.`}
                         </p>
@@ -5490,27 +5898,8 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                           </button>
                         </div>
 
-                        {/* Aspect Ratio Selection */}
-                        <div className="space-y-3">
-                          <div className="text-white font-medium mb-2">📐 Çıktı Boyutu (Aspect Ratio)</div>
-                          <div className="grid grid-cols-4 gap-2">
-                            {['16:9', '9:16', '1:1', '4:3'].map(ratio => (
-                              <button
-                                key={ratio}
-                                onClick={() => setAspectRatio(ratio)}
-                                className={`px-4 py-2 rounded-lg border transition-all ${
-                                  aspectRatio === ratio
-                                    ? 'border-cinema-accent bg-cinema-accent/20 text-cinema-accent'
-                                    : 'border-cinema-gray bg-cinema-gray/30 text-cinema-text hover:border-cinema-gray-light'
-                                }`}
-                              >
-                                {ratio}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="text-xs text-cinema-text-dim mt-2">
-                            ✅ Onaylı karakter ve mekan görselleri otomatik olarak referans alınacak
-                          </div>
+                        <div className="text-xs text-cinema-text-dim mt-2">
+                          ✅ Onaylı karakter ve mekan görselleri otomatik olarak referans alınacak
                         </div>
                       </div>
 
@@ -5531,8 +5920,7 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                   setFrameRegenerateSettings({
                                     useReference: true,
                                     customPrompt: '',
-                                    style: storyboardStyle,
-                                    aspectRatio: aspectRatio
+                                    style: storyboardStyle
                                   });
                                   setIsFrameDetailOpen(true);
                                 }}
@@ -5546,8 +5934,7 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                 setFrameRegenerateSettings({
                                   useReference: true,
                                   customPrompt: '',
-                                  style: storyboardStyle,
-                                  aspectRatio: aspectRatio
+                                  style: storyboardStyle
                                 });
                                 setIsFrameDetailOpen(true);
                               }}
@@ -5591,15 +5978,20 @@ ${styleDesc}
 Create a ${storyboardStyle === 'sketch' ? 'professional sketch/drawing' : 'cinematic photorealistic'} storyboard frame with clear composition and proper framing.`;
                                   
                                   const imageOptions = {
-                                    referenceImages: [],
-                                    aspectRatio: aspectRatio || '16:9'
+                                    referenceImages: []
                                   };
                                   
                                   // Always add approved character references
                                   scene.characters.forEach(charName => {
                                     const approval = characterApprovals[charName];
                                     if (approval?.approved && approval?.image?.url) {
-                                      imageOptions.referenceImages.push(approval.image.url);
+                                      const base64Data = approval.image.url.split(',')[1];
+                                      const mimeType = approval.image.url.match(/data:([^;]+);/)?.[1] || 'image/png';
+                                      imageOptions.referenceImages.push({
+                                        data: base64Data,
+                                        mimeType: mimeType
+                                      });
+                                      console.log(`✅ [Regenerate] Karakter referansı: ${charName}`);
                                     }
                                   });
                                   
@@ -5607,7 +5999,13 @@ Create a ${storyboardStyle === 'sketch' ? 'professional sketch/drawing' : 'cinem
                                   scene.locations?.forEach(locName => {
                                     const approval = locationApprovals[locName];
                                     if (approval?.approved && approval?.image?.url) {
-                                      imageOptions.referenceImages.push(approval.image.url);
+                                      const base64Data = approval.image.url.split(',')[1];
+                                      const mimeType = approval.image.url.match(/data:([^;]+);/)?.[1] || 'image/png';
+                                      imageOptions.referenceImages.push({
+                                        data: base64Data,
+                                        mimeType: mimeType
+                                      });
+                                      console.log(`✅ [Regenerate] Mekan referansı: ${locName}`);
                                     }
                                   });
                                   
@@ -6212,6 +6610,74 @@ Create a ${storyboardStyle === 'sketch' ? 'professional sketch/drawing' : 'cinem
                 </div>
               )}
 
+              {/* Reference Images Used */}
+              {selectedFrameDetail.scene && (
+                <div className="bg-cinema-gray/30 rounded-xl p-4 border border-cinema-gray">
+                  <h4 className="text-lg font-semibold text-cinema-accent mb-3 flex items-center gap-2">
+                    🖼️ Kullanılan Referans Görseller
+                  </h4>
+                  
+                  {(() => {
+                    const charRefs = selectedFrameDetail.scene.characters
+                      ?.map(charName => {
+                        const approval = characterApprovals[charName];
+                        return approval?.approved && approval?.image?.url ? { name: charName, image: approval.image, type: 'character' } : null;
+                      })
+                      .filter(Boolean) || [];
+                    
+                    const locRefs = selectedFrameDetail.scene.locations
+                      ?.map(locName => {
+                        const approval = locationApprovals[locName];
+                        return approval?.approved && approval?.image?.url ? { name: locName, image: approval.image, type: 'location' } : null;
+                      })
+                      .filter(Boolean) || [];
+                    
+                    const allRefs = [...charRefs, ...locRefs];
+                    
+                    if (allRefs.length === 0) {
+                      return (
+                        <p className="text-cinema-text-dim text-sm">
+                          Bu sahne için referans görsel kullanılmadı. Karakterleri ve mekanları onaylayarak referans görseller ekleyebilirsiniz.
+                        </p>
+                      );
+                    }
+                    
+                    return (
+                      <div className="space-y-3">
+                        <p className="text-xs text-cinema-text-dim">
+                          Bu görseller storyboard frame üretiminde AI'ya referans olarak gönderildi
+                        </p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {allRefs.map((ref, idx) => (
+                            <div key={`ref-${idx}-${ref.name}`} className="bg-cinema-black/50 rounded-lg p-2 border border-cinema-gray/50">
+                              <img
+                                src={ref.image.url}
+                                alt={ref.name}
+                                className="w-full h-24 object-cover rounded mb-2 cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={() => {
+                                  setSelectedImage({
+                                    url: ref.image.url,
+                                    scene: ref.name,
+                                    type: ref.type
+                                  });
+                                  setIsImageModalOpen(true);
+                                }}
+                              />
+                              <div className="text-xs">
+                                <div className="text-white font-medium truncate">{ref.name}</div>
+                                <div className="text-cinema-text-dim">
+                                  {ref.type === 'character' ? '👤 Karakter' : '🏛️ Mekan'}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* Regeneration Options */}
               <div className="bg-cinema-gray/30 rounded-xl p-6 border border-cinema-accent">
                 <h3 className="text-xl font-semibold text-white mb-4">🔄 Yeniden Üretim Seçenekleri</h3>
@@ -6242,26 +6708,6 @@ Create a ${storyboardStyle === 'sketch' ? 'professional sketch/drawing' : 'cinem
                       <div className="text-2xl mb-1">📸</div>
                       <div className="text-xs font-medium text-white">Gerçekçi</div>
                     </button>
-                  </div>
-                </div>
-
-                {/* Aspect Ratio */}
-                <div className="mb-6">
-                  <label className="text-sm font-medium text-white mb-2 block">📐 Boyut</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {['16:9', '9:16', '1:1', '4:3'].map(ratio => (
-                      <button
-                        key={ratio}
-                        onClick={() => setFrameRegenerateSettings({...frameRegenerateSettings, aspectRatio: ratio})}
-                        className={`px-3 py-2 rounded-lg border text-sm transition-all ${
-                          frameRegenerateSettings.aspectRatio === ratio
-                            ? 'border-cinema-accent bg-cinema-accent/20 text-cinema-accent'
-                            : 'border-cinema-gray bg-cinema-gray/30 text-cinema-text hover:border-cinema-gray-light'
-                        }`}
-                      >
-                        {ratio}
-                      </button>
-                    ))}
                   </div>
                 </div>
 
@@ -6334,8 +6780,7 @@ ${styleDesc}`;
                       prompt += `\n\nCreate a ${frameRegenerateSettings.style === 'sketch' ? 'professional sketch/drawing' : 'cinematic photorealistic'} storyboard frame with clear composition and proper framing.`;
                       
                       const imageOptions = {
-                        referenceImages: [],
-                        aspectRatio: frameRegenerateSettings.aspectRatio
+                        referenceImages: []
                       };
                       
                       // Add current frame as reference if enabled

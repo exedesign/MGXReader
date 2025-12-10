@@ -429,28 +429,66 @@ KESİN JSON KURALLARI:
 5. Field isimleri karakter değil ("age", "physical" değil!)
 6. Makul sayı: 5-20 karakter (81 değil!)
 7. İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele ve yanıtı döndür.
+8. DÖNEM/ZAMAN: Senaryo hangi dönemde geçiyorsa, karakterlerin fiziksel özellikleri, giyim tarzı ve stilleri o döneme uygun olmalı.
 
 {{language}} dilinde yanıt ver.`,
-      user: `Senaryodaki karakterleri listele. SADECE JSON:\n\n{\n  "characters": [\n    {\n      "name": "AHMET",\n      "age": "35",\n      "physical": "Uzun boylu, kahverengi saç",\n      "personality": "Sakin, düşünceli",\n      "style": "Rahat kıyafetler",\n      "role": "main",\n      "description": "Ana karakter"\n    }\n  ],\n  "summary": {\n    "totalCharacters": 0,\n    "mainCharacters": 0,\n    "supportingCharacters": 0\n  }\n}\n\nKESİN KURALLAR:\n- Yanıtının İLK karakteri { olmalı, SON karakteri } olmalı\n- "=== Karakter ===" yazma\n- "KAPSAMLı ANALİZ" yazma\n- "Bu karakter analizi tamamlandı" yazma\n- Sadece insan karakterler (AHMET, AYŞE...)\n- "age", "name" gibi kelimeler karakter değil!\n- 5-20 karakter (81 değil!)\n- Başlık, açıklama, markdown YASAK\n- SADECE JSON!`
+      user: `Senaryodaki karakterleri listele. SADECE JSON:
+
+ÖNEMLİ: Senaryo metni içinde yıl, tarih veya dönem belirtilmişse (örn: "1920'ler", "Osmanlı Dönemi", "2050 yılında", "80'ler") karakterlerin fiziksel özellikleri, giyim tarzı ve stilini O DÖNEME UYGUN olarak belirt.
+
+{
+  "characters": [
+    {
+      "name": "AHMET",
+      "age": "35",
+      "physical": "Uzun boylu, kahverengi saç (dönemin fiziksel özellikleri)",
+      "personality": "Sakin, düşünceli",
+      "style": "Dönemine uygun giyim tarzı (örn: 1920'ler: fötr şapka, yelekli takım)",
+      "role": "main",
+      "description": "Ana karakter",
+      "period": "Karakterin yaşadığı dönem/yıl (senaryo metninden tespit et)"
+    }
+  ],
+  "summary": {
+    "totalCharacters": 0,
+    "mainCharacters": 0,
+    "supportingCharacters": 0
+  }
+}
+
+KESİN KURALLAR:
+- Yanıtının İLK karakteri { olmalı, SON karakteri } olmalı
+- "=== Karakter ===" yazma
+- "KAPSAMLı ANALİZ" yazma
+- "Bu karakter analizi tamamlandı" yazma
+- Sadece insan karakterler (AHMET, AYŞE...)
+- "age", "name" gibi kelimeler karakter değil!
+- 5-20 karakter (81 değil!)
+- Başlık, açıklama, markdown YASAK
+- DÖNEM BİLGİSİ: "period" field'ında dönemi belirt (örn: "1920'ler", "Modern", "Osmanlı Dönemi", "2050")
+- SADECE JSON!`
     },
     llama_character: {
       name: '🦙 Karakter',
       tags: ['character', 'analysis', 'json', 'llama'],
       usedBy: ['analysis_panel'],
       outputFormat: 'json',
-      system: 'Sen senaryo uzmanısın. Karakterleri analiz edersin ve JSON formatında yanıt verirsin. İÇERİK FİLTRESİ: API filtreleri tarafından engellenen içerikleri **** ile maskele ve yanıtı tamamla. Basit ve net {{language}} dilinde cevaplar ver.',
+      system: 'Sen senaryo uzmanısın. Karakterleri analiz edersin ve JSON formatında yanıt verirsin. İÇERİK FİLTRESİ: API filtreleri tarafından engellenen içerikleri **** ile maskele ve yanıtı tamamla. DÖNEM: Senaryo hangi dönemde geçiyorsa, karakterlerin fiziksel özellikleri ve giyim tarzı o döneme uygun olmalı. Basit ve net {{language}} dilinde cevaplar ver.',
       user: `Bu senaryodaki karakterleri analiz et ve JSON formatında yaz:
+
+ÖNEMLİ: Senaryo eğer belirli bir dönemde geçiyorsa (örn: 1920'ler, Osmanlı, 2050) fiziksel özellikler ve giyim tarzını o döneme uygun yaz.
 
 {
   "characters": [
     {
       "name": "KARAKTER ADI",
       "age": "yaş",
-      "physical": "fiziksel görünüm (boy, saç, göz, vücut)",
+      "physical": "fiziksel görünüm (boy, saç, göz, vücut) - dönemine uygun",
       "personality": "kişilik (güvenli/gizemli/nazik/vs)",
-      "style": "giyim tarzı",
+      "style": "giyim tarzı - dönemine uygun (örn: 1920'ler: fötr şapka, uzun elbise)",
       "role": "main/supporting/minor",
-      "description": "karakterin önemi (1 cümle)"
+      "description": "karakterin önemi (1 cümle)",
+      "period": "Dönem/yıl (senaryo metninden tespit et, örn: 1920'ler, Modern, Osmanlı)"
     }
   ]
 }
@@ -459,6 +497,8 @@ KURALLAR:
 • Sadece JSON formatında yaz, başka açıklama ekleme
 • Tüm karakterleri listele
 • Fiziksel özellikleri net yaz
+• DÖNEM BİLGİSİ: "period" field'ı ekle
+• Giyim ve fiziksel özellikler döneme uygun olmalı
 • {{language}} dilinde yaz
 
 Net ve açık {{language}} cevap ver.`,
@@ -1277,20 +1317,26 @@ KESİN JSON KURALLARI:
 3. "Bu mekan analizi sonucudur" veya "Analiz tamamlandı" gibi yorumlar YASAK
 4. Her mekan için scenes array olmalı
 5. İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele ve yanıtı döndür.
+6. DÖNEM/ZAMAN: Senaryo hangi dönemde geçiyorsa, mekanların mimari özellikleri, dekorasyon ve atmosferi o döneme uygun olmalı.
 
 {{language}} dilinde yanıt ver.`,
       user: `Mekanları analiz et. SADECE JSON:
+
+ÖNEMLİ: Senaryo metni içinde yıl, tarih veya dönem belirtilmişse (örn: "1920'ler", "Osmanlı Dönemi", "2050 yılında", "80'ler") mekanların mimari özelliklerini, dekorasyon ve atmosferini O DÖNEME UYGUN olarak belirt.
+
 {
   "locations": [
     {
       "name": "KAFE İÇERİSİ",
       "type": "interior",
-      "description": "Modern şehir kafesi, ahşap masalar, büyük pencereler",
-      "atmosphere": "Sakin, huzurlu",
-      "lighting": "Doğal pencere ışığı, yumuşak",
+      "description": "Dönemine uygun mimari ve dekorasyon (örn: 1920'ler kafesi: Art Deco tarzı, kristal avizeler, mermer tablalar)",
+      "atmosphere": "Dönemine özgü atmosfer",
+      "lighting": "Dönemine uygun aydınlatma (örn: 1920'ler: gaz lambaları, 2020'ler: LED spot)",
       "timeOfDay": "morning",
-      "colors": "Kahverengi ahşap, beyaz duvarlar",
-      "mood": "Rahat sohbet atmosferi",
+      "colors": "Dönemin renk paleti",
+      "mood": "Atmosfer",
+      "architecture": "Mimari stil (dönemine özgü)",
+      "period": "Mekanın ait olduğu dönem/yıl (senaryo metninden tespit et)",
       "scenes": [
         {"sceneNumber": 1, "sceneTitle": "SAHNE 1 - KAFE İÇERİSİ", "characters": ["AHMET", "AYŞE"]}
       ]
@@ -1301,6 +1347,8 @@ KESİN JSON KURALLARI:
 ÖNEMLI:
 - İlk karakter { son karakter }
 - Başlık, açıklama yazma
+- DÖNEM BİLGİSİ: "period" ve "architecture" field'larında dönemi belirt
+- Mimari, dekorasyon, aydınlatma o döneme uygun olmalı
 - Sadece JSON!`
     },
     

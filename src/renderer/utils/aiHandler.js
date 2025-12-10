@@ -464,15 +464,6 @@ class AIHandler {
         requestedSize = "1K";
       }
 
-      // Validate aspect ratio - Gemini API only supports specific formats
-      const validAspectRatios = ["1:1", "16:9", "9:16", "4:3", "3:4"];
-      let requestedRatio = options.aspectRatio || "1:1";
-      
-      if (!validAspectRatios.includes(requestedRatio)) {
-        console.warn(`⚠️ Invalid aspect ratio ${requestedRatio}, using 1:1 instead`);
-        requestedRatio = "1:1";
-      }
-
       // Validate temperature (0.0 - 2.0 for image generation)
       let temperature = options.temperature || modelCapabilities.defaultTemperature;
       if (temperature < 0.0 || temperature > 2.0) {
@@ -485,7 +476,6 @@ class AIHandler {
         response_modalities: ["IMAGE"],
         temperature: temperature,
         image_config: {
-          aspect_ratio: requestedRatio,
           image_size: requestedSize
         }
       };
@@ -535,7 +525,6 @@ class AIHandler {
         prompt: prompt,
         config: {
           number_of_images: options.numberOfImages || 1,
-          aspect_ratio: options.aspectRatio || "1:1",
           image_size: options.imageSize || "1K",
           person_generation: "allow_adult"
         }
@@ -1390,18 +1379,11 @@ ${mergedChunks.map((chunk, idx) =>
       };
 
       // Add image configuration if specified (CORRECT PLACEMENT in generationConfig)
-      if (options.aspectRatio || options.imageSize) {
+      if (options.imageSize) {
         requestBody.generationConfig.image_config = {};
 
-        if (options.aspectRatio) {
-          // Valid values: "1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"
-          requestBody.generationConfig.image_config.aspect_ratio = options.aspectRatio;
-        }
-
-        if (options.imageSize) {
-          // Valid values: "1K", "2K", "4K" (note: capital K required)
-          requestBody.generationConfig.image_config.image_size = options.imageSize;
-        }
+        // Valid values: "1K", "2K", "4K" (note: capital K required)
+        requestBody.generationConfig.image_config.image_size = options.imageSize;
       }
 
       // Add text prompt first
@@ -1442,7 +1424,6 @@ ${mergedChunks.map((chunk, idx) =>
         model: imageModel,
         endpoint: url,
         hasReferenceImages: !!(options.referenceImages?.length),
-        aspectRatio: options.aspectRatio,
         imageSize: options.imageSize
       });
 

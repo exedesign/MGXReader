@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Script Store Temizleyici - MGXReader</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 40px;
+      max-width: 800px;
+      width: 100%;
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 2em;
+      text-align: center;
+    }
+    
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 0.9em;
+    }
+    
+    .info-box {
+      background: #f8f9fa;
+      border-left: 4px solid #667eea;
+      padding: 20px;
+      margin-bottom: 30px;
+      border-radius: 8px;
+    }
+    
+    .info-box h3 {
+      color: #667eea;
+      margin-bottom: 10px;
+      font-size: 1.1em;
+    }
+    
+    .info-box p {
+      color: #555;
+      line-height: 1.6;
+      margin-bottom: 8px;
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 30px;
+    }
+    
+    .stat-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .stat-card h3 {
+      font-size: 0.9em;
+      margin-bottom: 10px;
+      opacity: 0.9;
+    }
+    
+    .stat-card .value {
+      font-size: 2em;
+      font-weight: bold;
+    }
+    
+    .data-section {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    
+    .data-section h3 {
+      color: #333;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .data-content {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      line-height: 1.6;
+      border: 1px solid #dee2e6;
+    }
+    
+    .data-content pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    
+    .buttons {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    
+    button {
+      padding: 15px 30px;
+      border: none;
+      border-radius: 10px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    }
+    
+    .btn-view {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .btn-clear {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+    }
+    
+    .btn-refresh {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: white;
+    }
+    
+    .warning {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      color: #856404;
+    }
+    
+    .warning strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+    
+    .success {
+      background: #d4edda;
+      border: 2px solid #28a745;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      color: #155724;
+    }
+    
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧹 Script Store Temizleyici</h1>
+    <p class="subtitle">MGXReader - Zustand Persist State Manager</p>
+    
+    <div class="info-box">
+      <h3>📋 Bu Araç Ne İşe Yarar?</h3>
+      <p>Bu araç, MGXReader uygulamasının Zustand persist state'ini temizler.</p>
+      <p><strong>Script Store:</strong> Senaryo metni, analiz sonuçları, karakterler, mekanlar gibi verileri localStorage'da saklar.</p>
+      <p><strong>Sorun:</strong> Eski analizler silinse bile persist state'de karakter isimleri kalabiliyor.</p>
+      <p><strong>Çözüm:</strong> Bu araç tüm persist state'i temizler ve uygulamayı sıfırlar.</p>
+    </div>
+    
+    <div class="stats">
+      <div class="stat-card">
+        <h3>localStorage Keys</h3>
+        <div class="value" id="localStorageCount">-</div>
+      </div>
+      <div class="stat-card">
+        <h3>Script Store Size</h3>
+        <div class="value" id="scriptStoreSize">-</div>
+      </div>
+      <div class="stat-card">
+        <h3>Total Keys</h3>
+        <div class="value" id="totalKeys">-</div>
+      </div>
+    </div>
+    
+    <div class="warning">
+      <strong>⚠️ DİKKAT!</strong>
+      "Script Store Temizle" butonu tüm senaryo verilerinizi, analiz sonuçlarınızı ve ayarlarınızı silecektir.
+      Bu işlem geri alınamaz. Emin değilseniz önce "Script Store Görüntüle" ile içeriği kontrol edin.
+    </div>
+    
+    <div id="successMessage" class="success hidden">
+      <strong>✅ Başarılı!</strong>
+      <span id="successText"></span>
+    </div>
+    
+    <div class="data-section">
+      <h3>
+        📦 Script Store İçeriği
+        <span style="font-size: 0.8em; color: #666; font-weight: normal;">(script-storage key)</span>
+      </h3>
+      <div class="data-content" id="scriptStoreData">
+        <em style="color: #999;">Henüz görüntülenmedi. "Script Store Görüntüle" butonuna tıklayın.</em>
+      </div>
+    </div>
+    
+    <div class="buttons">
+      <button class="btn-view" onclick="viewScriptStore()">
+        👁️ Script Store Görüntüle
+      </button>
+      <button class="btn-clear" onclick="clearScriptStore()">
+        🗑️ Script Store Temizle
+      </button>
+      <button class="btn-refresh" onclick="refreshStats()">
+        🔄 Yenile
+      </button>
+    </div>
+  </div>
+
+  <script>
+    function updateStats() {
+      const localStorageCount = localStorage.length;
+      const scriptStoreKey = 'script-storage';
+      const scriptStoreData = localStorage.getItem(scriptStoreKey);
+      const scriptStoreSize = scriptStoreData ? (scriptStoreData.length / 1024).toFixed(2) + ' KB' : '0 KB';
+      
+      document.getElementById('localStorageCount').textContent = localStorageCount;
+      document.getElementById('scriptStoreSize').textContent = scriptStoreSize;
+      document.getElementById('totalKeys').textContent = localStorageCount;
+    }
+    
+    function viewScriptStore() {
+      const scriptStoreKey = 'script-storage';
+      const scriptStoreData = localStorage.getItem(scriptStoreKey);
+      const dataContainer = document.getElementById('scriptStoreData');
+      
+      if (!scriptStoreData) {
+        dataContainer.innerHTML = '<em style="color: #f5576c;">❌ Script Store bulunamadı. localStorage boş olabilir.</em>';
+        return;
+      }
+      
+      try {
+        const parsed = JSON.parse(scriptStoreData);
+        const formatted = JSON.stringify(parsed, null, 2);
+        
+        // Highlight important fields
+        let highlighted = formatted;
+        highlighted = highlighted.replace(/"characters":/g, '<span style="color: #f5576c; font-weight: bold;">"characters":</span>');
+        highlighted = highlighted.replace(/"locations":/g, '<span style="color: #764ba2; font-weight: bold;">"locations":</span>');
+        highlighted = highlighted.replace(/"scenes":/g, '<span style="color: #667eea; font-weight: bold;">"scenes":</span>');
+        highlighted = highlighted.replace(/"analysisData":/g, '<span style="color: #00f2fe; font-weight: bold;">"analysisData":</span>');
+        highlighted = highlighted.replace(/"customResults":/g, '<span style="color: #f093fb; font-weight: bold;">"customResults":</span>');
+        
+        // Show stats
+        const state = parsed.state || {};
+        const charactersCount = state.characters?.length || 0;
+        const locationsCount = state.locations?.length || 0;
+        const scenesCount = state.scenes?.length || 0;
+        const scriptsCount = state.scripts?.length || 0;
+        
+        dataContainer.innerHTML = `
+          <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+            <strong>📊 Script Store İstatistikleri:</strong><br>
+            📜 Senaryo sayısı: ${scriptsCount}<br>
+            👤 Karakter sayısı: ${charactersCount}<br>
+            📍 Mekan sayısı: ${locationsCount}<br>
+            🎬 Sahne sayısı: ${scenesCount}<br>
+            💾 Toplam boyut: ${(scriptStoreData.length / 1024).toFixed(2)} KB
+          </div>
+          <pre>${highlighted}</pre>
+        `;
+      } catch (error) {
+        dataContainer.innerHTML = `<em style="color: #f5576c;">❌ JSON parse hatası: ${error.message}</em>`;
+      }
+    }
+    
+    function clearScriptStore() {
+      const confirmation = confirm(
+        '⚠️ DİKKAT!\n\n' +
+        'Bu işlem şunları silecek:\n' +
+        '• Tüm senaryo metinleri\n' +
+        '• Tüm analiz sonuçları\n' +
+        '• Tüm karakterler ve mekanlar\n' +
+        '• Tüm sahneler\n' +
+        '• Tüm uygulama ayarları\n\n' +
+        'Bu işlem GERİ ALINAMAZ!\n\n' +
+        'Devam etmek istediğinize emin misiniz?'
+      );
+      
+      if (!confirmation) return;
+      
+      const secondConfirmation = confirm(
+        '⚠️ SON UYARI!\n\n' +
+        'Bu işlemden sonra:\n' +
+        '• Uygulamayı yeniden başlatmanız gerekecek\n' +
+        '• Tüm veriler kaybolacak\n' +
+        '• localStorage tamamen temizlenecek\n\n' +
+        'Gerçekten devam etmek istiyor musunuz?'
+      );
+      
+      if (!secondConfirmation) return;
+      
+      try {
+        const scriptStoreKey = 'script-storage';
+        const beforeSize = localStorage.getItem(scriptStoreKey)?.length || 0;
+        
+        // Clear script-storage key
+        localStorage.removeItem(scriptStoreKey);
+        
+        // Also clear all MGX related keys
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (
+            key.startsWith('mgx_') || 
+            key.startsWith('character_reference_') ||
+            key.startsWith('location_reference_')
+          )) {
+            keysToRemove.push(key);
+          }
+        }
+        
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        
+        // Show success message
+        const successMessage = document.getElementById('successMessage');
+        const successText = document.getElementById('successText');
+        successText.textContent = `Script Store temizlendi! ${keysToRemove.length + 1} anahtar silindi (${(beforeSize / 1024).toFixed(2)} KB). Uygulamayı yeniden başlatın.`;
+        successMessage.classList.remove('hidden');
+        
+        // Update stats
+        updateStats();
+        
+        // Clear data display
+        document.getElementById('scriptStoreData').innerHTML = '<em style="color: #999;">Script Store temizlendi. Artık veri yok.</em>';
+        
+        setTimeout(() => {
+          alert(
+            '✅ Temizlik tamamlandı!\n\n' +
+            `• ${keysToRemove.length + 1} anahtar silindi\n` +
+            `• ${(beforeSize / 1024).toFixed(2)} KB alan temizlendi\n\n` +
+            '🔄 Lütfen uygulamayı yeniden başlatın (npm start)'
+          );
+        }, 500);
+        
+      } catch (error) {
+        alert('❌ Temizleme hatası: ' + error.message);
+      }
+    }
+    
+    function refreshStats() {
+      updateStats();
+      
+      const successMessage = document.getElementById('successMessage');
+      successMessage.classList.add('hidden');
+      
+      // Show brief feedback
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = '✅ Yenilendi!';
+      btn.disabled = true;
+      
+      setTimeout(() => {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }, 1000);
+    }
+    
+    // Initialize stats on load
+    updateStats();
+  </script>
+</body>
+</html>

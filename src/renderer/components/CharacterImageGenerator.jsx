@@ -17,6 +17,90 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
     const [fileInputKey, setFileInputKey] = useState(Date.now()); // Key to force input reset
     const fileInputRef = useRef(null);
 
+    // 📥 Referans görselleri localStorage'dan yükle VE resize et
+    useEffect(() => {
+        if (character?.name) {
+            const storageKey = `character_reference_${character.name}`;
+            try {
+                const savedReferences = localStorage.getItem(storageKey);
+                if (savedReferences) {
+                    const parsed = JSON.parse(savedReferences);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        // Check if images need resizing (old format check)
+                        const needsResize = parsed.some(img => {
+                            const dataLength = img.data?.length || 0;
+                            return dataLength > 100000; // If >100KB, needs resize
+                        });
+                        
+                        if (needsResize) {
+                            console.log(`🔄 Eski format görseller algılandı, resize ediliyor...`);
+                            // Resize old images
+                            Promise.all(parsed.map(oldImg => {
+                                return new Promise((resolve) => {
+                                    const img = new Image();
+                                    img.onload = () => {
+                                        const canvas = document.createElement('canvas');
+                                        let width = img.width;
+                                        let height = img.height;
+                                        
+                                        const maxSize = 1024;
+                                        if (width > maxSize || height > maxSize) {
+                                            if (width > height) {
+                                                height = Math.round((height * maxSize) / width);
+                                                width = maxSize;
+                                            } else {
+                                                width = Math.round((width * maxSize) / height);
+                                                height = maxSize;
+                                            }
+                                        }
+                                        
+                                        canvas.width = width;
+                                        canvas.height = height;
+                                        const ctx = canvas.getContext('2d');
+                                        ctx.drawImage(img, 0, 0, width, height);
+                                        
+                                        const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                                        resolve({
+                                            ...oldImg,
+                                            data: resizedDataUrl,
+                                            type: 'image/jpeg',
+                                            size: resizedDataUrl.length
+                                        });
+                                    };
+                                    img.onerror = () => resolve(oldImg); // Keep original if error
+                                    img.src = oldImg.data;
+                                });
+                            })).then(resizedImages => {
+                                setReferenceImages(resizedImages);
+                                // Save resized versions
+                                localStorage.setItem(storageKey, JSON.stringify(resizedImages));
+                                console.log(`✅ ${resizedImages.length} referans görsel resize edildi ve kaydedildi`);
+                            });
+                        } else {
+                            setReferenceImages(parsed);
+                            console.log(`📥 ${parsed.length} referans görsel yüklendi:`, character.name);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Referans görseller yüklenemedi:', error);
+            }
+        }
+    }, [character?.name]);
+
+    // 💾 Referans görselleri localStorage'a kaydet
+    useEffect(() => {
+        if (character?.name && referenceImages.length > 0) {
+            const storageKey = `character_reference_${character.name}`;
+            try {
+                localStorage.setItem(storageKey, JSON.stringify(referenceImages));
+                console.log(`💾 ${referenceImages.length} referans görsel kaydedildi:`, character.name);
+            } catch (error) {
+                console.error('❌ Referans görseller kaydedilemedi:', error);
+            }
+        }
+    }, [character?.name, referenceImages]);
+
     // Auto-generate prompt from character data
     useEffect(() => {
         if (character && character.name) {
@@ -105,17 +189,49 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
 
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    const newImage = {
-                        id: Date.now() + Math.random(), // Unique ID
-                        data: e.target.result,
-                        name: file.name,
-                        type: file.type,
-                        size: file.size
-                    };
+                    // Resize image to reduce base64 size (max 1024px)
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        
+                        // Calculate new dimensions (max 1024px on longest side)
+                        const maxSize = 1024;
+                        if (width > maxSize || height > maxSize) {
+                            if (width > height) {
+                                height = Math.round((height * maxSize) / width);
+                                width = maxSize;
+                            } else {
+                                width = Math.round((width * maxSize) / height);
+                                height = maxSize;
+                            }
+                        }
+                        
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        // Convert to data URL with compression
+                        const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                        
+                        const newImage = {
+                            id: Date.now() + Math.random(), // Unique ID
+                            data: resizedDataUrl,
+                            name: file.name,
+                            type: 'image/jpeg', // Force JPEG for better compression
+                            size: resizedDataUrl.length,
+                            originalSize: file.size
+                        };
 
-                    setReferenceImages(prev => [...prev, newImage]);
-                    // Regenerate prompt with reference context
-                    setTimeout(generatePromptFromCharacter, 100);
+                        setReferenceImages(prev => [...prev, newImage]);
+                        // Regenerate prompt with reference context
+                        setTimeout(generatePromptFromCharacter, 100);
+                        
+                        console.log(`📸 Resized: ${file.name} (${(file.size/1024).toFixed(1)}KB → ${(resizedDataUrl.length/1024).toFixed(1)}KB)`);
+                    };
+                    img.src = e.target.result;
                 };
                 reader.readAsDataURL(file);
             } else {
@@ -129,7 +245,18 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
     };
 
     const removeReferenceImage = (imageId) => {
-        setReferenceImages(prev => prev.filter(img => img.id !== imageId));
+        setReferenceImages(prev => {
+            const newImages = prev.filter(img => img.id !== imageId);
+            
+            // 💾 Eğer tüm görseller silinirse localStorage'dan da sil
+            if (newImages.length === 0 && character?.name) {
+                const storageKey = `character_reference_${character.name}`;
+                localStorage.removeItem(storageKey);
+                console.log('🗑️ Tüm referans görseller silindi:', character.name);
+            }
+            
+            return newImages;
+        });
         // Clear file input
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
@@ -140,6 +267,14 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
 
     const clearAllReferenceImages = () => {
         setReferenceImages([]);
+        
+        // 💾 localStorage'dan da temizle
+        if (character?.name) {
+            const storageKey = `character_reference_${character.name}`;
+            localStorage.removeItem(storageKey);
+            console.log('🗑️ Tüm referans görseller temizlendi:', character.name);
+        }
+        
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -167,11 +302,19 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
 
             // Add reference images if available (max 14 for Gemini)
             if (referenceImages.length > 0) {
-                imageOptions.referenceImages = referenceImages.slice(0, 14).map(refImage => ({
-                    data: refImage.data,
-                    mimeType: refImage.type || 'image/png',
-                    instruction: 'Create a character similar to this reference image'
-                }));
+                imageOptions.referenceImages = referenceImages.slice(0, 14).map(refImage => {
+                    // Extract base64 data without data URL prefix
+                    let base64Data = refImage.data;
+                    if (base64Data.includes('base64,')) {
+                        base64Data = base64Data.split('base64,')[1];
+                    }
+                    
+                    return {
+                        data: base64Data, // Pure base64 without data URL prefix
+                        mimeType: refImage.type || 'image/png',
+                        instruction: 'Create a character similar to this reference image'
+                    };
+                });
                 console.log('🖼️ Including reference images:', imageOptions.referenceImages.length, 'images');
             }
 
@@ -248,6 +391,17 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
 
             {/* Reference Image Upload */}
             <div className="mb-6">
+                {/* Hidden file input - her zaman DOM'da olmalı */}
+                <input
+                    key={fileInputKey}
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleReferenceUpload}
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                />
+                
                 <div className="flex items-center justify-between mb-3">
                     <label className="text-sm font-medium text-cinema-text">
                         📸 Referans Görseller (Opsiyonel - Max 14)
@@ -302,15 +456,6 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                     </div>
                 ) : (
                     <div className="border-2 border-dashed border-cinema-gray rounded-lg p-6 text-center">
-                        <input
-                            key={fileInputKey}
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleReferenceUpload}
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                        />
                         <div className="text-4xl mb-3 text-cinema-text-dim">📷</div>
                         <p className="text-sm text-cinema-text mb-2">
                             Karakterinize benzer referans görseller yükleyin

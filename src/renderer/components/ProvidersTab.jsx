@@ -26,7 +26,6 @@ export default function ProvidersTab({
     setCustomTemperature,
     setMLXConfig,
     geminiImageSize,
-    geminiAspectRatio,
     openaiImageSize,
     openaiImageQuality,
     setGeminiImageSettings,
@@ -49,7 +48,6 @@ export default function ProvidersTab({
   
   // Local state for image generation settings
   const [localGeminiImageSize, setLocalGeminiImageSize] = useState(geminiImageSize || '1K');
-  const [localGeminiAspectRatio, setLocalGeminiAspectRatio] = useState(geminiAspectRatio || '1:1');
   const [localOpenAIImageSize, setLocalOpenAIImageSize] = useState(openaiImageSize || '1024x1024');
   const [localOpenAIImageQuality, setLocalOpenAIImageQuality] = useState(openaiImageQuality || 'standard');
   
@@ -690,56 +688,33 @@ export default function ProvidersTab({
             </div>
 
             {/* Image Generation Settings */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-cinema-text font-medium block mb-2">
-                  Image Resolution
-                </label>
-                <select
-                  value={localGeminiImageSize}
-                  onChange={(e) => {
-                    const newSize = e.target.value;
-                    setLocalGeminiImageSize(newSize);
-                    setGeminiImageSettings(newSize, localGeminiAspectRatio);
-                    console.log('📐 Gemini image size changed to:', newSize);
-                  }}
-                  className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
-                >
-                  <option value="1K">1K (1024x1024) - All models</option>
-                  {localGeminiImageModel === 'gemini-3-pro-image-preview' && (
-                    <>
-                      <option value="2K">2K (2048x2048) - Pro only</option>
-                      <option value="4K">4K (4096x4096) - Pro only</option>
-                    </>
-                  )}
-                </select>
-                <p className="text-xs text-cinema-text-dim mt-1">
-                  {localGeminiImageModel === 'gemini-3-pro-image-preview' 
-                    ? '🎨 Pro: 1K, 2K, 4K available'
-                    : '⚡ Flash: 1K only'}
-                </p>
-              </div>
-              <div>
-                <label className="text-cinema-text font-medium block mb-2">
-                  Aspect Ratio
-                </label>
-                <select
-                  value={localGeminiAspectRatio}
-                  onChange={(e) => {
-                    const newRatio = e.target.value;
-                    setLocalGeminiAspectRatio(newRatio);
-                    setGeminiImageSettings(localGeminiImageSize, newRatio);
-                    console.log('📐 Gemini aspect ratio changed to:', newRatio);
-                  }}
-                  className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
-                >
-                  <option value="1:1">1:1 Square</option>
-                  <option value="16:9">16:9 Landscape</option>
-                  <option value="9:16">9:16 Portrait</option>
-                  <option value="4:3">4:3 Classic</option>
-                  <option value="3:4">3:4 Portrait</option>
-                </select>
-              </div>
+            <div>
+              <label className="text-cinema-text font-medium block mb-2">
+                Image Resolution
+              </label>
+              <select
+                value={localGeminiImageSize}
+                onChange={(e) => {
+                  const newSize = e.target.value;
+                  setLocalGeminiImageSize(newSize);
+                  setGeminiImageSettings(newSize);
+                  console.log('📐 Gemini image size changed to:', newSize);
+                }}
+                className="w-full px-4 py-3 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
+              >
+                <option value="1K">1K (1024x1024) - All models</option>
+                {localGeminiImageModel === 'gemini-3-pro-image-preview' && (
+                  <>
+                    <option value="2K">2K (2048x2048) - Pro only</option>
+                    <option value="4K">4K (4096x4096) - Pro only</option>
+                  </>
+                )}
+              </select>
+              <p className="text-xs text-cinema-text-dim mt-1">
+                {localGeminiImageModel === 'gemini-3-pro-image-preview' 
+                  ? '🎨 Pro: 1K, 2K, 4K available'
+                  : '⚡ Flash: 1K only'}
+              </p>
             </div>
 
             <button

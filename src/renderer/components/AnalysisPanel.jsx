@@ -976,10 +976,15 @@ export default function AnalysisPanel() {
             const { updateScript } = useScriptStore.getState();
             updateScript(currentScript.id, {
               analysisData: null,
+              customResults: null,
               scenes: [],
               characters: [],
-              locations: []
+              locations: [],
+              equipment: []
             });
+            
+            // Notify other components (like ProfessionalStoryboard) that analyses were cleared
+            window.dispatchEvent(new CustomEvent('analysisCleared'));
             
             console.log('🗑️ Cleared currently loaded analysis from state');
           }
@@ -4117,11 +4122,17 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
                       const { updateScript } = useScriptStore.getState();
                       updateScript(currentScript.id, {
                         analysisData: null,
+                        customResults: null,
                         scenes: [],
                         characters: [],
-                        locations: []
+                        locations: [],
+                        equipment: []
                       });
+                      console.log('🗑️ Script store cleared: analysisData, customResults, characters, locations, scenes, equipment');
                     }
+                    
+                    // Notify other components (like ProfessionalStoryboard) that all analyses were cleared
+                    window.dispatchEvent(new CustomEvent('analysisCleared'));
                     
                     // 6. Başarı mesajı
                     const totalCleaned = clearResult.successCount + keysToRemove.length;

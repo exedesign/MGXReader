@@ -13,7 +13,6 @@ export const useAIStore = create(
       geminiModel: 'gemini-2.5-flash', // En hızlı ve güncel model
       geminiImageModel: 'gemini-2.5-flash-image', // Nano Banana - Fast and efficient
       geminiImageSize: '1K', // 1K, 2K, 4K (4K only for Pro)
-      geminiAspectRatio: '1:1', // 1:1, 16:9, 9:16, 4:3, 3:4
 
       // OpenAI Configuration  
       openaiApiKey: '',
@@ -58,9 +57,8 @@ export const useAIStore = create(
         geminiModel: model || get().geminiModel,
         geminiImageModel: imageModel || get().geminiImageModel,
       }),
-      setGeminiImageSettings: (size, aspectRatio) => set({
+      setGeminiImageSettings: (size) => set({
         geminiImageSize: size || get().geminiImageSize,
-        geminiAspectRatio: aspectRatio || get().geminiAspectRatio,
       }),
       setOpenAIImageSettings: (size, quality) => set({
         openaiImageSize: size || get().openaiImageSize,
@@ -294,12 +292,11 @@ export const useAIStore = create(
           // Remove any model override from options to ensure store settings are respected
           const imageOptions = { 
             ...options,
-            // Apply store image generation settings based on provider
-            imageSize: state.geminiImageSize,
-            aspectRatio: state.geminiAspectRatio,
+            // Apply store image generation settings ONLY if not provided by component
+            imageSize: options.imageSize || state.geminiImageSize,
             // OpenAI settings (will be used if fallback to OpenAI)
-            size: state.openaiImageSize,
-            quality: state.openaiImageQuality
+            size: options.size || state.openaiImageSize,
+            quality: options.quality || state.openaiImageQuality
           };
           delete imageOptions.model; // Remove any component-level model override
 
@@ -315,7 +312,6 @@ export const useAIStore = create(
           console.log('🎯 FORCING STORE MODELS & SETTINGS - No overrides allowed:', {
             geminiImageModel: state.geminiImageModel,
             geminiImageSize: state.geminiImageSize,
-            geminiAspectRatio: state.geminiAspectRatio,
             openaiImageModel: state.openaiImageModel,
             openaiImageSize: state.openaiImageSize,
             openaiImageQuality: state.openaiImageQuality,

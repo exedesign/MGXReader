@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Karakter Veri Kaynağı Debug - MGXReader</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 40px;
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 2em;
+    }
+    
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+    }
+    
+    .section {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      border-left: 4px solid #667eea;
+    }
+    
+    .section h2 {
+      color: #667eea;
+      margin-bottom: 15px;
+      font-size: 1.3em;
+    }
+    
+    .result {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 15px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid #dee2e6;
+    }
+    
+    .character-card {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border: 2px solid #667eea;
+    }
+    
+    .character-name {
+      font-weight: bold;
+      color: #667eea;
+      font-size: 1.1em;
+      margin-bottom: 8px;
+    }
+    
+    .character-detail {
+      color: #555;
+      line-height: 1.6;
+      margin-bottom: 5px;
+    }
+    
+    .source-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.85em;
+      font-weight: 600;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+    
+    .badge-script {
+      background: #f093fb;
+      color: white;
+    }
+    
+    .badge-localStorage {
+      background: #4facfe;
+      color: white;
+    }
+    
+    .badge-analysis {
+      background: #43e97b;
+      color: white;
+    }
+    
+    .badge-storyboard {
+      background: #fa709a;
+      color: white;
+    }
+    
+    button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .btn-danger {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    
+    .warning {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      color: #856404;
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .stat-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+    }
+    
+    .stat-card h3 {
+      font-size: 0.9em;
+      margin-bottom: 8px;
+      opacity: 0.9;
+    }
+    
+    .stat-card .value {
+      font-size: 2em;
+      font-weight: bold;
+    }
+    
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Karakter Veri Kaynağı Analizi</h1>
+    <p class="subtitle">LALEH ve MURAT karakterlerinin nereden geldiğini bul</p>
+    
+    <div class="stats">
+      <div class="stat-card">
+        <h3>localStorage Keys</h3>
+        <div class="value" id="localStorageCount">0</div>
+      </div>
+      <div class="stat-card">
+        <h3>MGX Analysis Keys</h3>
+        <div class="value" id="mgxAnalysisCount">0</div>
+      </div>
+      <div class="stat-card">
+        <h3>Toplam Karakter</h3>
+        <div class="value" id="totalCharacters">0</div>
+      </div>
+      <div class="stat-card">
+        <h3>Script Store Size</h3>
+        <div class="value" id="scriptStoreSize">0 KB</div>
+      </div>
+    </div>
+    
+    <div class="warning">
+      <strong>🎯 Amaç:</strong> Bu araç, Storyboard'da görünen karakter isimlerinin (LALEH, MURAT) 
+      hangi veri kaynağından geldiğini tespit eder. 4 farklı kaynağı tarar:
+      <br><br>
+      1️⃣ <strong>Script Store (Zustand persist)</strong> - script-storage key<br>
+      2️⃣ <strong>localStorage MGX Analysis</strong> - mgx_analysis_* keys<br>
+      3️⃣ <strong>localStorage MGX Storyboard</strong> - mgx_storyboard_* keys<br>
+      4️⃣ <strong>Karakter Referans Görselleri</strong> - character_reference_* keys
+    </div>
+    
+    <!-- SOURCE 1: Script Store -->
+    <div class="section">
+      <h2>1️⃣ Script Store (Zustand Persist)</h2>
+      <p>Zustand persist state - senaryo ve analiz verileri</p>
+      <button class="btn-primary" onclick="checkScriptStore()">Script Store Kontrol Et</button>
+      <button class="btn-danger" onclick="clearScriptStoreCharacters()">Script Store Karakterleri Temizle</button>
+      <div id="scriptStoreResult" class="result" style="display: none;"></div>
+    </div>
+    
+    <!-- SOURCE 2: localStorage MGX Analysis -->
+    <div class="section">
+      <h2>2️⃣ localStorage MGX Analysis</h2>
+      <p>analysisStorageService tarafından kaydedilen analiz verileri</p>
+      <button class="btn-primary" onclick="checkMGXAnalysis()">MGX Analysis Kontrol Et</button>
+      <button class="btn-danger" onclick="clearMGXAnalysis()">MGX Analysis Temizle</button>
+      <div id="mgxAnalysisResult" class="result" style="display: none;"></div>
+    </div>
+    
+    <!-- SOURCE 3: localStorage MGX Storyboard -->
+    <div class="section">
+      <h2>3️⃣ localStorage MGX Storyboard</h2>
+      <p>Storyboard cache verileri</p>
+      <button class="btn-primary" onclick="checkMGXStoryboard()">MGX Storyboard Kontrol Et</button>
+      <button class="btn-danger" onclick="clearMGXStoryboard()">MGX Storyboard Temizle</button>
+      <div id="mgxStoryboardResult" class="result" style="display: none;"></div>
+    </div>
+    
+    <!-- SOURCE 4: Character References -->
+    <div class="section">
+      <h2>4️⃣ Karakter Referans Görselleri</h2>
+      <p>CharacterImageGenerator tarafından kaydedilen referans görseller</p>
+      <button class="btn-primary" onclick="checkCharacterReferences()">Referans Görseller Kontrol Et</button>
+      <button class="btn-danger" onclick="clearCharacterReferences()">Referans Görseller Temizle</button>
+      <div id="characterReferencesResult" class="result" style="display: none;"></div>
+    </div>
+    
+    <!-- SUMMARY -->
+    <div class="section">
+      <h2>📊 ÖZET RAPOR</h2>
+      <button class="btn-primary" onclick="generateSummary()">Tüm Kaynakları Tara ve Rapor Oluştur</button>
+      <div id="summaryResult" class="result" style="display: none;"></div>
+    </div>
+  </div>
+
+  <script>
+    // Update stats
+    function updateStats() {
+      const localStorageCount = localStorage.length;
+      let mgxAnalysisCount = 0;
+      let totalCharacters = 0;
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('mgx_analysis_')) {
+          mgxAnalysisCount++;
+        }
+      }
+      
+      document.getElementById('localStorageCount').textContent = localStorageCount;
+      document.getElementById('mgxAnalysisCount').textContent = mgxAnalysisCount;
+      
+      const scriptStore = localStorage.getItem('script-storage');
+      if (scriptStore) {
+        const size = (scriptStore.length / 1024).toFixed(2);
+        document.getElementById('scriptStoreSize').textContent = size + ' KB';
+      }
+    }
+    
+    // SOURCE 1: Script Store
+    function checkScriptStore() {
+      const scriptStore = localStorage.getItem('script-storage');
+      const resultDiv = document.getElementById('scriptStoreResult');
+      
+      if (!scriptStore) {
+        resultDiv.innerHTML = '<p style="color: #999;">❌ Script Store bulunamadı</p>';
+        resultDiv.style.display = 'block';
+        return;
+      }
+      
+      try {
+        const data = JSON.parse(scriptStore);
+        const state = data.state || {};
+        const characters = state.characters || [];
+        const scripts = state.scripts || [];
+        
+        let html = '<strong>📦 Script Store İçeriği:</strong><br><br>';
+        html += `<p>📜 Senaryo sayısı: ${scripts.length}</p>`;
+        html += `<p>👤 state.characters array: ${characters.length} karakter</p><br>`;
+        
+        if (characters.length > 0) {
+          html += '<strong style="color: #f5576c;">⚠️ BULUNDU! state.characters array\'inde karakter var:</strong><br><br>';
+          characters.forEach((char, idx) => {
+            html += `<div class="character-card">`;
+            html += `<div class="character-name">${idx + 1}. ${char.name || 'İsimsiz'}</div>`;
+            if (char.age) html += `<div class="character-detail">📅 Yaş: ${char.age}</div>`;
+            if (char.role) html += `<div class="character-detail">🎭 Rol: ${char.role}</div>`;
+            if (char.physical) html += `<div class="character-detail">👁️ Fiziksel: ${char.physical}</div>`;
+            html += `<span class="source-badge badge-script">Script Store - state.characters</span>`;
+            html += `</div>`;
+          });
+        }
+        
+        // Check each script's analysisData
+        scripts.forEach((script, idx) => {
+          if (script.analysisData?.customResults?.character) {
+            const charData = script.analysisData.customResults.character;
+            html += `<br><strong style="color: #f5576c;">⚠️ BULUNDU! scripts[${idx}].analysisData.customResults.character:</strong><br>`;
+            html += `<p>📝 Script: ${script.fileName || script.title || 'Untitled'}</p>`;
+            
+            if (charData.characters && Array.isArray(charData.characters)) {
+              html += `<p>👤 ${charData.characters.length} karakter bulundu:</p>`;
+              charData.characters.slice(0, 5).forEach(char => {
+                html += `<div class="character-card">`;
+                html += `<div class="character-name">${char.name || 'İsimsiz'}</div>`;
+                if (char.age) html += `<div class="character-detail">📅 Yaş: ${char.age}</div>`;
+                if (char.role) html += `<div class="character-detail">🎭 Rol: ${char.role}</div>`;
+                html += `<span class="source-badge badge-script">Script ${idx} - analysisData</span>`;
+                html += `</div>`;
+              });
+              if (charData.characters.length > 5) {
+                html += `<p>... ve ${charData.characters.length - 5} karakter daha</p>`;
+              }
+            }
+          }
+          
+          if (script.characters && script.characters.length > 0) {
+            html += `<br><strong style="color: #f5576c;">⚠️ BULUNDU! scripts[${idx}].characters array:</strong><br>`;
+            html += `<p>📝 Script: ${script.fileName || script.title || 'Untitled'}</p>`;
+            html += `<p>👤 ${script.characters.length} karakter bulundu:</p>`;
+            script.characters.slice(0, 5).forEach(char => {
+              html += `<div class="character-card">`;
+              html += `<div class="character-name">${char.name || char}</div>`;
+              html += `<span class="source-badge badge-script">Script ${idx} - characters array</span>`;
+              html += `</div>`;
+            });
+          }
+        });
+        
+        if (characters.length === 0 && !scripts.some(s => s.characters?.length > 0 || s.analysisData?.customResults?.character)) {
+          html += '<p style="color: #28a745;">✅ Script Store\'da karakter verisi YOK</p>';
+        }
+        
+        resultDiv.innerHTML = html;
+        resultDiv.style.display = 'block';
+        
+      } catch (error) {
+        resultDiv.innerHTML = `<p style="color: #f5576c;">❌ Parse hatası: ${error.message}</p>`;
+        resultDiv.style.display = 'block';
+      }
+    }
+    
+    function clearScriptStoreCharacters() {
+      if (!confirm('⚠️ Script Store\'daki TÜM karakter ve analiz verileri silinecek!\n\nDevam etmek istiyor musunuz?')) {
+        return;
+      }
+      
+      const scriptStore = localStorage.getItem('script-storage');
+      if (!scriptStore) {
+        alert('❌ Script Store bulunamadı');
+        return;
+      }
+      
+      try {
+        const data = JSON.parse(scriptStore);
+        const state = data.state || {};
+        
+        // Clear characters array
+        state.characters = [];
+        state.locations = [];
+        state.equipment = [];
+        state.scenes = [];
+        state.analysisData = null;
+        
+        // Clear each script's character data
+        if (state.scripts && Array.isArray(state.scripts)) {
+          state.scripts.forEach(script => {
+            script.characters = [];
+            script.locations = [];
+            script.scenes = [];
+            if (script.analysisData) {
+              script.analysisData = null;
+            }
+          });
+        }
+        
+        // Save back
+        data.state = state;
+        localStorage.setItem('script-storage', JSON.stringify(data));
+        
+        alert('✅ Script Store karakterleri temizlendi!\n\nUygulamayı yeniden başlatın.');
+        checkScriptStore(); // Refresh display
+        updateStats();
+        
+      } catch (error) {
+        alert('❌ Temizleme hatası: ' + error.message);
+      }
+    }
+    
+    // SOURCE 2: MGX Analysis
+    function checkMGXAnalysis() {
+      const resultDiv = document.getElementById('mgxAnalysisResult');
+      let html = '<strong>📊 MGX Analysis Keys:</strong><br><br>';
+      let foundCharacters = false;
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('mgx_analysis_')) {
+          try {
+            const data = JSON.parse(localStorage.getItem(key));
+            if (data.customResults?.character) {
+              foundCharacters = true;
+              const charData = data.customResults.character;
+              html += `<strong style="color: #f5576c;">⚠️ BULUNDU! ${key}</strong><br>`;
+              
+              if (charData.characters && Array.isArray(charData.characters)) {
+                html += `<p>👤 ${charData.characters.length} karakter:</p>`;
+                charData.characters.slice(0, 3).forEach(char => {
+                  html += `<div class="character-card">`;
+                  html += `<div class="character-name">${char.name || 'İsimsiz'}</div>`;
+                  if (char.age) html += `<div class="character-detail">📅 Yaş: ${char.age}</div>`;
+                  if (char.role) html += `<div class="character-detail">🎭 Rol: ${char.role}</div>`;
+                  html += `<span class="source-badge badge-localStorage">${key}</span>`;
+                  html += `</div>`;
+                });
+                if (charData.characters.length > 3) {
+                  html += `<p>... ve ${charData.characters.length - 3} karakter daha</p>`;
+                }
+              }
+              html += '<br>';
+            }
+          } catch (error) {
+            html += `<p style="color: #999;">${key}: Parse hatası</p>`;
+          }
+        }
+      }
+      
+      if (!foundCharacters) {
+        html += '<p style="color: #28a745;">✅ MGX Analysis\'te karakter verisi YOK</p>';
+      }
+      
+      resultDiv.innerHTML = html;
+      resultDiv.style.display = 'block';
+    }
+    
+    function clearMGXAnalysis() {
+      if (!confirm('⚠️ Tüm MGX Analysis verileri silinecek!\n\nDevam etmek istiyor musunuz?')) {
+        return;
+      }
+      
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('mgx_analysis_')) {
+          keysToRemove.push(key);
+        }
+      }
+      
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
+      alert(`✅ ${keysToRemove.length} MGX Analysis key silindi!\n\nUygulamayı yeniden başlatın.`);
+      checkMGXAnalysis();
+      updateStats();
+    }
+    
+    // SOURCE 3: MGX Storyboard
+    function checkMGXStoryboard() {
+      const resultDiv = document.getElementById('mgxStoryboardResult');
+      let html = '<strong>🎬 MGX Storyboard Keys:</strong><br><br>';
+      let foundData = false;
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('mgx_storyboard_')) {
+          foundData = true;
+          html += `<p>📦 ${key}</p>`;
+        }
+      }
+      
+      if (!foundData) {
+        html += '<p style="color: #28a745;">✅ MGX Storyboard cache YOK</p>';
+      }
+      
+      resultDiv.innerHTML = html;
+      resultDiv.style.display = 'block';
+    }
+    
+    function clearMGXStoryboard() {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('mgx_storyboard_')) {
+          keysToRemove.push(key);
+        }
+      }
+      
+      if (keysToRemove.length === 0) {
+        alert('ℹ️ Silinecek MGX Storyboard key yok');
+        return;
+      }
+      
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      alert(`✅ ${keysToRemove.length} MGX Storyboard key silindi!`);
+      checkMGXStoryboard();
+      updateStats();
+    }
+    
+    // SOURCE 4: Character References
+    function checkCharacterReferences() {
+      const resultDiv = document.getElementById('characterReferencesResult');
+      let html = '<strong>🖼️ Karakter Referans Görselleri:</strong><br><br>';
+      let foundData = false;
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('character_reference_')) {
+          foundData = true;
+          const charName = key.replace('character_reference_', '');
+          try {
+            const data = JSON.parse(localStorage.getItem(key));
+            html += `<div class="character-card">`;
+            html += `<div class="character-name">${charName}</div>`;
+            html += `<div class="character-detail">🖼️ ${data.length} referans görsel</div>`;
+            html += `<span class="source-badge badge-analysis">${key}</span>`;
+            html += `</div>`;
+          } catch (error) {
+            html += `<p>${charName}: Parse hatası</p>`;
+          }
+        }
+      }
+      
+      if (!foundData) {
+        html += '<p style="color: #28a745;">✅ Karakter referans görseli YOK</p>';
+      }
+      
+      resultDiv.innerHTML = html;
+      resultDiv.style.display = 'block';
+    }
+    
+    function clearCharacterReferences() {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('character_reference_')) {
+          keysToRemove.push(key);
+        }
+      }
+      
+      if (keysToRemove.length === 0) {
+        alert('ℹ️ Silinecek referans görsel yok');
+        return;
+      }
+      
+      if (!confirm(`⚠️ ${keysToRemove.length} karakter referans görseli silinecek!\n\nDevam etmek istiyor musunuz?`)) {
+        return;
+      }
+      
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      alert(`✅ ${keysToRemove.length} referans görsel silindi!`);
+      checkCharacterReferences();
+      updateStats();
+    }
+    
+    // SUMMARY
+    function generateSummary() {
+      const resultDiv = document.getElementById('summaryResult');
+      let html = '<h3>🎯 VERİ KAYNAĞI ANALİZ RAPORU</h3><br>';
+      
+      let totalCharacters = 0;
+      let sources = [];
+      
+      // 1. Script Store
+      const scriptStore = localStorage.getItem('script-storage');
+      if (scriptStore) {
+        try {
+          const data = JSON.parse(scriptStore);
+          const state = data.state || {};
+          
+          if (state.characters && state.characters.length > 0) {
+            sources.push({
+              name: 'Script Store - state.characters',
+              count: state.characters.length,
+              characters: state.characters.map(c => c.name || 'İsimsiz'),
+              critical: true
+            });
+            totalCharacters += state.characters.length;
+          }
+          
+          if (state.scripts && Array.isArray(state.scripts)) {
+            state.scripts.forEach((script, idx) => {
+              if (script.characters && script.characters.length > 0) {
+                sources.push({
+                  name: `Script Store - scripts[${idx}].characters`,
+                  count: script.characters.length,
+                  characters: script.characters.map(c => typeof c === 'string' ? c : c.name || 'İsimsiz'),
+                  critical: true
+                });
+                totalCharacters += script.characters.length;
+              }
+              
+              if (script.analysisData?.customResults?.character?.characters) {
+                sources.push({
+                  name: `Script Store - scripts[${idx}].analysisData`,
+                  count: script.analysisData.customResults.character.characters.length,
+                  characters: script.analysisData.customResults.character.characters.map(c => c.name || 'İsimsiz'),
+                  critical: true
+                });
+                totalCharacters += script.analysisData.customResults.character.characters.length;
+              }
+            });
+          }
+        } catch (error) {
+          html += `<p style="color: #f5576c;">❌ Script Store parse hatası: ${error.message}</p>`;
+        }
+      }
+      
+      // 2. MGX Analysis
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('mgx_analysis_')) {
+          try {
+            const data = JSON.parse(localStorage.getItem(key));
+            if (data.customResults?.character?.characters) {
+              sources.push({
+                name: `localStorage - ${key}`,
+                count: data.customResults.character.characters.length,
+                characters: data.customResults.character.characters.map(c => c.name || 'İsimsiz'),
+                critical: true
+              });
+              totalCharacters += data.customResults.character.characters.length;
+            }
+          } catch (error) {}
+        }
+      }
+      
+      // 3. Character References
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('character_reference_')) {
+          const charName = key.replace('character_reference_', '');
+          sources.push({
+            name: 'Referans Görsel',
+            count: 1,
+            characters: [charName],
+            critical: false
+          });
+        }
+      }
+      
+      html += `<p><strong>📊 Toplam ${totalCharacters} karakter ${sources.filter(s => s.critical).length} farklı kaynakta bulundu</strong></p><br>`;
+      
+      if (sources.length === 0) {
+        html += '<div style="background: #d4edda; padding: 20px; border-radius: 8px; border: 2px solid #28a745;">';
+        html += '<h3 style="color: #155724;">✅ HİÇBİR KAYNAKTA KARAKTER VERİSİ YOK!</h3>';
+        html += '<p style="color: #155724;">Tüm kaynaklar temiz. Storyboard boş olmalı.</p>';
+        html += '</div>';
+      } else {
+        sources.forEach((source, idx) => {
+          html += `<div class="character-card" style="border-color: ${source.critical ? '#f5576c' : '#667eea'};">`;
+          html += `<div class="character-name">${idx + 1}. ${source.name}</div>`;
+          html += `<div class="character-detail">👤 ${source.count} karakter: ${source.characters.slice(0, 5).join(', ')}`;
+          if (source.characters.length > 5) {
+            html += ` ... (+${source.characters.length - 5})`;
+          }
+          html += `</div>`;
+          if (source.critical) {
+            html += `<span class="source-badge badge-danger" style="background: #f5576c;">❗ KRİTİK - Bu kaynak Storyboard\'a veri sağlıyor</span>`;
+          } else {
+            html += `<span class="source-badge badge-analysis">ℹ️ Sadece referans görsel</span>`;
+          }
+          html += `</div>`;
+        });
+        
+        html += '<br><div style="background: #fff3cd; padding: 20px; border-radius: 8px; border: 2px solid #ffc107;">';
+        html += '<h3 style="color: #856404;">⚠️ ÖNERİ</h3>';
+        html += '<p style="color: #856404;">Yukarıdaki kaynaklardan <strong>KRİTİK</strong> işaretli olanları temizleyin.</p>';
+        html += '<p style="color: #856404;">En yaygın sorun: <strong>Script Store - state.characters</strong> veya <strong>scripts[].analysisData</strong> temizlenmemiş.</p>';
+        html += '</div>';
+      }
+      
+      document.getElementById('totalCharacters').textContent = totalCharacters;
+      resultDiv.innerHTML = html;
+      resultDiv.style.display = 'block';
+    }
+    
+    // Initialize
+    updateStats();
+  </script>
+</body>
+</html>
