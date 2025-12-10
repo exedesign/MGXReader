@@ -2046,11 +2046,58 @@ export default function ProfessionalStoryboard() {
     }
   };
 
-  // Load approvals on mount
+  // Load approvals on mount and check if analysis exists
   useEffect(() => {
-    if (currentScriptId) {
-      loadApprovalsFromStorage();
-    }
+    const checkAnalysisAndLoad = async () => {
+      if (!currentScriptId) {
+        // No script - clear everything
+        setCharacterAnalysis(null);
+        setLocationAnalysis(null);
+        setStyleAnalysis(null);
+        setColorPalette(null);
+        setVisualLanguage(null);
+        setExtractedScenes([]);
+        setStoryboardFrames([]);
+        setCharacterApprovals({});
+        setLocationApprovals({});
+        setSceneApprovals({});
+        console.log('🗑️ Script yok - tüm veriler temizlendi');
+        return;
+      }
+
+      // Check if analysis exists
+      const currentScript = getCurrentScript();
+      if (currentScript) {
+        const scriptText = currentScript.cleanedText || currentScript.scriptText || currentScript.text || currentScript.content || '';
+        const fileName = currentScript.fileName || currentScript.name || currentScript.title || 'untitled';
+        
+        // Check for existing analysis
+        const existingAnalysis = await analysisStorageService.loadAnalysis(scriptText, fileName);
+        
+        if (!existingAnalysis || !existingAnalysis.customResults || Object.keys(existingAnalysis.customResults).length === 0) {
+          // No analysis found - clear storyboard data
+          console.log('⚠️ Analiz kaydı bulunamadı - storyboard verileri temizleniyor');
+          setCharacterAnalysis(null);
+          setLocationAnalysis(null);
+          setStyleAnalysis(null);
+          setColorPalette(null);
+          setVisualLanguage(null);
+          setExtractedScenes([]);
+          setStoryboardFrames([]);
+          setCharacterApprovals({});
+          setLocationApprovals({});
+          setSceneApprovals({});
+          setCurrentPhase(null);
+          console.log('🗑️ Analiz yok - tüm storyboard verileri temizlendi');
+        } else {
+          // Analysis exists - load storyboard data
+          console.log('✅ Analiz bulundu - storyboard verileri yükleniyor');
+          loadApprovalsFromStorage();
+        }
+      }
+    };
+
+    checkAnalysisAndLoad();
   }, [currentScriptId]);
 
   // Auto-save when approvals change
