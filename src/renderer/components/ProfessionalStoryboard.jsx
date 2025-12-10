@@ -2226,21 +2226,17 @@ export default function ProfessionalStoryboard() {
       console.log('✅ Script başarıyla yüklendi:', fileName);
       console.log('📊 Script uzunluğu:', scriptText?.length || 0, 'karakter');
       
-      // 1. Check script's own analysisData first (immediate access)
-      if (currentScript.analysisData) {
-        console.log('📊 Script objesinde analysisData mevcut');
-        existingAnalysis = currentScript.analysisData;
-      }
+      // ═══════════════════════════════════════════════════════════════
+      // SADECE ANALYSIS PANEL'DEN VERİ AL (Basitleştirilmiş)
+      // ═══════════════════════════════════════════════════════════════
       
-      // 2. AnalysisStorageService'den yükle (persistent storage)
-      if (!existingAnalysis) {
-        console.log('🔍 AnalysisStorageService\'den yükleniyor...');
-        existingAnalysis = await analysisStorageService.loadAnalysis(scriptText, fileName);
-      }
+      // 1. AnalysisStorageService'den yükle (Analysis panelinin kaydettiği yer)
+      console.log('🔍 Analysis paneli verilerini yüklüyor...');
+      existingAnalysis = await analysisStorageService.loadAnalysis(scriptText, fileName);
       
-      // 3. Tüm kaydedilmiş analizleri kontrol et (fileName ile eşleşme)
+      // 2. Bulunamazsa tüm kaydedilmiş analizleri kontrol et
       if (!existingAnalysis) {
-        console.log('🗂️ Kaydedilmiş analizler kontrol ediliyor...');
+        console.log('🗂️ Kaydedilmiş tüm analizler taranıyor...');
         const allAnalyses = await analysisStorageService.listAnalyses();
         console.log(`📊 Toplam ${allAnalyses.length} kaydedilmiş analiz bulundu`);
         
@@ -2298,18 +2294,12 @@ export default function ProfessionalStoryboard() {
       // ⚠️ REMOVED: Legacy customResults check - causes stale data issues
       // Script store should not cache analysis data directly
       
-      console.log('🔍 Analiz kaynağı kontrolü:', {
+      console.log('🔍 Analysis Panel veri kontrolü:', {
         hasExistingAnalysis: !!existingAnalysis,
         hasCustomResults: !!existingAnalysis?.customResults,
         customResultsKeys: existingAnalysis?.customResults ? Object.keys(existingAnalysis.customResults) : [],
-        sources: {
-          analysisPanel: 'checked',
-          localStorage: 'checked',
-          tempFiles: 'checked',
-          fuzzyMatch: 'checked',
-          pdfMatch: 'checked',
-          scriptStore: 'DISABLED - causes stale data'
-        }
+        dataSource: 'Analysis Panel (analysisStorageService)',
+        note: 'Storyboard her zaman Analysis panelinden veri okur'
       });
       
       // 5. customResults kontrolü
@@ -4362,10 +4352,10 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
         
         if (!hasCharacterAnalysisData && !hasLocationAnalysisData) {
           console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('❌ HATA: Analiz verileri bulunamadı!');
+          console.error('❌ HATA: Analysis panelinde analiz verisi bulunamadı!');
           console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('Çözüm: Alt menüden "📄 Analiz Verilerini Yükle" butonuna tıklayın.');
-          alert('❌ Analiz verileri yüklenmemiş!\n\nLütfen alttaki navigasyon menüsünden\n"📄 Analiz Verilerini Yükle" butonuna tıklayın.');
+          console.error('Çözüm: Analysis paneline gidin ve analiz yapın.');
+          alert('❌ Analysis panelinde analiz verisi yok!\n\nStoryboard paneli Analysis panelinden veri okur.\n\n1. Analysis paneline gidin\n2. Gerekli analizleri yapın\n3. Tekrar Storyboard paneline dönün');
           return;
         }
         
@@ -4397,8 +4387,8 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
           console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           console.error('❌ HATA: Karakter veya mekan verisi yok!');
           console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('Çözüm: Analiz verilerini yükleyin ve karakterleri/mekanları onaylayın.');
-          alert('❌ Karakter veya mekan verisi bulunamadı!\n\n1. Alttaki menüden "📄 Analiz Verilerini Yükle" butonuna tıklayın\n2. "👥 Karakterler" fazına gidin ve karakterleri onaylayın\n3. "🏛️ Mekanlar" fazına gidin ve mekanları onaylayın');
+          console.error('Çözüm: Analysis panelinde karakter/mekan analizi yapın.');
+          alert('❌ Karakter veya mekan analizi yapılmamış!\n\nAnalysis paneline gidin ve:\n1. Karakter analizi yapın\n2. Mekan analizi yapın\n3. Tekrar Storyboard paneline dönün');
           return;
         }
         
@@ -4466,6 +4456,9 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                 </h1>
                 <p className="text-cinema-text-dim">
                   Senaryonuzdan profesyonel storyboard oluşturun
+                </p>
+                <p className="text-xs text-yellow-400/70 mt-1">
+                  ℹ️ Bu panel <span className="font-semibold">Analysis panelinden</span> veri okur. Analiz yoksa storyboard oluşturulamaz.
                 </p>
               </div>
               {(characterAnalysis || styleAnalysis || Object.keys(characterReferences).length > 0) && (
@@ -6307,7 +6300,7 @@ Create a ${storyboardStyle === 'sketch' ? 'professional sketch/drawing' : 'cinem
                           className="bg-cinema-accent hover:bg-cinema-accent/90 text-cinema-black px-8 py-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium text-lg transition-all transform hover:scale-105"
                         >
                           {(isProcessing || isStoryboardProcessing) ? '🔄 Storyboard Üretiliyor...' :
-                            extractedScenes.length === 0 ? '⚠️ Önce Analiz Verilerini Yükle' :
+                            extractedScenes.length === 0 ? '⚠️ Analysis Panelinde Analiz Yapın' :
                               !isConfigured() ? '⚠️ AI Ayarları Gerekli' :
                                 !aiHandler ? '⏳ Yükleniyor...' :
                                   '🎬 Profesyonel Storyboard Üret'}
