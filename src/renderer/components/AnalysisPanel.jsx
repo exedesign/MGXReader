@@ -1250,6 +1250,25 @@ export default function AnalysisPanel() {
     }
   }, [activeTab]);
 
+  // Listen for analysis updates from Storyboard panel
+  useEffect(() => {
+    const handleAnalysisUpdate = (event) => {
+      console.log('🔄 Analysis update event received:', event.detail);
+      // Refresh saved analyses list
+      if (activeTab === 'saved') {
+        loadSavedAnalyses();
+      }
+      // Show notification
+      console.log('✅ Storyboard panelinden analiz güncellendi');
+    };
+
+    window.addEventListener('analysisUpdated', handleAnalysisUpdate);
+    
+    return () => {
+      window.removeEventListener('analysisUpdated', handleAnalysisUpdate);
+    };
+  }, [activeTab]);
+
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef(null);
   const analysisDropdownRef = useRef(null);

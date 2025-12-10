@@ -1960,8 +1960,59 @@ export default function ProfessionalStoryboard() {
         storyboardData
       );
       console.log('💾 Storyboard verileri kaydedildi');
+      
+      // Eğer karakterler ve mekanlar analiz edilmişse, Analysis paneline bildir
+      await saveAnalysisDataIfComplete();
     } catch (error) {
       console.error('❌ Storyboard kayıt hatası:', error);
+    }
+  };
+
+  // Analiz verilerini Analysis paneline kaydet (görünür olması için)
+  const saveAnalysisDataIfComplete = async () => {
+    try {
+      const currentScript = getCurrentScript();
+      if (!currentScript) return;
+
+      // Eğer karakter veya mekan analizi varsa, bunu Analysis storage'a kaydet
+      if (characterAnalysis || locationAnalysis || styleAnalysis) {
+        const scriptText = currentScript.cleanedText || currentScript.scriptText || currentScript.text || currentScript.content || '';
+        const fileName = currentScript.fileName || currentScript.name || currentScript.title || 'untitled';
+        
+        // Mevcut analysis data'yı oluştur
+        const analysisDataToSave = {
+          character: characterAnalysis,
+          location_analysis: locationAnalysis,
+          style: styleAnalysis,
+          color_palette: colorPalette,
+          visual_language: visualLanguage,
+          scenes: extractedScenes,
+          timestamp: new Date().toISOString(),
+          source: 'Storyboard Panel'
+        };
+
+        // Analysis storage'a kaydet (Analysis panelinde görünecek)
+        await analysisStorageService.saveAnalysis(
+          scriptText,
+          fileName,
+          analysisDataToSave,
+          {
+            projectName: currentScript.title || fileName.replace(/\.(pdf|txt|fountain)$/i, ''),
+            analysisType: 'storyboard',
+            originalFileName: fileName,
+            fileType: fileName.match(/\.(pdf|txt|fountain)$/i)?.[1] || 'unknown'
+          }
+        );
+        
+        console.log('✅ Analiz verileri Analysis paneline kaydedildi');
+        
+        // Event gönder - Analysis panelinin refresh yapması için
+        window.dispatchEvent(new CustomEvent('analysisUpdated', {
+          detail: { fileName, source: 'storyboard' }
+        }));
+      }
+    } catch (error) {
+      console.error('❌ Analiz kayıt hatası:', error);
     }
   };
 
