@@ -5858,9 +5858,25 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                     </div>
                   ) : storyboardFrames.length > 0 ? (
                     <div className="space-y-6">
-                      <h3 className="text-lg font-semibold text-cinema-accent">
-                        ✅ {storyboardFrames.length} Storyboard Çerçevesi Üretildi
-                      </h3>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-cinema-accent">
+                          ✅ {storyboardFrames.length} Storyboard Çerçevesi Üretildi
+                        </h3>
+                        {storyboardFrames.length > 0 && (
+                          <button
+                            onClick={() => {
+                              if (confirm(`${storyboardFrames.length} adet storyboard çerçevesini silmek istediğinizden emin misiniz?`)) {
+                                setStoryboardFrames([]);
+                                setFinalStoryboard({});
+                                console.log('🗑️ Tüm storyboard çerçeveleri silindi');
+                              }
+                            }}
+                            className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded-lg text-sm transition-colors border border-red-500/30"
+                          >
+                            🗑️ Tümünü Sil
+                          </button>
+                        )}
+                      </div>
 
                       {/* Style Settings - Always Visible */}
                       <div className="bg-cinema-gray/30 rounded-xl p-6 border border-cinema-gray">
@@ -5927,21 +5943,36 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                               />
                             )}
                             
-                            {/* Detail & Regenerate Button */}
-                            <button
-                              onClick={() => {
-                                setSelectedFrameDetail({ frame, index, scene: extractedScenes[index] });
-                                setFrameRegenerateSettings({
-                                  useReference: true,
-                                  customPrompt: '',
-                                  style: storyboardStyle
-                                });
-                                setIsFrameDetailOpen(true);
-                              }}
-                              className="mt-2 w-full px-3 py-2 bg-cinema-gray/20 hover:bg-cinema-gray/40 text-cinema-text rounded text-xs transition-colors"
-                            >
-                              📝 Detaylar & Yeniden Üretim
-                            </button>
+                            {/* Action Buttons */}
+                            <div className="mt-2 flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedFrameDetail({ frame, index, scene: extractedScenes[index] });
+                                  setFrameRegenerateSettings({
+                                    useReference: true,
+                                    customPrompt: '',
+                                    style: storyboardStyle
+                                  });
+                                  setIsFrameDetailOpen(true);
+                                }}
+                                className="flex-1 px-3 py-2 bg-cinema-gray/20 hover:bg-cinema-gray/40 text-cinema-text rounded text-xs transition-colors"
+                              >
+                                📝 Detaylar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Çerçeve ${frame.frameNumber} - "${frame.title}" silmek istediğinizden emin misiniz?`)) {
+                                    const newFrames = storyboardFrames.filter((_, i) => i !== index);
+                                    setStoryboardFrames(newFrames);
+                                    console.log(`🗑️ Çerçeve ${frame.frameNumber} silindi`);
+                                  }
+                                }}
+                                className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-xs transition-colors border border-red-500/30"
+                                title="Bu çerçeveyi sil"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                             
                             {/* Quick Regenerate Button */}
                             <button
