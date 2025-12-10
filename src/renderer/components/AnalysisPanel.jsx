@@ -107,17 +107,50 @@ export default function AnalysisPanel() {
       console.log('🔍 Loading existing analysis for script:', fileName);
 
       try {
-        // Priority 1: Check if analysis data exists in current script store
+        // Priority 1: Check for partial (incomplete) analyses first
+        const partialAnalyses = await analysisStorageService.findPartialAnalyses(fileName);
+        if (partialAnalyses && partialAnalyses.length > 0) {
+          const latestPartial = partialAnalyses[0];
+          console.log('🔄 Yarım kalan analiz bulundu:', latestPartial);
+          
+          // Auto-load partial analysis notification
+          setTimeout(() => {
+            const shouldLoad = confirm(
+              `🔄 Yarım Kalan Analiz Bulundu!\n\n` +
+              `📄 Dosya: ${latestPartial.fileName}\n` +
+              `📅 Tarih: ${new Date(latestPartial.timestamp).toLocaleString('tr-TR')}\n` +
+              `📊 Tamamlanan: ${latestPartial.completedAnalyses}/${latestPartial.totalExpectedAnalyses}\n` +
+              `⏰ Kalan: ${latestPartial.remainingAnalyses?.join(', ') || 'Bilinmiyor'}\n\n` +
+              `Bu analizi yüklemek istiyor musunuz?\n\n` +
+              `✅ EVET = Yükle\n❌ HAYIR = Yeni analiz için hazırlan`
+            );
+            
+            if (shouldLoad) {
+              analysisStorageService.loadAnalysisByKey(latestPartial.key).then(partialData => {
+                if (partialData?.customResults) {
+                  setCustomResults(partialData.customResults);
+                  setAnalysisData(partialData);
+                  setActiveTab('custom');
+                  console.log('✅ Yarım kalan analiz yüklendi');
+                }
+              });
+            }
+          }, 500);
+          return;
+        }
+
+        // Priority 2: Check if analysis data exists in current script store
         if (currentScript.analysisData?.customResults) {
           setCustomResults(currentScript.analysisData.customResults);
           console.log('📋 Loaded analysis from script store');
           return;
         }
 
-        // Priority 2: Try to load from persistent storage
+        // Priority 3: Try to load completed analysis from persistent storage
         const existingAnalysis = await analysisStorageService.loadAnalysis(scriptText, fileName);
         if (existingAnalysis?.customResults) {
           setCustomResults(existingAnalysis.customResults);
+          setAnalysisData(existingAnalysis);
           console.log('💾 Loaded analysis from persistent storage');
           
           // Update script store with loaded analysis
@@ -130,10 +163,66 @@ export default function AnalysisPanel() {
             equipment: existingAnalysis?.equipment || [],
             updatedAt: new Date().toISOString()
           });
+          
+          // Show notification
+          setTimeout(() => {
+            const shouldUse = confirm(
+              `✅ Önceki Analiz Bulundu!\n\n` +
+              `📄 Dosya: ${fileName}\n` +
+              `📅 Tarih: ${new Date(existingAnalysis.timestamp || Date.now()).toLocaleString('tr-TR')}\n` +
+              `📊 Analiz Sayısı: ${Object.keys(existingAnalysis.customResults).length}\n\n` +
+              `Bu analizi kullanmak istiyor musunuz?\n\n` +
+              `✅ EVET = Kullan (Custom Results sekmesinde görüntülenir)\n` +
+              `❌ HAYIR = Yeni analiz için temizle`
+            );
+            
+            if (!shouldUse) {
+              setCustomResults({});
+              setAnalysisData(null);
+              console.log('🗑️ Kullanıcı önceki analizi temizledi');
+            } else {
+              setActiveTab('custom');
+              console.log('✅ Kullanıcı önceki analizi kabul etti');
+            }
+          }, 500);
         } else {
-          // No existing analysis found
-          setCustomResults({});
-          console.log('❌ No existing analysis found for script');
+          // Priority 4: Check all analyses for fuzzy match
+          const allAnalyses = await analysisStorageService.listAnalyses();
+          if (allAnalyses.length > 0) {
+            const match = allAnalyses.find(a => 
+              a.fileName === fileName || 
+              a.scriptMetadata?.originalFileName === fileName ||
+              (fileName.endsWith('.pdf') && a.fileName.includes(fileName.replace('.pdf', '')))
+            );
+            
+            if (match) {
+              console.log('🎯 Benzer dosya adıyla analiz bulundu:', match.fileName);
+              setTimeout(() => {
+                const shouldUse = confirm(
+                  `🎯 Benzer Analiz Bulundu!\n\n` +
+                  `📄 Kayıtlı: ${match.fileName}\n` +
+                  `📅 Tarih: ${new Date(match.timestamp).toLocaleString('tr-TR')}\n\n` +
+                  `Bu analizi kullanmak istiyor musunuz?`
+                );
+                
+                if (shouldUse) {
+                  analysisStorageService.loadAnalysisByKey(match.key).then(data => {
+                    if (data?.customResults) {
+                      setCustomResults(data.customResults);
+                      setAnalysisData(data);
+                      setActiveTab('custom');
+                    }
+                  });
+                }
+              }, 500);
+            } else {
+              setCustomResults({});
+              console.log('❌ No existing analysis found for script');
+            }
+          } else {
+            setCustomResults({});
+            console.log('❌ No existing analysis found for script');
+          }
         }
       } catch (error) {
         console.error('Failed to load existing analysis:', error);
