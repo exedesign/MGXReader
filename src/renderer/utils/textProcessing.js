@@ -692,3 +692,54 @@ export function getOptimalChunkSize(provider, model = '') {
     preserveScenes: true,
   };
 }
+
+/**
+ * Advanced screenplay text cleaning and sanitization
+ * Removes page numbers, headers, footers, and formatting artifacts
+ * @param {string} text - Raw extracted text
+ * @returns {string} - Cleaned screenplay text
+ */
+export function cleanExtractedText(text) {
+  if (!text || typeof text !== 'string') return '';
+  
+  let cleaned = text;
+  
+  // 1. Remove page numbers (various formats)
+  cleaned = cleaned.replace(/^\s*\d+\s*$/gm, ''); // Standalone numbers
+  cleaned = cleaned.replace(/^Page\s+\d+\s*$/gmi, ''); // "Page 12"
+  cleaned = cleaned.replace(/^\s*-\s*\d+\s*-\s*$/gm, ''); // "- 5 -"
+  
+  // 2. Remove common screenplay headers/footers
+  cleaned = cleaned.replace(/^(CONTINUED|CONTINUED:)\s*$/gmi, '');
+  cleaned = cleaned.replace(/^\(CONTINUED\)\s*$/gmi, '');
+  cleaned = cleaned.replace(/^(FADE IN:|FADE OUT\.|FADE TO BLACK\.)\s*$/gmi, '');
+  cleaned = cleaned.replace(/^(THE END|FIN|SONU)\s*$/gmi, '');
+  
+  // 3. Remove watermarks and copyright notices
+  cleaned = cleaned.replace(/^(©|Copyright|All Rights Reserved).*$/gmi, '');
+  cleaned = cleaned.replace(/^(Draft|Revised|Final Draft).*\d{4}.*$/gmi, '');
+  cleaned = cleaned.replace(/^(Confidential|Not for Distribution).*$/gmi, '');
+  
+  // 4. Remove excessive whitespace
+  cleaned = cleaned.replace(/[ \t]+/g, ' '); // Multiple spaces to single
+  cleaned = cleaned.replace(/\n\s*\n\s*\n+/g, '\n\n'); // Max 2 newlines
+  
+  // 5. Remove PDF artifacts
+  cleaned = cleaned.replace(/[■□●○▪▫]/g, ''); // Bullet characters
+  cleaned = cleaned.replace(/[\x00-\x1F\x7F-\x9F]/g, ''); // Control characters
+  
+  // 6. Fix Turkish encoding issues (from renderer)
+  cleaned = fixRendererEncoding(cleaned);
+  
+  // 7. Trim and normalize
+  cleaned = cleaned.trim().normalize('NFC');
+  
+  console.log('📝 Text Cleaning Stats:', {
+    originalLength: text.length,
+    cleanedLength: cleaned.length,
+    removedChars: text.length - cleaned.length,
+    removedPercentage: ((text.length - cleaned.length) / text.length * 100).toFixed(2) + '%'
+  });
+  
+  return cleaned;
+}

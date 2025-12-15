@@ -55,10 +55,13 @@ export default function ProfessionalStoryboard() {
     //   approved: boolean,
     //   image: { url, prompt, timestamp },
     //   referenceImages: [...],
-    //   regenerationCount: number
+    //   regenerationCount: number,
+    //   generating: boolean,
+    //   progress: number (0-100)
     // }
   });
   const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [characterGeneratingProgress, setCharacterGeneratingProgress] = useState({});
 
   // Location Approval Workflow
   const [locationApprovals, setLocationApprovals] = useState({
@@ -1757,16 +1760,30 @@ export default function ProfessionalStoryboard() {
   const approveLocation = (locationName) => {
     console.log('✅ Mekan onaylandı:', locationName);
     
-    setLocationApprovals(prev => ({
-      ...prev,
-      [locationName]: {
-        ...prev[locationName],
-        approved: true
-      }
-    }));
+    setLocationApprovals(prev => {
+      const updated = {
+        ...prev,
+        [locationName]: {
+          ...prev[locationName],
+          approved: true
+        }
+      };
+      
+      console.log('📍 Location approvals state güncellendi:', {
+        mekan: locationName,
+        toplamMekan: Object.keys(updated).length,
+        onaylıMekan: Object.values(updated).filter(a => a.approved).length,
+        tümOnaylar: updated
+      });
+      
+      return updated;
+    });
 
-    // Update phase completion
-    updatePhaseCompletion('location');
+    // Update phase completion after state update
+    setTimeout(() => {
+      updatePhaseCompletion('location');
+      console.log('📊 Phase completion güncellendi (location)');
+    }, 0);
     
     // Save to localStorage
     saveApprovalsToStorage();
@@ -1878,6 +1895,14 @@ export default function ProfessionalStoryboard() {
       const approved = locations.filter(name => locationApprovals[name]?.approved).length;
       const generated = locations.filter(name => locationApprovals[name]?.image).length;
       const complete = total > 0 && approved === total;
+
+      console.log('📊 Mekan fazı tamamlanma durumu:', {
+        toplamMekan: total,
+        onaylıMekan: approved,
+        üretilmişGörsel: generated,
+        tamamMı: complete,
+        locationApprovals: locationApprovals
+      });
 
       setPhaseCompletion(prev => ({
         ...prev,
@@ -2065,13 +2090,46 @@ export default function ProfessionalStoryboard() {
         return;
       }
 
-      // Check if analysis exists
+      // Check if analysis exists AND load analysis data
       const currentScript = getCurrentScript();
       if (currentScript) {
         const scriptText = currentScript.cleanedText || currentScript.scriptText || currentScript.text || currentScript.content || '';
         const fileName = currentScript.fileName || currentScript.name || currentScript.title || 'untitled';
         
-        // Check for existing analysis
+        console.log('🔍 Script değişti - analiz verileri yükleniyor:', fileName);
+        
+        // Priority 1: Check script store first (AnalysisPanel loads here)
+        if (currentScript.analysisData?.customResults) {
+          const results = currentScript.analysisData.customResults;
+          console.log('✅ Script store\'dan analiz yükleniyor:', Object.keys(results));
+          
+          if (results.character) {
+            setCharacterAnalysis(results.character);
+            console.log('📊 Karakter analizi yüklendi:', results.character.characters?.length || 0, 'karakter');
+          }
+          if (results.location_analysis) {
+            setLocationAnalysis(results.location_analysis);
+            console.log('📊 Mekan analizi yüklendi:', results.location_analysis.locations?.length || 0, 'mekan');
+          }
+          if (results.style) {
+            setStyleAnalysis(results.style);
+            console.log('📊 Stil analizi yüklendi');
+          }
+          if (results.color_palette) {
+            setColorPalette(results.color_palette);
+            console.log('📊 Renk paleti yüklendi');
+          }
+          if (results.visual_language) {
+            setVisualLanguage(results.visual_language);
+            console.log('📊 Görsel dil yüklendi');
+          }
+          
+          // Load storyboard approvals
+          await loadApprovalsFromStorage();
+          return;
+        }
+        
+        // Priority 2: Load from Analysis Panel storage
         const existingAnalysis = await analysisStorageService.loadAnalysis(scriptText, fileName);
         
         if (!existingAnalysis || !existingAnalysis.customResults || Object.keys(existingAnalysis.customResults).length === 0) {
@@ -2090,9 +2148,34 @@ export default function ProfessionalStoryboard() {
           setCurrentPhase(null);
           console.log('🗑️ Analiz yok - tüm storyboard verileri temizlendi');
         } else {
-          // Analysis exists - load storyboard data
-          console.log('✅ Analiz bulundu - storyboard verileri yükleniyor');
-          loadApprovalsFromStorage();
+          // Analysis exists - load both analysis data and storyboard approvals
+          console.log('✅ analysisStorageService\'den analiz yükleniyor:', Object.keys(existingAnalysis.customResults));
+          
+          // Load analysis data into state
+          const results = existingAnalysis.customResults;
+          if (results.character) {
+            setCharacterAnalysis(results.character);
+            console.log('📊 Karakter analizi yüklendi:', results.character.characters?.length || 0, 'karakter');
+          }
+          if (results.location_analysis) {
+            setLocationAnalysis(results.location_analysis);
+            console.log('📊 Mekan analizi yüklendi:', results.location_analysis.locations?.length || 0, 'mekan');
+          }
+          if (results.style) {
+            setStyleAnalysis(results.style);
+            console.log('📊 Stil analizi yüklendi');
+          }
+          if (results.color_palette) {
+            setColorPalette(results.color_palette);
+            console.log('📊 Renk paleti yüklendi');
+          }
+          if (results.visual_language) {
+            setVisualLanguage(results.visual_language);
+            console.log('📊 Görsel dil yüklendi');
+          }
+          
+          // Load storyboard approvals
+          await loadApprovalsFromStorage();
         }
       }
     };
@@ -2149,8 +2232,17 @@ export default function ProfessionalStoryboard() {
       });
       
       if (Object.keys(newApprovals).length > 0) {
-        setLocationApprovals(prev => ({ ...prev, ...newApprovals }));
-        updatePhaseCompletion('location');
+        setLocationApprovals(prev => {
+          const updated = { ...prev, ...newApprovals };
+          console.log('📍 Location approvals güncellendi:', {
+            yeniEklenen: Object.keys(newApprovals),
+            toplamMekan: Object.keys(updated).length,
+            onaylıMekan: Object.values(updated).filter(a => a.approved).length
+          });
+          return updated;
+        });
+        // updatePhaseCompletion after state update
+        setTimeout(() => updatePhaseCompletion('location'), 0);
       }
     }
   }, [locationAnalysis]);
@@ -2227,12 +2319,18 @@ export default function ProfessionalStoryboard() {
       console.log('📊 Script uzunluğu:', scriptText?.length || 0, 'karakter');
       
       // ═══════════════════════════════════════════════════════════════
-      // SADECE ANALYSIS PANEL'DEN VERİ AL (Basitleştirilmiş)
+      // VERİ YÜKLEME: Script Store (Priority 1) → analysisStorageService (Priority 2)
       // ═══════════════════════════════════════════════════════════════
       
-      // 1. AnalysisStorageService'den yükle (Analysis panelinin kaydettiği yer)
-      console.log('🔍 Analysis paneli verilerini yüklüyor...');
-      existingAnalysis = await analysisStorageService.loadAnalysis(scriptText, fileName);
+      // Priority 1: Check script store first (AnalysisPanel loads here)
+      if (currentScript.analysisData?.customResults) {
+        console.log('✅ Script store\'da analiz bulundu!');
+        existingAnalysis = currentScript.analysisData;
+      } else {
+        // Priority 2: Load from analysisStorageService
+        console.log('🔍 Analysis storage\'dan yükleniyor...');
+        existingAnalysis = await analysisStorageService.loadAnalysis(scriptText, fileName);
+      }
       
       // 2. Bulunamazsa tüm kaydedilmiş analizleri kontrol et
       if (!existingAnalysis) {
@@ -4450,14 +4548,14 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
           <div className="max-w-7xl mx-auto">
             {/* Progress panel removed per user request */}
             <div className="mb-8 flex items-center justify-between">
-              <div>
+              <div className="flex-1">
                 <h1 className="text-3xl font-bold text-white mb-2">
                   🎨 Storyboard
                 </h1>
-                <p className="text-cinema-text-dim">
+                <p className="text-cinema-text-dim mb-3">
                   Senaryonuzdan profesyonel storyboard oluşturun
                 </p>
-                <p className="text-xs text-yellow-400/70 mt-1">
+                <p className="text-xs text-yellow-400/70 mb-4">
                   ℹ️ Bu panel <span className="font-semibold">Analysis panelinden</span> veri okur. Analiz yoksa storyboard oluşturulamaz.
                 </p>
               </div>
@@ -4756,30 +4854,43 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                               <button
                                 onClick={() => {
                                   const imageCount = Object.values(characterApprovals).filter(a => a.image).length;
-                                  const message = imageCount > 0 
-                                    ? `⚠️ Tüm karakterleri (${characterAnalysis.characters.length}) ve ${imageCount} görseli silmek istediğinizden emin misiniz?`
-                                    : `⚠️ Tüm karakterleri (${characterAnalysis.characters.length}) silmek istediğinizden emin misiniz?`;
+                                  const referenceCount = characterAnalysis.characters.filter(char => {
+                                    const storageKey = `character_reference_${char.name}`;
+                                    try {
+                                      return !!localStorage.getItem(storageKey);
+                                    } catch {
+                                      return false;
+                                    }
+                                  }).length;
+                                  
+                                  let message = `⚠️ Tüm karakterleri (${characterAnalysis.characters.length}) silmek istediğinizden emin misiniz?\n\n`;
+                                  if (imageCount > 0) message += `• ${imageCount} oluşturulmuş görsel silinecek\n`;
+                                  if (referenceCount > 0) message += `• ${referenceCount} referans görsel silinecek\n`;
+                                  message += `\nBu işlem geri alınamaz!`;
                                   
                                   if (window.confirm(message)) {
+                                    console.log('🗑️ Tüm karakterler siliniyor:', {
+                                      karakterler: characterAnalysis.characters.length,
+                                      oluşturulmuşGörseller: imageCount,
+                                      referansGörseller: referenceCount
+                                    });
+                                    
                                     // Clear all reference images from localStorage
-                                    let referenceCount = 0;
                                     characterAnalysis.characters.forEach(character => {
                                       const storageKey = `character_reference_${character.name}`;
                                       try {
-                                        if (localStorage.getItem(storageKey)) {
-                                          localStorage.removeItem(storageKey);
-                                          referenceCount++;
-                                        }
+                                        localStorage.removeItem(storageKey);
                                       } catch (error) {
                                         console.warn(`⚠️ ${character.name} referans görselleri temizlenemedi:`, error);
                                       }
                                     });
                                     
-                                    // Clear character data and approvals
+                                    // Clear character data and approvals (includes generated images)
                                     setCharacterAnalysis({ ...characterAnalysis, characters: [] });
                                     setCharacterApprovals({});
+                                    updatePhaseCompletion('character');
                                     
-                                    console.log(`🗑️ Tüm karakterler${imageCount > 0 ? ' ve görselleri' : ''} silindi${referenceCount > 0 ? ` (${referenceCount} karakter referans görseli temizlendi)` : ''}`);
+                                    console.log('✅ Tüm karakterler, görseller ve referanslar temizlendi');
                                   }
                                 }}
                                 className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded-lg text-sm transition-colors border border-red-500/30"
@@ -4927,6 +5038,16 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                   </div>
                                 </div>
 
+                                {/* Progress Bar - Show when generating */}
+                                {characterGeneratingProgress[character.name] !== undefined && (
+                                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-cinema-black/60">
+                                    <div 
+                                      className="h-full bg-green-500 transition-all duration-300"
+                                      style={{ width: `${characterGeneratingProgress[character.name]}%` }}
+                                    />
+                                  </div>
+                                )}
+
                                 {/* Card Footer - Action Buttons */}
                                 <div className="p-2 bg-cinema-black/60 backdrop-blur-sm">
                                   {hasImage && !isApproved ? (
@@ -4978,6 +5099,20 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                           try {
                                             console.log(`🎨 "${character.name}" için görsel üretiliyor...`);
                                             
+                                            // Initialize progress
+                                            setCharacterGeneratingProgress(prev => ({ ...prev, [character.name]: 0 }));
+                                            
+                                            // Simulate progress steps
+                                            const progressInterval = setInterval(() => {
+                                              setCharacterGeneratingProgress(prev => {
+                                                const current = prev[character.name] || 0;
+                                                if (current < 90) {
+                                                  return { ...prev, [character.name]: current + 10 };
+                                                }
+                                                return prev;
+                                              });
+                                            }, 300);
+                                            
                                             // Generate prompt
                                             let characterPrompt = `Professional character portrait of ${character.name}`;
                                             
@@ -4997,7 +5132,13 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                               imageSize: '1K'
                                             });
                                             
+                                            // Clear progress interval
+                                            clearInterval(progressInterval);
+                                            
                                             if (result?.success && result?.imageData) {
+                                              // Complete progress
+                                              setCharacterGeneratingProgress(prev => ({ ...prev, [character.name]: 100 }));
+                                              
                                               const imageUrl = `data:${result.mimeType || 'image/jpeg'};base64,${result.imageData}`;
                                               const imageData = {
                                                 url: imageUrl,
@@ -5018,19 +5159,36 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                               }));
                                               
                                               console.log(`✅ "${character.name}" görseli oluşturuldu`);
+                                              
+                                              // Clear progress after a short delay
+                                              setTimeout(() => {
+                                                setCharacterGeneratingProgress(prev => {
+                                                  const { [character.name]: _, ...rest } = prev;
+                                                  return rest;
+                                                });
+                                              }, 500);
                                             } else {
                                               console.error(`❌ "${character.name}" görseli oluşturulamadı`);
                                               alert(`Görsel üretilemedi. Lütfen AI ayarlarınızı kontrol edin.`);
+                                              setCharacterGeneratingProgress(prev => {
+                                                const { [character.name]: _, ...rest } = prev;
+                                                return rest;
+                                              });
                                             }
                                           } catch (error) {
                                             console.error(`❌ "${character.name}" için hata:`, error);
                                             alert(`Hata: ${error.message}`);
+                                            setCharacterGeneratingProgress(prev => {
+                                              const { [character.name]: _, ...rest } = prev;
+                                              return rest;
+                                            });
                                           }
                                         }}
-                                        className="flex-1 bg-cinema-accent/30 hover:bg-cinema-accent/50 text-cinema-accent px-2 py-1 rounded text-xs transition-colors font-medium"
+                                        className="flex-1 bg-cinema-accent/30 hover:bg-cinema-accent/50 text-cinema-accent px-2 py-1 rounded text-xs transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                         title="AI ile görsel üret"
+                                        disabled={!!characterGeneratingProgress[character.name]}
                                       >
-                                        🎨 Üret
+                                        {characterGeneratingProgress[character.name] ? '⏳' : '🎨'} Üret
                                       </button>
                                       <label className="flex-1 bg-blue-500/30 hover:bg-blue-500/50 text-blue-300 px-2 py-1 rounded text-xs transition-colors font-medium cursor-pointer text-center">
                                         📁 Yükle
@@ -5169,11 +5327,11 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                         🏞️
                       </div>
                       <div>
-                        <h2 className="text-2xl font-semibold text-white">Mekan Görselleştirme</h2>
+                        <h2 className="text-2xl font-semibold text-white">Mekanlar ve Sahneler</h2>
                         <p className="text-cinema-text-dim text-sm">
                           {phaseCompletion.location.total > 0 
                             ? `${phaseCompletion.location.approved}/${phaseCompletion.location.total} mekan onaylandı`
-                            : 'Mekanlar analiz verilerinden yükleniyor...'}
+                            : 'Mekanlar ve sahneler yükleniyor...'}
                         </p>
                       </div>
                     </div>
@@ -5877,7 +6035,7 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                         <div className="bg-cinema-gray/50 rounded-lg p-4">
                           <div className="text-sm text-cinema-text-dim mb-1">Mekanlar</div>
                           <div className="text-2xl font-bold text-green-400">
-                            {Object.keys(locationApprovals).filter(k => locationApprovals[k].approved).length}
+                            {phaseCompletion.location.approved}
                           </div>
                           <div className="text-xs text-cinema-text-dim">onaylandı</div>
                         </div>

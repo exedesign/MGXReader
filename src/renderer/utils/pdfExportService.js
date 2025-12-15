@@ -869,6 +869,164 @@ export class PDFExportService {
     
     this.currentY += 5;
   }
+
+  /**
+   * Export analysis data as JSON with error handling and repair
+   * @param {Object} analysisData - Analysis results
+   * @param {string} projectTitle - Project name
+   * @returns {Promise<Object>} - Result with success status
+   */
+  async exportAnalysisAsJSON(analysisData, projectTitle = 'MGXReader Analysis') {
+    try {
+      console.log('📤 Exporting analysis as JSON...');
+      
+      // STEP 1: Sanitize and validate data
+      const sanitizedData = this.sanitizeForJSON(analysisData);
+      
+      // STEP 2: Create structured JSON output
+      const jsonOutput = {
+        metadata: {
+          projectTitle: this.cleanTurkishText(projectTitle),
+          exportDate: new Date().toISOString(),
+          exporter: 'MGXReader v2.0',
+          dataVersion: '3.0'
+        },
+        analysisResults: sanitizedData.customResults || {},
+        summary: {
+          totalAnalyses: Object.keys(sanitizedData.customResults || {}).length,
+          completedAnalyses: Object.values(sanitizedData.customResults || {})
+            .filter(a => a.status === 'completed').length,
+          failedAnalyses: Object.values(sanitizedData.customResults || {})
+            .filter(a => a.status === 'error').length,
+          totalWordCount: Object.values(sanitizedData.customResults || {})
+            .reduce((sum, a) => sum + (a.wordCount || 0), 0)
+        },
+        sceneBreakdown: sanitizedData.scenes || [],
+        characters: sanitizedData.characters || [],
+        locations: sanitizedData.locations || [],
+        equipment: sanitizedData.equipment || []
+      };
+      
+      // STEP 3: Validate JSON structure
+      try {
+        const testString = JSON.stringify(jsonOutput);
+        JSON.parse(testString); // Verify it's valid JSON
+      } catch (jsonError) {
+        console.error('❌ JSON validation failed:', jsonError);
+        throw new Error('JSON yapısı geçersiz. Lütfen analiz sonuçlarını kontrol edin.');
+      }
+      
+      // STEP 4: Create download with pretty formatting
+      const jsonString = JSON.stringify(jsonOutput, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+      const fileName = `${projectTitle.replace(/[^a-zA-Z0-9ğüşıöçĞÜŞİÖÇ]/g, '_')}_analysis_${timestamp}.json`;
+      
+      // Trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      console.log('✅ JSON export completed:', fileName);
+      return { success: true, fileName: fileName, size: blob.size };
+      
+    } catch (error) {
+      console.error('❌ JSON export error:', error);
+      
+      // STEP 5: Attempt emergency fallback export
+      try {
+        console.log('🔄 Attempting emergency JSON export...');
+        const emergencyData = {
+          error: 'Primary export failed',
+          errorMessage: error.message,
+          timestamp: new Date().toISOString(),
+          rawData: String(analysisData).substring(0, 10000) // Truncate to prevent issues
+        };
+        
+        const emergencyJSON = JSON.stringify(emergencyData, null, 2);
+        const blob = new Blob([emergencyJSON], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `emergency_backup_${Date.now()}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        console.log('⚠️ Emergency JSON export completed');
+      } catch (emergencyError) {
+        console.error('❌ Emergency export also failed:', emergencyError);
+      }
+      
+      throw new Error(`JSON export failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Sanitize data for JSON serialization
+   * Handles circular references, undefined values, and encoding issues
+   * @param {*} data - Data to sanitize
+   * @returns {*} - Sanitized data
+   */
+  sanitizeForJSON(data) {
+    if (!data) return {};
+    
+    // Use a WeakSet to track visited objects (prevent circular references)
+    const visited = new WeakSet();
+    
+    const sanitize = (obj) => {
+      if (obj === null || obj === undefined) {
+        return null;
+      }
+      
+      // Primitive types
+      if (typeof obj !== 'object') {
+        if (typeof obj === 'string') {
+          return this.cleanTurkishText(obj); // Fix Turkish characters
+        }
+        return obj;
+      }
+      
+      // Circular reference detection
+      if (visited.has(obj)) {
+        return '[Circular Reference]';
+      }
+      visited.add(obj);
+      
+      // Arrays
+      if (Array.isArray(obj)) {
+        return obj.map(item => sanitize(item));
+      }
+      
+      // Objects
+      const sanitized = {};
+      for (const [key, value] of Object.entries(obj)) {
+        // Skip functions and symbols
+        if (typeof value === 'function' || typeof value === 'symbol') {
+          continue;
+        }
+        
+        try {
+          sanitized[key] = sanitize(value);
+        } catch (error) {
+          console.warn(`Failed to sanitize key "${key}":`, error.message);
+          sanitized[key] = `[Sanitization Error: ${error.message}]`;
+        }
+      }
+      
+      return sanitized;
+    };
+    
+    return sanitize(data);
+  }
 }
 
 export default PDFExportService;

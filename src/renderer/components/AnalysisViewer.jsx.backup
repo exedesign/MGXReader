@@ -1,0 +1,349 @@
+import React, { useState } from 'react';
+import DynamicDataTable from './DynamicDataTable';
+
+/**
+ * AnalysisViewer - Universal JSON Analysis Visualizer
+ * Dark-mode cyber-analysis themed component
+ * Supports table/card view toggle, search, and responsive design
+ */
+export default function AnalysisViewer({ 
+  analysisType,  // 'character', 'location', 'structure', etc.
+  data,          // JSON object or string
+  outputFormat   // 'json' or 'text'
+}) {
+  const [viewMode, setViewMode] = useState('card'); // 'card' or 'table'
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Parse data if it's a string
+  let parsedData = typeof data === 'object' ? data : null;
+  
+  if (!parsedData && outputFormat === 'json' && typeof data === 'string') {
+    try {
+      parsedData = JSON.parse(data);
+    } catch (e) {
+      console.warn('Failed to parse JSON data:', e);
+      // Fallback to text view
+      return (
+        <div className="p-4 bg-zinc-950 text-zinc-300 rounded-lg font-mono text-sm whitespace-pre-wrap">
+          {data}
+        </div>
+      );
+    }
+  }
+
+  // If not JSON format or parsing failed, show text
+  if (!parsedData || outputFormat === 'text') {
+    return (
+      <div className="p-4 bg-zinc-950 text-zinc-300 rounded-lg font-mono text-sm whitespace-pre-wrap border border-zinc-800">
+        {typeof data === 'string' ? data : JSON.stringify(data, null, 2)}
+      </div>
+    );
+  }
+
+  // Extract main array/object for visualization
+  const getMainData = () => {
+    if (Array.isArray(parsedData)) return parsedData;
+    
+    // Common patterns in analysis results
+    if (parsedData.characters) return parsedData.characters;
+    if (parsedData.scenes) return parsedData.scenes;
+    if (parsedData.locations) return parsedData.locations;
+    if (parsedData.themes) return parsedData.themes;
+    if (parsedData.shots) return parsedData.shots; // Cinematography shots
+    if (parsedData.acts) return parsedData.acts; // Structure acts
+    if (parsedData.dialogues) return parsedData.dialogues; // Dialogue analysis
+    if (parsedData.elements) return parsedData.elements; // Production elements
+    if (parsedData.plot) return [parsedData.plot]; // Wrap single object
+    if (parsedData.dialogue) return [parsedData.dialogue];
+    if (parsedData.production) return [parsedData.production];
+    if (parsedData.visualStyle) return [parsedData]; // Wrap entire cinematography object
+    
+    // If top-level is object with arrays, find the first array
+    for (const key in parsedData) {
+      if (Array.isArray(parsedData[key])) {
+        return parsedData[key];
+      }
+    }
+    
+    // Last resort: wrap entire object
+    return [parsedData];
+  };
+
+  const mainData = getMainData();
+
+  // Filter data based on search
+  const filteredData = searchTerm ? mainData.filter(item => {
+    const itemStr = JSON.stringify(item).toLowerCase();
+    return itemStr.includes(searchTerm.toLowerCase());
+  }) : mainData;
+
+  // Get summary data if available
+  const getSummary = () => {
+    if (parsedData.summary) return parsedData.summary;
+    if (parsedData.statistics) return parsedData.statistics;
+    return null;
+  };
+
+  const summary = getSummary();
+
+  return (
+    <div className="space-y-4 bg-black p-6 rounded-lg border border-zinc-800">
+      {/* Header with controls */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between pb-4 border-b border-zinc-800">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">📊</span>
+          <h3 className="text-xl font-bold text-yellow-400">Analiz Sonuçları</h3>
+          <span className="text-xs text-zinc-500 bg-zinc-900 px-2 py-1 rounded">
+            {filteredData.length} öğe
+          </span>
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          {/* Search */}
+          <input
+            type="text"
+            placeholder="🔍 Ara..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-zinc-300 text-sm focus:border-cyan-500 focus:outline-none"
+          />
+
+          {/* View mode toggle */}
+          <button
+            onClick={() => setViewMode('card')}
+            className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
+              viewMode === 'card'
+                ? 'bg-cyan-500 text-black'
+                : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'
+            }`}
+          >
+            🎴 Kart
+          </button>
+          <button
+            onClick={() => setViewMode('table')}
+            className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
+              viewMode === 'table'
+                ? 'bg-cyan-500 text-black'
+                : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'
+            }`}
+          >
+            📋 Tablo
+          </button>
+        </div>
+      </div>
+
+      {/* Summary section if available */}
+      {summary && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pb-4 border-b border-zinc-800">
+          {Object.entries(summary).map(([key, value]) => (
+            <div key={key} className="bg-zinc-950 p-3 rounded border border-zinc-800">
+              <div className="text-xs text-zinc-500 mb-1 uppercase tracking-wide">
+                {key.replace(/([A-Z])/g, ' $1').trim()}
+              </div>
+              <div className="text-lg font-mono font-bold text-green-400">
+                {typeof value === 'object' ? JSON.stringify(value) : value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Main content */}
+      {viewMode === 'table' ? (
+        <DynamicDataTable
+          data={filteredData}
+          showRowNumbers={true}
+          maxChipsPerCell={5}
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredData.map((item, index) => (
+            <DataCard key={index} data={item} index={index} />
+          ))}
+        </div>
+      )}
+
+      {filteredData.length === 0 && (
+        <div className="text-center py-12 text-zinc-500">
+          <div className="text-4xl mb-2">🔍</div>
+          <div>Sonuç bulunamadı</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * DataCard - Individual card view for data items
+ */
+function DataCard({ data, index }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Detect title field
+  const getTitleField = () => {
+    const titleFields = ['name', 'title', 'location', 'theme', 'type', 'sceneNumber', 'actNumber'];
+    for (const field of titleFields) {
+      if (data[field]) {
+        const value = field === 'sceneNumber' ? `Sahne ${data[field]}` : 
+                     field === 'actNumber' ? `Perde ${data[field]}` : 
+                     data[field];
+        return { key: field, value };
+      }
+    }
+    return { key: Object.keys(data)[0], value: data[Object.keys(data)[0]] };
+  };
+
+  // Detect badge fields (short text/status)
+  const getBadgeFields = () => {
+    const badgeFields = ['type', 'status', 'role', 'priority', 'complexity', 'importance', 'intExt', 'timeOfDay', 
+                        'shotType', 'angle', 'movement', 'lighting', 'mood', 'lensType', 'focusType'];
+    return badgeFields.filter(field => data[field] && typeof data[field] === 'string' && data[field].length < 50);
+  };
+
+  // Detect description fields
+  const getDescriptionFields = () => {
+    const descFields = ['description', 'content', 'message', 'summary', 'details', 'note', 'analysis'];
+    return descFields.filter(field => data[field]);
+  };
+
+  // Detect nested object fields (for visualStyle, colorPalette, etc.)
+  const getNestedObjectFields = () => {
+    const nestedFields = ['visualStyle', 'colorPalette', 'lightingStyle', 'technicalChoices', 'quality', 'subtext', 'technical'];
+    return nestedFields.filter(field => data[field] && typeof data[field] === 'object' && !Array.isArray(data[field]));
+  };
+
+  // Detect array fields (for themes, referenceFilms, visualThemes, etc.)
+  const getArrayFields = () => {
+    const arrayFields = ['referenceFilms', 'visualThemes', 'examples', 'keyScenes', 'pacingIssues', 'characters'];
+    return arrayFields.filter(field => Array.isArray(data[field]) && data[field].length > 0);
+  };
+
+  const title = getTitleField();
+  const badges = getBadgeFields();
+  const descriptions = getDescriptionFields();
+  const nestedObjects = getNestedObjectFields();
+  const arrayFields = getArrayFields();
+
+  // Badge colors
+  const getBadgeColor = (field, value) => {
+    const colorMap = {
+      type: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+      status: value === 'completed' || value === 'approved' ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+      role: value === 'main' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+      priority: value === 'high' || value === 'kritik' ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+      intExt: value === 'İÇ' ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+      // Cinematography fields
+      shotType: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
+      angle: 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30',
+      movement: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+      lighting: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+      mood: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+      lensType: 'bg-sky-500/20 text-sky-400 border-sky-500/30',
+      focusType: 'bg-teal-500/20 text-teal-400 border-teal-500/30'
+    };
+    return colorMap[field] || 'bg-zinc-700/30 text-zinc-400 border-zinc-600/30';
+  };
+
+  return (
+    <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 hover:border-cyan-500/50 transition-colors">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1">
+          <div className="text-xs text-zinc-500 mb-1">#{index + 1}</div>
+          <h4 className="text-lg font-bold text-zinc-200 line-clamp-2">
+            {title.value}
+          </h4>
+        </div>
+      </div>
+
+      {/* Badges */}
+      {badges.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {badges.map(field => (
+            <span
+              key={field}
+              className={`px-2 py-1 rounded text-xs font-medium border whitespace-nowrap flex-shrink-0 ${getBadgeColor(field, data[field])}`}
+            >
+              {data[field]}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Description */}
+      {descriptions.map(field => (
+        <div key={field} className="mb-2">
+          <div className="text-sm text-zinc-400 line-clamp-3">
+            {data[field]}
+          </div>
+        </div>
+      ))}
+
+      {/* Nested Objects (visualStyle, colorPalette, etc.) */}
+      {!isExpanded && nestedObjects.length > 0 && (
+        <div className="space-y-2 mb-2">
+          {nestedObjects.map(field => (
+            <div key={field} className="bg-zinc-900/50 p-2 rounded border border-zinc-800/50">
+              <div className="text-xs text-cyan-400 font-semibold mb-1 uppercase tracking-wide">
+                {field.replace(/([A-Z])/g, ' $1').trim()}
+              </div>
+              <div className="text-xs text-zinc-400 space-y-0.5">
+                {Object.entries(data[field]).slice(0, 3).map(([key, value]) => (
+                  <div key={key} className="flex gap-2">
+                    <span className="text-zinc-500">{key}:</span>
+                    <span className="text-zinc-300">
+                      {typeof value === 'object' ? JSON.stringify(value).slice(0, 50) + '...' : String(value).slice(0, 50)}
+                    </span>
+                  </div>
+                ))}
+                {Object.keys(data[field]).length > 3 && (
+                  <div className="text-zinc-600 italic">+{Object.keys(data[field]).length - 3} more...</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Array Fields (referenceFilms, visualThemes, etc.) */}
+      {!isExpanded && arrayFields.length > 0 && (
+        <div className="space-y-2 mb-2">
+          {arrayFields.map(field => (
+            <div key={field} className="bg-zinc-900/50 p-2 rounded border border-zinc-800/50">
+              <div className="text-xs text-yellow-400 font-semibold mb-1 uppercase tracking-wide">
+                {field.replace(/([A-Z])/g, ' $1').trim()} ({data[field].length})
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {data[field].slice(0, 3).map((item, idx) => (
+                  <span key={idx} className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded">
+                    {typeof item === 'object' ? item.name || item.scene || Object.values(item)[0] : String(item).slice(0, 30)}
+                  </span>
+                ))}
+                {data[field].length > 3 && (
+                  <span className="text-xs text-zinc-600 px-2 py-0.5">+{data[field].length - 3} more</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Expand button */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="text-xs text-cyan-400 hover:text-cyan-300 mt-2"
+      >
+        {isExpanded ? '▲ Kapat' : '▼ Detayları Göster'}
+      </button>
+
+      {/* Expanded content */}
+      {isExpanded && (
+        <div className="mt-4 pt-4 border-t border-zinc-800">
+          <pre className="text-xs text-zinc-400 whitespace-pre-wrap font-mono">
+            {JSON.stringify(data, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}

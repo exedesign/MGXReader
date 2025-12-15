@@ -46,7 +46,7 @@ const resources = {
       "analysis.tabs.geographic": "Coğrafi",
       "analysis.tabs.trend": "Trendler",
       "analysis.tabs.risk": "Risk & Fırsat",
-      "analysis.tabs.customResults": "Özel Sonuçlar",
+      "analysis.tabs.customResults": "Analiz Sonuçları",
       "analysis.aiSettings": "AI Ayarları",
       "analysis.selectTypes": "Analiz Türlerini Seçin",
       "analysis.types.character": "Karakter Analizi",
