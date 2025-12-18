@@ -11,6 +11,98 @@ export class EnhancedAnalysisEngine {
   }
 
   /**
+   * Generate Hollywood-standard shot list from scenes
+   * Each scene is broken down into 5-10 shots with technical specifications
+   */
+  async generateShotList(scenes, options = {}) {
+    const { onProgress = () => {} } = options;
+    
+    try {
+      onProgress({ progress: 0, message: 'Analyzing scenes for shot breakdown...' });
+      
+      const shotListByScene = [];
+      const totalScenes = Math.min(scenes.length, 20); // Limit to first 20 scenes to avoid token overflow
+      
+      for (let i = 0; i < totalScenes; i++) {
+        const scene = scenes[i];
+        onProgress({
+          progress: (i / totalScenes) * 100,
+          message: `Generating shots for Scene ${i + 1}/${totalScenes}...`
+        });
+        
+        // AI prompt for shot breakdown
+        const shotPrompt = `As a professional cinematographer and director, break down this scene into 5-10 individual shots.
+
+SCENE:
+${scene.text || scene.description || ''}
+
+For each shot, provide:
+1. Shot Number (e.g., 1A, 1B, 1C...)
+2. Shot Type: (ESTABLISHING, WIDE, MEDIUM, CLOSE-UP, EXTREME CLOSE-UP, OVER THE SHOULDER, POV, INSERT, etc.)
+3. Camera Movement: (STATIC, PAN, TILT, DOLLY, TRACK, CRANE, STEADICAM, HANDHELD, etc.)
+4. Lens: (WIDE 24mm, NORMAL 35mm, PORTRAIT 50mm, TELEPHOTO 85mm+, etc.)
+5. Lighting: (NATURAL, HIGH KEY, LOW KEY, MOTIVATED, PRACTICAL, etc.)
+6. Duration: (Estimated seconds)
+7. Description: (What we see in this specific shot)
+8. Purpose: (Story purpose - establish location, reveal emotion, show action, etc.)
+
+Format your response as JSON array:
+[
+  {
+    "shotNumber": "1A",
+    "shotType": "ESTABLISHING SHOT",
+    "cameraMovement": "CRANE DOWN",
+    "lens": "24mm WIDE",
+    "lighting": "NATURAL - GOLDEN HOUR",
+    "duration": 8,
+    "description": "Aerial view of the city skyline at sunset, camera cranes down to street level",
+    "purpose": "Establish location and time of day"
+  }
+]`;
+
+        try {
+          const response = await this.aiHandler.generateContent(shotPrompt);
+          const jsonMatch = response.match(/\[[\s\S]*\]/);
+          
+          if (jsonMatch) {
+            const shots = JSON.parse(jsonMatch[0]);
+            shotListByScene.push({
+              sceneNumber: i + 1,
+              sceneHeading: scene.heading || `Scene ${i + 1}`,
+              location: scene.location || 'Unknown',
+              timeOfDay: scene.timeOfDay || 'Unknown',
+              intExt: scene.intExt || 'Unknown',
+              shots: shots,
+              totalShots: shots.length
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to generate shots for scene ${i + 1}:`, error);
+          // Continue with next scene on error
+        }
+      }
+      
+      onProgress({ progress: 100, message: 'Shot list generation complete!' });
+      
+      return {
+        totalScenes: totalScenes,
+        scenesProcessed: shotListByScene.length,
+        totalShots: shotListByScene.reduce((sum, scene) => sum + scene.totalShots, 0),
+        shotListByScene: shotListByScene,
+        metadata: {
+          generatedAt: new Date().toISOString(),
+          cinematographyStandard: 'Hollywood',
+          version: '1.0'
+        }
+      };
+      
+    } catch (error) {
+      console.error('Shot list generation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Enhanced Screenplay Analysis with AI Prompts
    * Uses specialized prompts for comprehensive results
    */
@@ -97,6 +189,20 @@ export class EnhancedAnalysisEngine {
       const riskOpportunityAnalysis = await runSpecializedAnalysis('risk', 'risk_assessment', 80, 90);
 
       // Step 7: Integration
+      // Step 6: Shot List Generation (if scenes are available)
+      let shotListAnalysis = null;
+      if (scenes && scenes.length > 0 && options.generateShotList) {
+        shotListAnalysis = await this.generateShotList(scenes, {
+          onProgress: (progressData) => {
+            onProgress({
+              step: 'shot_list',
+              progress: 90 + (progressData.progress * 0.05), // 90-95%
+              message: progressData.message
+            });
+          }
+        });
+      }
+
       onProgress({
         step: 'integration',
         progress: 95,
@@ -110,6 +216,7 @@ export class EnhancedAnalysisEngine {
         geographicAnalysis,
         trendAnalysis,
         riskOpportunityAnalysis,
+        shotListAnalysis, // NEW: Hollywood-standard shot breakdowns
         enhancedMetrics: {
           qualityScores: {
             overallQuality: competitiveAnalysis.competitiveScore || 75, // Fallback
@@ -122,7 +229,7 @@ export class EnhancedAnalysisEngine {
           }
         },
         metadata: {
-          analysisVersion: '3.0-ai-prompts',
+          analysisVersion: '4.0-ai-prompts-shots',
           analysisDate: new Date().toISOString(),
           language: language
         }

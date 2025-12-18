@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const pdfParse = require('pdf-parse');
 const poppler = require('pdf-poppler');
+const PDFParser = require('pdf2json');
 
 // Disable Electron security warnings in development
 if (process.env.NODE_ENV !== 'production') {
@@ -383,19 +384,105 @@ ipcMain.handle('pdf:parse', async (event, filePath, selectedPages = null) => {
   }
 });
 
-// Advanced PDF parser with coordinate extraction
-// TODO: Implement with pdf-lib or pdf2json (Node.js compatible)
-// For now, returns fallback to indicate unsupported
+// Advanced PDF parser with coordinate extraction using pdf2json
 ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null) => {
-  console.log('⚠️ Advanced PDF parsing not yet implemented in Node.js environment');
-  console.log('📌 Falling back to standard parser');
-  
-  // Return error to trigger fallback in PDFUploader
-  return {
-    success: false,
-    error: 'Advanced parsing requires browser environment (pdfjs-dist). Use standard parser.',
-    fallbackToStandard: true
-  };
+  return new Promise((resolve) => {
+    const pdfParser = new PDFParser(null, 1); // raw text mode
+    
+    const elements = [];
+    let metadata = {};
+    let totalPages = 0;
+
+    pdfParser.on('pdfParser_dataError', (errData) => {
+      console.error('❌ pdf2json error:', errData.parserError);
+      resolve({
+        success: false,
+        error: errData.parserError,
+        fallbackToStandard: true
+      });
+    });
+
+    pdfParser.on('pdfParser_dataReady', (pdfData) => {
+      try {
+        console.log('📄 pdf2json parsing complete');
+        
+        // Extract metadata
+        metadata = {
+          title: pdfData.Meta?.Title || '',
+          author: pdfData.Meta?.Author || '',
+          creator: pdfData.Meta?.Creator || '', // Important for screenplay format detection
+          producer: pdfData.Meta?.Producer || '',
+          creationDate: pdfData.Meta?.CreationDate || '',
+          pages: pdfData.Pages?.length || 0
+        };
+        
+        totalPages = metadata.pages;
+        console.log(`📊 Metadata: ${metadata.creator || 'Unknown'} | ${totalPages} pages`);
+
+        // Filter pages if selectedPages is provided
+        const pagesToProcess = selectedPages 
+          ? pdfData.Pages.filter((_, idx) => selectedPages.includes(idx + 1))
+          : pdfData.Pages;
+
+        // Extract text elements with coordinates
+        pagesToProcess.forEach((page, pageIdx) => {
+          const actualPageNumber = selectedPages ? selectedPages[pageIdx] : pageIdx + 1;
+          
+          // pdf2json uses normalized coordinates (0-1 range multiplied by 1000)
+          // Convert to points (1/72 inch)
+          const pageWidth = page.Width || 612; // Default letter width
+          const pageHeight = page.Height || 792; // Default letter height
+
+          page.Texts?.forEach((textItem) => {
+            // pdf2json splits text into runs with different fonts
+            const decodedText = decodeURIComponent(textItem.R?.[0]?.T || '').trim();
+            
+            if (!decodedText) return; // Skip empty text
+
+            const x = textItem.x * pageWidth / 1000; // Convert to points
+            const y = textItem.y * pageHeight / 1000;
+            const width = textItem.w * pageWidth / 1000;
+            
+            elements.push({
+              text: decodedText,
+              page: actualPageNumber,
+              bbox: {
+                x0: x,
+                y0: y,
+                x1: x + width,
+                y1: y + (textItem.R?.[0]?.TS?.[1] || 12) // Font size as height
+              },
+              fontName: textItem.R?.[0]?.TS?.[0] || 'unknown', // Font face index
+              fontSize: textItem.R?.[0]?.TS?.[1] || 12, // Font size
+              bold: textItem.R?.[0]?.TS?.[2] === 1, // Bold flag
+              italic: textItem.R?.[0]?.TS?.[3] === 1 // Italic flag
+            });
+          });
+        });
+
+        console.log(`✅ Extracted ${elements.length} text elements with coordinates`);
+
+        resolve({
+          success: true,
+          elements,
+          metadata,
+          format: 'pdf2json',
+          totalPages
+        });
+      } catch (error) {
+        console.error('❌ Error processing pdf2json data:', error);
+        resolve({
+          success: false,
+          error: error.message,
+          fallbackToStandard: true
+        });
+      }
+    });
+
+    // Start parsing
+    console.log('🔄 Starting pdf2json coordinate extraction:', filePath);
+    pdfParser.loadPDF(filePath);
+  });
 });
 
 // Convert PDF pages to images for OCR (with optional page selection)
