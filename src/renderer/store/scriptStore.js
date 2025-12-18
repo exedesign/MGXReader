@@ -139,6 +139,9 @@ export const useScriptStore = create(
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       
+      // ✨ NEW: Structured elements with coordinates (Phase 1 - Coordinate-based parsing)
+      elements: scriptData.elements || [],  // Array of { id, type, text, page, bbox, fontName, fontSize }
+      
       // Enhanced project structure
       structure: {
         type: structure.type || 'single',

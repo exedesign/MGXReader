@@ -130,8 +130,62 @@ export default function PDFUploader() {
             throw new Error(`OCR processing failed: ${ocrError.message}`);
           }
         } else {
-          // Standard PDF text extraction when OCR is disabled
-          result = await window.electronAPI.parsePDF(filePath, selectedPages);
+          // ✨ Phase 1: Advanced coordinate-based PDF parsing
+          console.log('🔍 Using advanced coordinate-based PDF parser...');
+          
+          try {
+            result = await window.electronAPI.parseAdvancedPDF(filePath, selectedPages);
+            
+            if (!result.success) {
+              console.warn('⚠️ Advanced parser failed, falling back to standard parser:', result.error);
+              // Fallback to standard parser
+              result = await window.electronAPI.parsePDF(filePath, selectedPages);
+            } else {
+              console.log('✅ Advanced parsing successful:', {
+                elements: result.elements?.length,
+                pages: result.pages,
+                metadata: result.metadata
+              });
+              
+              // ✨ Classify elements using coordinate-based classifier
+              const { classifyElements, groupIntoScenes, extractCharacters, extractLocations } = 
+                await import('../utils/screenplayClassifier');
+              
+              const classifiedElements = classifyElements(result.elements, result.metadata);
+              const scenes = groupIntoScenes(classifiedElements);
+              const characters = extractCharacters(classifiedElements);
+              const locations = extractLocations(classifiedElements);
+              
+              console.log('🎬 Classification complete:', {
+                elements: classifiedElements.length,
+                scenes: scenes.length,
+                characters: characters.length,
+                locations: locations.length
+              });
+              
+              // Store classified elements and scenes
+              result.elements = classifiedElements;
+              result.scenes = scenes;
+              result.characters = characters;
+              result.locations = locations;
+              
+              // Use fullText from advanced parser
+              result.text = result.fullText;
+              result.metadata = {
+                ...result.metadata,
+                extractedViaAdvancedParser: true,
+                hasStructuredElements: true,
+                elementsCount: classifiedElements.length,
+                scenesCount: scenes.length,
+                charactersCount: characters.length,
+                locationsCount: locations.length
+              };
+            }
+          } catch (advancedError) {
+            console.error('❌ Advanced parser error, falling back:', advancedError);
+            // Fallback to standard parser
+            result = await window.electronAPI.parsePDF(filePath, selectedPages);
+          }
           
           if (!result.success) {
             throw new Error(result.error || 'Failed to parse PDF');
@@ -164,18 +218,51 @@ export default function PDFUploader() {
         
         // Final display title = proje adı (header'da gösterilecek)
         const finalDisplayTitle = projectTitle || 'Bilinmeyen Proje';
+        
+        // ✨ Create script data with structured elements
+        const scriptData = {
+          title: titleWithChapter,
+          fileName: titleWithChapter,
+          name: titleWithChapter,
+          scriptText: result.text,
+          cleanedText: cleanScreenplayText(result.text),
+          pageCount: result.pages,
+          metadata: result.metadata,
+          
+          // ✨ NEW: Store structured elements
+          elements: result.elements || [],
+          
+          // Store extracted data
+          scenes: result.scenes || [],
+          characters: result.characters || [],
+          locations: result.locations || [],
+          
+          structure: {
+            type: 'single',
+            projectTitle: finalDisplayTitle,
+            title: titleWithChapter,
+            scenes: result.scenes || []
+          }
+        };
+        
+        // Add to multi-script store
+        const { addScript } = useScriptStore.getState();
+        addScript(scriptData);
+        
+        // Also set in legacy single-script store for compatibility
         setOriginalFileName(finalDisplayTitle);
         setPageCount(result.pages);
         setScriptText(result.text, result.metadata);
+        useScriptStore.getState().setCleanedText(scriptData.cleanedText);
 
-        // Clean the text automatically
-        const cleaned = cleanScreenplayText(result.text);
-        useScriptStore.getState().setCleanedText(cleaned);
-
-        console.log('PDF loaded successfully:', {
+        console.log('✅ PDF loaded successfully with structured data:', {
           pages: result.pages,
           textLength: result.text.length,
-          extractedViaOCR: result.metadata?.extractedViaOCR
+          elements: result.elements?.length,
+          scenes: result.scenes?.length,
+          characters: result.characters?.length,
+          extractedViaOCR: result.metadata?.extractedViaOCR,
+          hasStructuredElements: result.metadata?.hasStructuredElements
         });
 
       } else if (['fdx', 'celtx', 'txt', 'docx'].includes(extension)) {

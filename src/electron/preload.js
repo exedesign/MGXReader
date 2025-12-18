@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // PDF APIs
   getPDFInfo: (filePath) => ipcRenderer.invoke('pdf:getInfo', filePath),
   parsePDF: (filePath, selectedPages) => ipcRenderer.invoke('pdf:parse', filePath, selectedPages),
+  parseAdvancedPDF: (filePath, selectedPages) => ipcRenderer.invoke('pdf:parseAdvanced', filePath, selectedPages),
   pdfToImages: (filePath, selectedPages) => ipcRenderer.invoke('pdf:toImages', filePath, selectedPages),
   
   // OCR APIs
