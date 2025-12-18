@@ -3,7 +3,6 @@ const path = require('path');
 const fs = require('fs').promises;
 const pdfParse = require('pdf-parse');
 const poppler = require('pdf-poppler');
-const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 
 // Disable Electron security warnings in development
 if (process.env.NODE_ENV !== 'production') {
@@ -385,91 +384,18 @@ ipcMain.handle('pdf:parse', async (event, filePath, selectedPages = null) => {
 });
 
 // Advanced PDF parser with coordinate extraction
+// TODO: Implement with pdf-lib or pdf2json (Node.js compatible)
+// For now, returns fallback to indicate unsupported
 ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null) => {
-  try {
-    console.log('🔍 Advanced PDF parsing started:', filePath);
-    
-    const dataBuffer = await fs.readFile(filePath);
-    const loadingTask = pdfjsLib.getDocument({
-      data: new Uint8Array(dataBuffer),
-      useSystemFonts: true,
-      standardFontDataUrl: path.join(__dirname, '../../node_modules/pdfjs-dist/standard_fonts/')
-    });
-    
-    const pdfDoc = await loadingTask.promise;
-    const totalPages = pdfDoc.numPages;
-    
-    console.log(`📄 PDF has ${totalPages} pages`);
-    
-    const pagesToProcess = selectedPages && Array.isArray(selectedPages) && selectedPages.length > 0
-      ? selectedPages.filter(p => p >= 1 && p <= totalPages)
-      : Array.from({ length: totalPages }, (_, i) => i + 1);
-    
-    console.log(`🎯 Processing pages: ${pagesToProcess.join(', ')}`);
-    
-    const elements = [];
-    let fullText = '';
-    let elementId = 0;
-    
-    for (const pageNum of pagesToProcess) {
-      const page = await pdfDoc.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      const viewport = page.getViewport({ scale: 1.0 });
-      
-      console.log(`📖 Page ${pageNum}: ${textContent.items.length} text items`);
-      
-      for (const item of textContent.items) {
-        if (!item.str || item.str.trim().length === 0) continue;
-        
-        const text = fixPDFEncoding(item.str);
-        fullText += text + (item.hasEOL ? '\n' : ' ');
-        
-        elements.push({
-          id: `elem-${elementId++}`,
-          text: text,
-          page: pageNum,
-          bbox: {
-            x0: item.transform[4],
-            y0: viewport.height - item.transform[5], // Flip Y coordinate
-            x1: item.transform[4] + item.width,
-            y1: viewport.height - item.transform[5] - item.height
-          },
-          fontName: item.fontName || 'unknown',
-          fontSize: item.height || 12,
-          fontWeight: Math.abs(item.transform[0]) || 1, // Scale factor as proxy for weight
-          hasEOL: item.hasEOL || false
-        });
-      }
-    }
-    
-    console.log(`✅ Extracted ${elements.length} elements from ${pagesToProcess.length} pages`);
-    
-    // Get metadata
-    const metadata = await pdfDoc.getMetadata();
-    
-    return {
-      success: true,
-      elements: elements,
-      fullText: fullText.trim(),
-      pages: totalPages,
-      processedPages: pagesToProcess,
-      metadata: {
-        info: metadata.info || {},
-        creator: metadata.info?.Creator || 'Unknown',
-        producer: metadata.info?.Producer || 'Unknown',
-        title: metadata.info?.Title || '',
-        author: metadata.info?.Author || ''
-      }
-    };
-    
-  } catch (error) {
-    console.error('❌ Advanced PDF parsing error:', error);
-    return {
-      success: false,
-      error: error.message,
-      stack: error.stack
-    };
-  }
+  console.log('⚠️ Advanced PDF parsing not yet implemented in Node.js environment');
+  console.log('📌 Falling back to standard parser');
+  
+  // Return error to trigger fallback in PDFUploader
+  return {
+    success: false,
+    error: 'Advanced parsing requires browser environment (pdfjs-dist). Use standard parser.',
+    fallbackToStandard: true
+  };
 });
 
 // Convert PDF pages to images for OCR (with optional page selection)
