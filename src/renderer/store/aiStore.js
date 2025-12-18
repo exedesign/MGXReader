@@ -33,7 +33,6 @@ export const useAIStore = create(
 
       // General Settings
       temperature: 0.3,
-      maxTokens: 4000,
 
       // Connection Status
       isConnected: false,
@@ -78,8 +77,6 @@ export const useAIStore = create(
       }),
 
       setTemperature: (temperature) => set({ temperature }),
-
-      setMaxTokens: (maxTokens) => set({ maxTokens }),
 
       // Individual setters for ease of use
       setOpenAIKey: (apiKey) => {
@@ -131,8 +128,7 @@ export const useAIStore = create(
             model: state.mlxModel,
             temperature: state.mlxTemperature,
           },
-          temperature: state.temperature,
-          maxTokens: state.maxTokens,
+          temperature: state.temperature
         };
       },
 
@@ -219,7 +215,6 @@ export const useAIStore = create(
         mlxModel: 'mlx-community/Llama-3.2-3B-Instruct-4bit',
         mlxTemperature: 0.3,
         temperature: 0.3,
-        maxTokens: 4000,
         isConnected: false,
         lastTestedProvider: null,
       }),
@@ -268,8 +263,7 @@ export const useAIStore = create(
             provider: AI_PROVIDERS.GEMINI,
             apiKey: state.geminiApiKey,
             model: state.geminiModel,
-            temperature: state.temperature,
-            maxTokens: state.maxTokens
+            temperature: state.temperature
           });
 
           console.log('🔍 Analyzing image with Gemini Vision...');
@@ -330,8 +324,7 @@ export const useAIStore = create(
                 apiKey: state.geminiApiKey,
                 model: state.geminiModel,
                 imageModel: state.geminiImageModel, // ALWAYS use store model
-                temperature: state.temperature,
-                maxTokens: state.maxTokens
+                temperature: state.temperature
               })
             });
           } else {
@@ -347,8 +340,7 @@ export const useAIStore = create(
                 apiKey: state.openaiApiKey,
                 model: state.openaiModel,
                 imageModel: state.openaiImageModel, // ALWAYS use store model
-                temperature: state.temperature,
-                maxTokens: state.maxTokens
+                temperature: state.temperature
               })
             });
           }
@@ -486,8 +478,7 @@ export const useAIStore = create(
         mlxEndpoint: state.mlxEndpoint,
         mlxModel: state.mlxModel,
         mlxTemperature: state.mlxTemperature,
-        temperature: state.temperature,
-        maxTokens: state.maxTokens,
+        temperature: state.temperature
       }),
     }
   )

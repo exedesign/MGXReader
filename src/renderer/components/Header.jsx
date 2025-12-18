@@ -4,6 +4,8 @@ import { useScriptStore } from '../store/scriptStore';
 import { useAIStore } from '../store/aiStore';
 import { useFeatureStore } from '../store/featureStore';
 import ErrorBoundary from './ErrorBoundary';
+import TokenUsageDisplay from './TokenUsageDisplay';
+import { getSavedCurrencyPreference } from '../utils/currencyConverter';
 
 // Lazy load UnifiedSettings to prevent circular dependencies
 const UnifiedSettings = lazy(() => import('./UnifiedSettings'));
@@ -15,6 +17,8 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
   const [showUnifiedSettings, setShowUnifiedSettings] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [customLogo, setCustomLogo] = useState('');
+  const [sessionUsage, setSessionUsage] = useState(null);
+  const [selectedCurrency, setSelectedCurrency] = useState(() => getSavedCurrencyPreference());
 
   // Load custom logo from localStorage
   useEffect(() => {
@@ -23,6 +27,55 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
       setCustomLogo(savedLogo);
     }
   }, [showUnifiedSettings]); // Refresh when settings are closed
+
+  // Load and update token usage
+  useEffect(() => {
+    const loadTokenUsage = () => {
+      try {
+        const saved = localStorage.getItem('mgxreader_token_usage');
+        if (saved) {
+          const usage = JSON.parse(saved);
+          setSessionUsage(usage);
+        } else {
+          setSessionUsage(null);
+        }
+      } catch (error) {
+        console.error('Failed to load token usage:', error);
+        setSessionUsage(null);
+      }
+    };
+    
+    // Initial load
+    loadTokenUsage();
+    
+    const handleTokenUpdate = () => {
+      loadTokenUsage();
+    };
+    
+    const handleStorageChange = (e) => {
+      if (e.key === 'mgxreader_token_usage') {
+        loadTokenUsage();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('tokenUsageUpdated', handleTokenUpdate);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('tokenUsageUpdated', handleTokenUpdate);
+    };
+  }, []);
+
+  // Update currency from settings
+  useEffect(() => {
+    const handleCurrencyChange = () => {
+      setSelectedCurrency(getSavedCurrencyPreference());
+    };
+    
+    window.addEventListener('currencyChanged', handleCurrencyChange);
+    return () => window.removeEventListener('currencyChanged', handleCurrencyChange);
+  }, []);
 
   // 🎯 Basit başlık gösterimi: Proje adını göster, bölüm bilgisi olmasın
   const getDisplayTitle = (fileName) => {
@@ -153,7 +206,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
 
 
   return (
-    <header className="h-16 bg-cinema-dark border-b border-cinema-gray flex items-center justify-between px-4 lg:px-6 select-none flex-wrap">
+    <header className="h-16 bg-cinema-dark border-b border-cinema-gray flex items-center justify-between px-4 lg:px-6 select-none flex-wrap relative z-[10000]">
       {/* Left section */}
       <div className="flex items-center gap-2 lg:gap-4 min-w-0">
         <button

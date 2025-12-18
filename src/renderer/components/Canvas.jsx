@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAIStore } from '../store/aiStore';
 import { useScriptStore } from '../store/scriptStore';
+import { updateTokenUsage } from '../utils/tokenTracker';
 
 // Custom cursor for move tool
 const MOVE_CURSOR_SVG = `data:image/svg+xml;base64,${btoa(`
@@ -1118,6 +1119,16 @@ export default function Canvas() {
         systemPrompt: systemPrompt,
         timeout: 300000 // 5 minutes timeout
       });
+      
+      // Track image generation cost
+      if (result && result.cost && result.usage) {
+        updateTokenUsage({
+          cost: result.cost,
+          usage: result.usage,
+          model: result.model,
+          analysisType: `canvas_${currentMode}`
+        });
+      }
 
       if (result && result.imageData) {
         const imageUrl = `data:${result.mimeType || 'image/png'};base64,${result.imageData}`;

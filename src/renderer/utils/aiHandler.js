@@ -181,6 +181,142 @@ export const GEMINI_IMAGE_UNDERSTANDING_MODELS = [
   { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Hızlı ve ekonomik görsel anlama', fast: true, stable: true, maxImages: 3600 },
 ];
 
+/**
+ * Gemini API Fiyatlandırma (Aralık 2025)
+ * Kaynak: https://ai.google.dev/pricing
+ * Fiyatlar: USD per 1M tokens
+ */
+/**
+ * Gemini API Fiyatlandırma (Aralık 2025)
+ * Kaynak: https://ai.google.dev/gemini-api/docs/pricing?hl=tr
+ * Tüm fiyatlar USD / 1M token cinsinden
+ * Güncelleme: 15 Aralık 2025
+ */
+export const GEMINI_PRICING = {
+  // Gemini 2.5 Serisi
+  'gemini-2.5-pro': { input: 1.25, output: 10.00, cached: 0.125 },
+  'gemini-2.5-flash': { input: 0.30, output: 2.50, cached: 0.03 },
+  'gemini-2.5-flash-preview-09-2025': { input: 0.30, output: 2.50, cached: 0.03 },
+  'gemini-2.5-flash-lite': { input: 0.10, output: 0.40, cached: 0.01 },
+  'gemini-2.5-flash-lite-preview-09-2025': { input: 0.10, output: 0.40, cached: 0.01 },
+  
+  // Gemini 2.0 Serisi
+  'gemini-2.0-flash': { input: 0.10, output: 0.40, cached: 0.025 },
+  'gemini-2.0-flash-lite': { input: 0.075, output: 0.30, cached: 0 },
+  'gemini-2.0-flash-exp': { input: 0, output: 0, cached: 0 }, // Free experimental
+  
+  // Gemini 1.5 Serisi (Legacy)
+  'gemini-1.5-pro': { input: 1.25, output: 10.00, cached: 0.125 },
+  'gemini-1.5-flash': { input: 0.075, output: 0.30, cached: 0.01875 },
+  'gemini-1.5-flash-8b': { input: 0.0375, output: 0.15, cached: 0.009375 },
+  
+  // Gemini 3 Serisi (Preview)
+  'gemini-3-pro-preview': { input: 2.00, output: 12.00, cached: 0.20 },
+  'gemini-pro': { input: 0.50, output: 1.50, cached: 0.125 },
+  
+  // Image Generation Models (per image, not per token)
+  'gemini-3-pro-image-preview': { perImage: 0.134 },
+  'gemini-2.5-flash-image': { perImage: 0.039 },
+  'imagen-3.0-generate-002': { perImage: 0.03 },
+  'imagen-4.0-fast-generate-001': { perImage: 0.02 },
+  'imagen-4.0-generate-001': { perImage: 0.04 },
+  'imagen-4.0-ultra-generate-001': { perImage: 0.06 },
+};
+
+/**
+ * Calculate cost for Gemini API usage
+ * @param {string} model - Model ID
+ * @param {Object} usage - Usage metadata from API
+ * @param {number} usage.promptTokenCount - Input tokens
+ * @param {number} usage.candidatesTokenCount - Output tokens  
+ * @param {number} usage.cachedContentTokenCount - Cached tokens
+ * @returns {Object} - Cost breakdown
+ */
+export function calculateGeminiCost(model, usage) {
+  const pricing = GEMINI_PRICING[model];
+  if (!pricing) {
+    return { total: 0, breakdown: { error: 'Unknown model pricing' } };
+  }
+
+  // Image generation models
+  if (pricing.perImage) {
+    return {
+      total: pricing.perImage,
+      breakdown: {
+        perImage: pricing.perImage,
+        currency: 'USD'
+      }
+    };
+  }
+
+  // Text generation models
+  const inputTokens = usage.promptTokenCount || 0;
+  const outputTokens = usage.candidatesTokenCount || 0;
+  const cachedTokens = usage.cachedContentTokenCount || 0;
+
+  const inputCost = (inputTokens / 1000000) * pricing.input;
+  const outputCost = (outputTokens / 1000000) * pricing.output;
+  const cachedCost = (cachedTokens / 1000000) * pricing.cached;
+
+  return {
+    total: inputCost + outputCost + cachedCost,
+    breakdown: {
+      input: inputCost,
+      output: outputCost,
+      cached: cachedCost,
+      currency: 'USD'
+    },
+    tokens: {
+      input: inputTokens,
+      output: outputTokens,
+      cached: cachedTokens,
+      total: inputTokens + outputTokens + cachedTokens
+    }
+  };
+}
+
+// OpenAI Pricing (USD per image)
+export const OPENAI_PRICING = {
+  'dall-e-3': { 
+    standard: { '1024x1024': 0.040, '1024x1792': 0.080, '1792x1024': 0.080 },
+    hd: { '1024x1024': 0.080, '1024x1792': 0.120, '1792x1024': 0.120 }
+  },
+  'dall-e-2': {
+    standard: { '256x256': 0.016, '512x512': 0.018, '1024x1024': 0.020 }
+  }
+};
+
+/**
+ * Calculate cost for OpenAI DALL-E usage
+ * @param {string} model - Model ID (dall-e-3, dall-e-2)
+ * @param {string} size - Image size (1024x1024, etc.)
+ * @param {string} quality - Quality level (standard, hd)
+ * @returns {Object} - Cost breakdown
+ */
+export function calculateOpenAICost(model, size = '1024x1024', quality = 'standard') {
+  const pricing = OPENAI_PRICING[model];
+  if (!pricing) {
+    return { total: 0, breakdown: { error: 'Unknown model pricing' } };
+  }
+
+  let cost = 0;
+  if (model === 'dall-e-3') {
+    cost = pricing[quality]?.[size] || pricing.standard['1024x1024'];
+  } else if (model === 'dall-e-2') {
+    cost = pricing.standard[size] || pricing.standard['1024x1024'];
+  }
+
+  return {
+    total: cost,
+    breakdown: {
+      perImage: cost,
+      size: size,
+      quality: quality,
+      currency: 'USD'
+    }
+  };
+}
+
 // OpenAI image models for comparison
 export const OPENAI_IMAGE_MODELS = [
   { id: 'dall-e-3', name: 'DALL-E 3', recommended: true, description: 'OpenAI en gelismis gorsel modeli' },
@@ -218,7 +354,7 @@ class AIHandler {
     this.localEndpoint = config.localEndpoint || 'http://localhost:11434';
     this.localModel = config.localModel || 'llama3';
     this.temperature = config.temperature || 0.3;
-    this.maxTokens = config.maxTokens || 4000;
+    // Token limiti yok - AI isteği kadar uzun çıktı üretebilir
 
     // API Rate Limiting - son istek zamanını takip et
     this.lastApiCall = 0;
@@ -249,28 +385,47 @@ class AIHandler {
     await this.waitForRateLimit();
 
     const temperature = options.temperature || this.temperature;
-    const maxTokens = options.maxTokens || this.maxTokens;
+    const includeMetadata = options.includeMetadata || false;
 
     try {
+      let result;
       switch (this.provider) {
         case AI_PROVIDERS.OPENAI:
           if (!this.openaiApiKey) {
             throw new Error('OpenAI API key is required');
           }
-          return await this.callOpenAI(systemPrompt, userPrompt, temperature, maxTokens);
+          const openaiResult = await this.callOpenAI(systemPrompt, userPrompt, temperature);
+          result = typeof openaiResult === 'string' 
+            ? { text: openaiResult, usage: null, model: this.model, provider: this.provider }
+            : openaiResult;
+          break;
 
         case AI_PROVIDERS.GEMINI:
           if (!this.apiKey) {
             throw new Error('Gemini API key is required');
           }
-          return await this.callGemini(systemPrompt, userPrompt, temperature, maxTokens);
+          const geminiResult = await this.callGemini(systemPrompt, userPrompt, temperature);
+          result = geminiResult; // Already returns { text, usage, model }
+          
+          // Calculate cost if usage metadata exists
+          if (result.usage && result.usage.promptTokenCount) {
+            result.cost = calculateGeminiCost(result.model, result.usage);
+          }
+          break;
 
         case AI_PROVIDERS.LOCAL:
-          return await this.callLocalAI(systemPrompt, userPrompt, temperature, maxTokens);
+          const localResult = await this.callLocalAI(systemPrompt, userPrompt, temperature);
+          result = typeof localResult === 'string'
+            ? { text: localResult, usage: null, model: this.model, provider: this.provider }
+            : localResult;
+          break;
 
         default:
           throw new Error('Unsupported AI provider: ' + this.provider);
       }
+
+      // Backward compatibility: return text only unless includeMetadata is true
+      return includeMetadata ? result : result.text;
     } catch (error) {
       console.error('AI Generation Error:', error);
       throw error;
@@ -364,8 +519,8 @@ class AIHandler {
         ]
       }],
       generationConfig: {
-        temperature: options.temperature || 0.7,
-        maxOutputTokens: options.maxOutputTokens || 2048
+        temperature: options.temperature || 0.7
+        // maxOutputTokens yok - sınırsız çıktı
       }
     };
 
@@ -520,11 +675,13 @@ class AIHandler {
 
       // Base configuration for all Gemini image models
       const generationConfig = {
-        responseModalities: ["IMAGE"],
-        temperature: temperature,
-        imageConfig: {
-          imageSize: requestedSize
-        }
+        temperature: temperature
+      };
+      
+      // Add image config if needed
+      const imageConfig = {
+        aspectRatio: "1:1",  // Default aspect ratio
+        imageSize: requestedSize
       };
 
       requestBody = {
@@ -533,25 +690,11 @@ class AIHandler {
             text: prompt
           }]
         }],
-        generationConfig: generationConfig,
-        safetySettings: [
-          {
-            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_HATE_SPEECH",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          }
-        ]
+        generationConfig: {
+          ...generationConfig,
+          responseModalities: ["TEXT", "IMAGE"],
+          imageConfig: imageConfig
+        }
       };
 
       // Add reference images if provided (respecting model limits)
@@ -633,6 +776,10 @@ class AIHandler {
               const imageData = imagePart.inline_data || imagePart.inlineData;
               
               console.log(`✅ ${model}: ${imageParts.length} görsel oluşturuldu`);
+              // Calculate cost for image generation
+              const cost = calculateGeminiCost(model, { imageCount: 1 });
+              console.log(`💰 Image generation cost: $${cost.total.toFixed(6)} USD (${model})`);
+              
               return {
                 success: true,
                 imageData: imageData.data,
@@ -641,7 +788,9 @@ class AIHandler {
                 model: model,
                 originalPrompt: prompt,
                 generatedAt: new Date().toISOString(),
-                totalImages: imageParts.length
+                totalImages: imageParts.length,
+                cost: cost,
+                usage: { imageCount: 1, model: model }
               };
             }
           }
@@ -651,7 +800,11 @@ class AIHandler {
       else if (model.includes('imagen')) {
         if (data.generated_images && data.generated_images.length > 0) {
           const generatedImage = data.generated_images[0];
-          console.log(`✅ ${model}: Görsel oluşturuldu`);
+          
+          // Calculate cost for image generation
+          const cost = calculateGeminiCost(model, { imageCount: 1 });
+          console.log(`✅ ${model}: Görsel oluşturuldu - Cost: $${cost.total.toFixed(6)} USD`);
+          
           return {
             success: true,
             imageData: generatedImage.image,
@@ -659,7 +812,9 @@ class AIHandler {
             provider: 'gemini',
             model: model,
             originalPrompt: prompt,
-            generatedAt: new Date().toISOString()
+            generatedAt: new Date().toISOString(),
+            cost: cost,
+            usage: { imageCount: 1, model: model }
           };
         }
       }
@@ -789,6 +944,10 @@ class AIHandler {
 
         if (data && data.data && data.data.length > 0) {
           const imageData = data.data[0];
+          
+          // Calculate cost for OpenAI image generation
+          const cost = calculateOpenAICost(model, size, quality);
+          console.log(`💰 OpenAI image generation cost: $${cost.total.toFixed(6)} USD (${model}, ${size}, ${quality})`);          
           return {
             success: true,
             imageUrl: imageData.url,
@@ -797,6 +956,8 @@ class AIHandler {
             revisedPrompt: imageData.revised_prompt || prompt,
             originalPrompt: prompt,
             generatedAt: new Date().toISOString(),
+            cost: cost,
+            usage: { imageCount: 1, model: model, size: size, quality: quality }
           };
         }
 
@@ -829,7 +990,7 @@ class AIHandler {
     }
   }
 
-  async callOpenAI(systemPrompt, userPrompt, temperature, maxTokens) {
+  async callOpenAI(systemPrompt, userPrompt, temperature) {
     if (!this.openaiApiKey) {
       throw new Error('OpenAI API key is required');
     }
@@ -859,8 +1020,8 @@ class AIHandler {
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
             ],
-            temperature: temperature,
-            max_tokens: maxTokens,
+            temperature: temperature
+            // max_tokens kaldırıldı - sınırsız çıktı
           }),
           signal: AbortSignal.timeout(300000) // 5 dakika timeout
         });
@@ -924,11 +1085,10 @@ class AIHandler {
    * @param {string} systemPrompt - System instruction
    * @param {string} userPrompt - User prompt
    * @param {number} temperature - Temperature setting
-   * @param {number} maxTokens - Max output tokens
    * @param {string|null} cacheId - Optional cache ID for context caching
    * @returns {Promise<string>} - Generated text
    */
-  async callGeminiWithCache(systemPrompt, userPrompt, temperature, maxTokens, cacheId = null) {
+  async callGeminiWithCache(systemPrompt, userPrompt, temperature, cacheId = null) {
     if (!this.apiKey) {
       throw new Error('Google API key is required');
     }
@@ -944,13 +1104,19 @@ class AIHandler {
     });
 
     const requestBody = {
+      // Cache kullanıldığında sadece userPrompt gönder (systemPrompt cache'de)
+      // Cache yoksa hem systemPrompt hem userPrompt gönder
       contents: [{
         role: 'user',
-        parts: [{ text: systemPrompt ? `${systemPrompt}\n\n${userPrompt}` : userPrompt }]
+        parts: [{ 
+          text: cacheId 
+            ? userPrompt  // Cache varsa sadece user prompt
+            : (systemPrompt ? `${systemPrompt}\n\n${userPrompt}` : userPrompt)  // Cache yoksa full prompt
+        }]
       }],
       generationConfig: {
         temperature: temperature || 0.7,
-        maxOutputTokens: maxTokens || 8192,
+        // maxOutputTokens kaldırıldı - sınırsız çıktı
         topP: 0.95,
         topK: 40,
       },
@@ -965,7 +1131,7 @@ class AIHandler {
     // Add cache reference if available
     if (cacheId) {
       requestBody.cachedContent = cacheId;
-      console.log('✅ Using cached content:', cacheId);
+      console.log('✅ Using cached content:', cacheId, '- Sadece user prompt gönderiliyor (system prompt cache\'de)');
     }
 
     try {
@@ -978,9 +1144,9 @@ class AIHandler {
     }
   }
 
-  async callGemini(systemPrompt, userPrompt, temperature, maxTokens) {
+  async callGemini(systemPrompt, userPrompt, temperature) {
     // Use callGeminiWithCache without cache for backwards compatibility
-    return this.callGeminiWithCache(systemPrompt, userPrompt, temperature, maxTokens, null);
+    return this.callGeminiWithCache(systemPrompt, userPrompt, temperature, null, null);
   }
 
   async makeGeminiRequestWithRetry(apiUrl, requestBodyOrSystemPrompt, userPromptOrModelName, temperatureOrUndefined, maxTokensOrUndefined, modelNameOrUndefined) {
@@ -996,7 +1162,6 @@ class AIHandler {
       const systemPrompt = requestBodyOrSystemPrompt;
       const userPrompt = userPromptOrModelName;
       const temperature = temperatureOrUndefined;
-      const maxTokens = maxTokensOrUndefined;
       modelName = modelNameOrUndefined;
       
       requestBody = {
@@ -1006,7 +1171,7 @@ class AIHandler {
         }],
         generationConfig: {
           temperature: temperature || 0.7,
-          maxOutputTokens: maxTokens || 8192,
+          // maxOutputTokens kaldırıldı - sınırsız çıktı
           topP: 0.95,
           topK: 40,
         },
@@ -1070,7 +1235,6 @@ class AIHandler {
       const systemPrompt = requestBodyOrSystemPrompt;
       const userPrompt = userPromptOrUndefined;
       const temperature = temperatureOrUndefined;
-      const maxTokens = maxTokensOrUndefined;
       
       requestBody = {
         contents: [{
@@ -1079,7 +1243,7 @@ class AIHandler {
         }],
         generationConfig: {
           temperature: temperature || 0.7,
-          maxOutputTokens: maxTokens || 8192,
+          // maxOutputTokens kaldırıldı - sınırsız çıktı
           topP: 0.95,
           topK: 40,
         },
@@ -1135,8 +1299,30 @@ class AIHandler {
         }
 
         if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
-          console.log(`✅ Gemini 3 Pro başarılı!`);
-          return candidate.content.parts[0].text;
+          // Extract usage metadata
+          const usageMetadata = data.usageMetadata || {};
+          const textResponse = candidate.content.parts[0].text;
+          
+          // Calculate cost
+          let calculatedCost = null;
+          if (usageMetadata.promptTokenCount) {
+            calculatedCost = calculateGeminiCost(this.model, usageMetadata);
+            console.log(`✅ Gemini başarılı! Model: ${this.model}`);
+            console.log(`📊 Token Kullanımı:`, {
+              input: usageMetadata.promptTokenCount,
+              output: usageMetadata.candidatesTokenCount,
+              cached: usageMetadata.cachedContentTokenCount || 0,
+              total: usageMetadata.totalTokenCount
+            });
+            console.log(`💰 Maliyet: $${calculatedCost.total.toFixed(6)} USD`);
+          }
+          
+          return {
+            text: textResponse,
+            usage: usageMetadata,
+            model: this.model,
+            cost: calculatedCost
+          };
         }
       }
 
@@ -1174,7 +1360,7 @@ class AIHandler {
     }
   }
 
-  async callLocalAI(systemPrompt, userPrompt, temperature, maxTokens) {
+  async callLocalAI(systemPrompt, userPrompt, temperature) {
     const endpoint = this.localEndpoint.endsWith('/')
       ? this.localEndpoint + "api/generate"
       : this.localEndpoint + "/api/generate";
@@ -1188,8 +1374,8 @@ class AIHandler {
         prompt: combinedPrompt,
         stream: false,
         options: {
-          temperature: temperature,
-          num_predict: maxTokens,
+          temperature: temperature
+          // num_predict kaldırıldı - sınırsız çıktı
         }
       },
       {
@@ -1217,7 +1403,9 @@ class AIHandler {
     const {
       systemPrompt = 'Sen bir senaryo analiz uzmanısın.',
       userPrompt = '',
-      onProgress = null
+      onProgress = null,
+      includeMetadata = false
+      // maxTokens yok - sınırsız çıktı
     } = options;
 
     // Tüm metni tek seferde analiz et - chunking yok
@@ -1227,7 +1415,11 @@ class AIHandler {
       onProgress({ message: 'Analiz yapılıyor...', progress: 50 });
     }
 
-    const result = await this.generateText(systemPrompt, fullPrompt);
+    const result = await this.generateText(systemPrompt, fullPrompt, { 
+      includeMetadata,
+      temperature: options.temperature
+      // maxTokens yok - sınırsız çıktı
+    });
 
     if (onProgress) {
       onProgress({ message: 'Tamamlandı', progress: 100 });
@@ -1273,7 +1465,7 @@ class AIHandler {
           temperature: options.temperature || 0.7,
           topP: 0.8,
           topK: 40,
-          maxOutputTokens: 8192,
+          // maxOutputTokens kaldırıldı - sınırsız çıktı
           // Response modalities MUST be at this level for Gemini 3 Pro Image
           response_modalities: ['TEXT', 'IMAGE']
         },

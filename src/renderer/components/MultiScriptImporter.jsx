@@ -5,6 +5,11 @@ import { cleanScreenplayText, parseScenes } from '../utils/textProcessing';
 import { parseScreenplayFile } from '../utils/screenplayParser';
 import { performPDFOCR, isOCRAvailable } from '../utils/ocrService';
 import { extractBestTitle, findCommonProjectTitle, extractProjectInfo } from '../utils/titleExtractor';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+// PDF.js worker setup - use local worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 export default function MultiScriptImporter() {
   const [isDragging, setIsDragging] = useState(false);
@@ -350,6 +355,7 @@ export default function MultiScriptImporter() {
             const scriptData = {
               title: titleWithChapter,
               fileName: titleWithChapter, // "Proje Adı - 1. Bölüm" formatında
+              name: titleWithChapter, // ✅ Consistency for analysis
               scriptText: result.text,
               cleanedText: cleanScreenplayText(result.text),
               pageCount: result.pages || 1,
@@ -456,6 +462,7 @@ export default function MultiScriptImporter() {
         const scriptData = {
           title: projectInfo.displayTitle,
           fileName: projectInfo.displayTitle, // Temiz dosya adı 
+          name: projectInfo.displayTitle, // ✅ Consistency for analysis
           scriptText: result.text,
           cleanedText: cleanScreenplayText(result.text),
           pageCount: result.pages || 1,
@@ -485,6 +492,14 @@ export default function MultiScriptImporter() {
       }
     } catch (error) {
       console.error('Single file processing failed:', error);
+      
+      // Show user-friendly error message
+      const errorMessage = error.message || 'File processing failed';
+      if (errorMessage.includes('only available in the desktop application')) {
+        alert('⚠️ PDF Desteği\n\nPDF dosyaları sadece masaüstü uygulamasında desteklenir.\n\nLütfen:\n- Electron masaüstü uygulamasını kullanın, VEYA\n- TXT, FDX, CELTX veya DOCX formatında dosya yükleyin');
+      } else {
+        alert(`Dosya işlenirken hata oluştu:\n\n${errorMessage}`);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -527,6 +542,35 @@ export default function MultiScriptImporter() {
         }
       } else {
         // Standard PDF extraction
+        if (!window.electronAPI || !window.electronAPI.parsePDF) {
+          // Web browser - use PDF.js
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            const pdf = await loadingTask.promise;
+            
+            let fullText = '';
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+              const page = await pdf.getPage(pageNum);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map(item => item.str).join(' ');
+              fullText += pageText + '\n\n';
+            }
+            
+            return {
+              success: true,
+              text: fullText,
+              pages: pdf.numPages,
+              metadata: { 
+                source: 'pdf.js-web',
+                extractedInBrowser: true
+              }
+            };
+          } catch (error) {
+            throw new Error(`PDF parsing failed: ${error.message}`);
+          }
+        }
+        
         const result = await window.electronAPI.parsePDF(filePath);
         if (!result.success) {
           throw new Error(result.error || 'Failed to parse PDF');
@@ -559,6 +603,23 @@ export default function MultiScriptImporter() {
   // File selection handlers
   const handleFileSelect = async () => {
     try {
+      // Check if electronAPI is available
+      if (!window.electronAPI || !window.electronAPI.openFiles) {
+        // Web browser fallback - use HTML file input
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.accept = '.pdf,.fdx,.celtx,.txt,.docx';
+        input.onchange = (e) => {
+          const files = Array.from(e.target.files);
+          if (files.length > 0) {
+            setSelectedFiles(files);
+          }
+        };
+        input.click();
+        return;
+      }
+      
       const filePaths = await window.electronAPI.openFiles(); // Need to implement multi-file selection
       if (filePaths && filePaths.length > 0) {
         // Convert to File-like objects

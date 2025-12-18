@@ -25,8 +25,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   directoryExists: (dirPath) => ipcRenderer.invoke('file:directoryExists', dirPath),
   ensureDir: (dirPath) => ipcRenderer.invoke('file:ensureDir', dirPath),
   listDirectory: (dirPath) => ipcRenderer.invoke('file:listDirectory', dirPath),
+  listFiles: (dirPath) => ipcRenderer.invoke('file:listDirectory', dirPath), // Alias for consistency
   deleteFile: (filePath) => ipcRenderer.invoke('file:delete', filePath),
   getTempDir: () => ipcRenderer.invoke('file:getTempDir'),
+  getFileStats: (filePath) => ipcRenderer.invoke('file:getStats', filePath),
 
   // App APIs
   getAppPath: (name) => ipcRenderer.invoke('app:getPath', name),

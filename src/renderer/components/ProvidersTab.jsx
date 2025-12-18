@@ -58,7 +58,6 @@ export default function ProvidersTab({
   
   // Global settings state
   const [globalTempInput, setGlobalTempInput] = useState(config?.temperature || 0.7);
-  const [maxTokensInput, setMaxTokensInput] = useState(config?.maxTokens || 2000);
   
   // Test connection state
   const [isTesting, setIsTesting] = useState(false);
@@ -315,7 +314,6 @@ export default function ProvidersTab({
       setMlxTempInput(currentConfig.mlx?.temperature || 0.7);
       setMlxModelInput(currentConfig.mlx?.model || 'llama3.1');
       setGlobalTempInput(currentConfig.temperature || 0.7);
-      setMaxTokensInput(currentConfig.maxTokens || 2000);
     }
   }, [currentConfig]);
 
@@ -902,41 +900,22 @@ export default function ProvidersTab({
       {/* Global Settings */}
       <div className="space-y-4 p-4 bg-cinema-gray/20 rounded-lg border border-cinema-gray-light">
         <h3 className="text-lg font-semibold text-cinema-text">Global AI Settings</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-cinema-text font-medium block mb-2">
-              Temperature: {globalTempInput}
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={globalTempInput}
-              onChange={(e) => setGlobalTempInput(parseFloat(e.target.value))}
-              className="w-full"
-            />
-            <p className="text-xs text-cinema-text-dim mt-1">
-              Lower = More focused, Higher = More creative
-            </p>
-          </div>
-          <div>
-            <label className="text-cinema-text font-medium block mb-2">
-              Max Tokens
-            </label>
-            <input
-              type="number"
-              min="100"
-              max="32000"
-              step="100"
-              value={maxTokensInput}
-              onChange={(e) => setMaxTokensInput(parseInt(e.target.value))}
-              className="w-full px-3 py-2 bg-cinema-gray border border-cinema-gray-light rounded-lg text-cinema-text focus:outline-none focus:border-cinema-accent transition-colors"
-            />
-            <p className="text-xs text-cinema-text-dim mt-1">
-              Maximum response length
-            </p>
-          </div>
+        <div>
+          <label className="text-cinema-text font-medium block mb-2">
+            Temperature: {globalTempInput}
+          </label>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={globalTempInput}
+            onChange={(e) => setGlobalTempInput(parseFloat(e.target.value))}
+            className="w-full"
+          />
+          <p className="text-xs text-cinema-text-dim mt-1">
+            Lower = More focused, Higher = More creative
+          </p>
         </div>
         <button
           onClick={handleSaveGlobal}

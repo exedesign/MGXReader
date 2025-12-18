@@ -19,6 +19,11 @@ export async function performPDFOCR(filePath, language = 'tur+eng', psm = '3', o
   let worker = null;
   
   try {
+    // Check if Electron API is available
+    if (!window.electronAPI || !window.electronAPI.pdfToImages) {
+      throw new Error('PDF OCR is only available in the desktop application. Please use the Electron app.');
+    }
+    
     onProgress({ status: 'converting', progress: 0, message: 'Converting PDF to images...' });
     
     // Convert PDF pages to images (with page selection)

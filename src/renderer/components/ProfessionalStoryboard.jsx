@@ -9,6 +9,7 @@ import CharacterImageGenerator from './CharacterImageGenerator';
 import LocationImageGenerator from './LocationImageGenerator';
 import LocationTableView from './LocationTableView';
 import { analysisStorageService } from '../utils/analysisStorageService';
+import { updateTokenUsage } from '../utils/tokenTracker';
 
 export default function ProfessionalStoryboard() {
   // PromptStore'dan storyboard modülü için tanımlanmış promptları al
@@ -420,6 +421,69 @@ export default function ProfessionalStoryboard() {
   
   // Location filter and table states - moved to LocationTableView component
 
+  // Sahne listesinden meta bilgileri ve geçersiz sahneleri filtrele
+  const filterValidScenes = (scenes) => {
+    if (!Array.isArray(scenes)) return [];
+    
+    return scenes.filter(scene => {
+      // Geçerli sahne objesi kontrolü
+      if (!scene || typeof scene !== 'object') {
+        console.warn('⚠️ Geçersiz sahne objesi:', scene);
+        return false;
+      }
+      
+      const title = scene.title || scene.name || '';
+      
+      // Trim whitespace and normalize
+      const cleanTitle = title.trim();
+      
+      // Sahne numarası var mı kontrol et - varsa muhtemelen geçerli bir sahne
+      const hasSceneNumber = /sahne\s*\d+/i.test(cleanTitle);
+      
+      // Meta bilgi pattern kontrolü
+      // "Sahne Sayısı: 28", "İç Mekan Sayısı: 20", "SAHNE ANALİZLERİ", "İÇ GECE" gibi
+      const metaPatterns = [
+        /sayısı:|count:|total:/i,  // "Sahne Sayısı: 28"
+        /^\d+\s*(sahne|scene|mekan|location)/i,  // "28 Sahne"
+        /^(sahne|scene)\s+(sayısı|count|analiz)/i,  // "Sahne Sayısı", "SAHNE ANALİZLERİ"
+        /^(iç|dış|int|ext)\s*\*\s*\*+\s*(zaman|time):/i,  // "İÇ * **Zaman:** GECE" - regex için * escaped
+        /^(iç|dış|int|ext)\s*\*\s*\*+/i,  // "İÇ * **" ile başlayan her şey
+        /^(iç|dış|int|ext)\s+(mekan|gece|gün|gündüz|akşam)$/i,  // Sadece "İÇ GECE", "DIŞ GÜN" (sahne ismi olmadan)
+        /tutarsız|inconsistent/i,  // "sahne numaralandırması tutarsızdır"
+        /^(kapsamlı|comprehensive)\s+(analiz|analysis)/i,  // "KAPSAMLI ANALİZ"
+        /^bölüm\s*\d+$/i,  // "Bölüm 1" gibi genel başlıklar
+        /^(özet|summary|not|note):/i  // Özet, not başlıkları
+      ];
+      
+      // FLASHBACK veya SAHNE numarası içeren başlıkları koru
+      const hasValidPrefix = /^(sahne|flashback)\s*\d+/i.test(cleanTitle);
+      
+      // Meta pattern kontrolü - ama geçerli sahne prefix'i varsa geçir
+      if (!hasValidPrefix) {
+        for (const pattern of metaPatterns) {
+          if (pattern.test(cleanTitle)) {
+            console.warn('⚠️ Meta bilgi filtrelendi (sahne):', title);
+            return false;
+          }
+        }
+      }
+      
+      // Çok kısa başlıklar (sadece "İÇ GECE" gibi)
+      if (title.length > 0 && title.length < 5 && !/sahne\s*\d+/i.test(title)) {
+        console.warn('⚠️ Çok kısa sahne başlığı filtrelendi:', title);
+        return false;
+      }
+      
+      // Çok uzun başlıklar (muhtemelen açıklama metni)
+      if (title.length > 200) {
+        console.warn('⚠️ Çok uzun sahne başlığı filtrelendi:', title.substring(0, 50) + '...');
+        return false;
+      }
+      
+      return true;
+    });
+  };
+
   // Analiz sonuçlarından sahne verilerini çıkar
   const extractScenesFromAnalysis = (analysisData) => {
     try {
@@ -668,13 +732,115 @@ export default function ProfessionalStoryboard() {
         }
         // JSON result parsing
         else if (customResults.location_analysis.result) {
+          // Sahne bilgilerini normalize et ve meta bilgileri filtrele
+          const normalizeSceneInfo = (sceneInfo) => {
+            if (!sceneInfo || typeof sceneInfo !== 'object') return null;
+            
+            let sceneNumber = sceneInfo.sceneNumber;
+            let sceneTitle = sceneInfo.sceneTitle || '';
+            
+            // 🚫 META BİLGİ FİLTRELEME - Bu tamamen meta bilgi, sahne değil!
+            const metaPatterns = [
+              /^SAHNE\s*ANALİZLERİ/i,  // "SAHNE ANALİZLERİ**"
+              /^(İÇ|DIŞ|INT|EXT)\s*\*\s*\*+\s*(Zaman|Time):/i,  // "İÇ * **Zaman:** GECE"
+              /^(İÇ|DIŞ|INT|EXT)\s*\*\s*\*+/i,  // "İÇ * **" ile başlayan
+              /^(İÇ|DIŞ)\s+(GECE|GÜN|GÜNDÜZ)$/i,  // Sadece "İÇ GECE", "DIŞ GÜN" (başka bilgi yok)
+              /sayısı:|count:|total:/i,  // "Sahne Sayısı: 28"
+              /^\d+\s*(sahne|scene|mekan)/i,  // "28 Sahne"
+              /^(KAPSAMLI|COMPREHENSIVE)\s+(ANALİZ|ANALYSIS)/i,  // "KAPSAMLI ANALİZ"
+              /^(özet|summary)/i  // "Özet" başlıkları
+            ];
+            
+            for (const pattern of metaPatterns) {
+              if (pattern.test(sceneTitle)) {
+                console.warn('⚠️ Meta bilgi filtrelendi (sceneTitle):', sceneTitle);
+                return null;
+              }
+            }
+            
+            // sceneNumber temizleme
+            if (typeof sceneNumber === 'string') {
+              // "SAHNE1" → "1", "JENERİK SAHNE2" → "2", "S12" → "12"
+              const numMatch = sceneNumber.match(/\d+/);
+              if (numMatch) {
+                sceneNumber = numMatch[0];
+              } else {
+                console.warn('⚠️ Geçersiz sahne numarası (rakam yok):', sceneNumber);
+                return null; // Rakam içermeyen sahne numaralarını atla
+              }
+            } else if (typeof sceneNumber === 'number') {
+              sceneNumber = String(sceneNumber);
+            } else {
+              console.warn('⚠️ Geçersiz sahne numarası tipi:', sceneNumber);
+              return null;
+            }
+            
+            // sceneTitle temizleme - "JENERİK SAHNE2" gibi önekleri ayır
+            if (sceneTitle.includes('JENERİK') || sceneTitle.includes('FLASHBACK')) {
+              // Önek varsa, formatlı hale getir
+              sceneTitle = sceneTitle
+                .replace(/^(JENERİK|FLASHBACK)\s*SAHNE\d+\s*/i, '$1 - ')
+                .replace(/^(JENERİK|FLASHBACK)\s*/i, '$1 - ');
+            }
+            
+            // Çok kısa başlıklar (5 karakterden az ve SAHNE kelimesi yok)
+            if (sceneTitle.length > 0 && sceneTitle.length < 5 && !/sahne/i.test(sceneTitle)) {
+              console.warn('⚠️ Çok kısa sahne başlığı filtrelendi:', sceneTitle);
+              return null;
+            }
+            
+            return {
+              ...sceneInfo,
+              sceneNumber,
+              sceneTitle
+            };
+          };
+          
           console.log('📝 Location_analysis result parse ediliyor...');
           const locationData = safeJSONParse(customResults.location_analysis.result);
           
           if (locationData && locationData.locations && Array.isArray(locationData.locations)) {
             console.log(`📦 ${locationData.locations.length} lokasyon bulundu`);
             
-            locationData.locations.forEach(loc => {
+            // Meta bilgileri ve geçersiz lokasyonları filtrele
+            const validLocations = locationData.locations.filter(loc => {
+              // Geçerli lokasyon kontrolü
+              if (!loc || typeof loc !== 'object' || !loc.name || typeof loc.name !== 'string') {
+                console.warn('⚠️ Geçersiz lokasyon objesi:', loc);
+                return false;
+              }
+              
+              // Meta bilgi pattern kontrolü - "Sahne Sayısı: 28", "İç Mekan Sayısı: 20" gibi
+              const isMeta = /sayısı:|count:|total:|^\d+\s*(sahne|scene|mekan|location|iç|dış|interior|exterior)/i.test(loc.name);
+              if (isMeta) {
+                console.warn('⚠️ Meta bilgi filtrelendi:', loc.name);
+                return false;
+              }
+              
+              // Çok kısa veya çok uzun isimler
+              if (loc.name.length < 3 || loc.name.length > 150) {
+                console.warn('⚠️ Geçersiz lokasyon ismi (uzunluk):', loc.name);
+                return false;
+              }
+              
+              return true;
+            });
+            
+            console.log(`✅ ${validLocations.length}/${locationData.locations.length} geçerli lokasyon`);
+            
+            validLocations.forEach(loc => {
+              // Sahne bilgilerini normalize et
+              if (loc.scenes && Array.isArray(loc.scenes)) {
+                const originalCount = loc.scenes.length;
+                loc.scenes = loc.scenes
+                  .map(normalizeSceneInfo)
+                  .filter(s => s !== null); // Geçersiz sahneleri filtrele
+                
+                if (loc.scenes.length < originalCount) {
+                  console.log(`  🔧 ${loc.name}: ${originalCount} → ${loc.scenes.length} sahne (${originalCount - loc.scenes.length} geçersiz temizlendi)`);
+                }
+              }
+              
               locations[loc.name] = loc;
               
               // Sahne bilgilerini çıkar ve mevcut sahnelere entegre et
@@ -933,20 +1099,26 @@ export default function ProfessionalStoryboard() {
       });
       
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log(`📊 HAM SAHNE ÇIKARIM SONUCU: ${scenes.length} sahne`);
+      
+      // Meta bilgileri ve geçersiz sahneleri filtrele
+      const filteredScenes = filterValidScenes(scenes);
+      console.log(`✅ FİLTRELENMİŞ SAHNE SONUCU: ${filteredScenes.length} geçerli sahne (${scenes.length - filteredScenes.length} sahne filtrelendi)`);
+      
       console.log(`✅ SAHNE ÇIKARIM SONUCU:`);
-      console.log(`   📊 Toplam Sahne: ${scenes.length}`);
+      console.log(`   📊 Toplam Sahne: ${filteredScenes.length}`);
       console.log(`   👥 Toplam Karakter: ${Object.keys(characters).length}`);
       console.log(`   📍 Toplam Lokasyon: ${Object.keys(locations).length}`);
-      scenes.forEach(scene => {
-        console.log(`   🎬 Sahne ${scene.number}: ${scene.characters.length} karakter, ${scene.locations.length} mekan`);
+      filteredScenes.forEach(scene => {
+        console.log(`   🎬 Sahne ${scene.number}: ${scene.title} - ${scene.characters?.length || 0} karakter, ${scene.locations?.length || 0} mekan`);
       });
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       
       return {
-        scenes,
+        scenes: filteredScenes,
         characters,
         locations,
-        success: scenes.length > 0
+        success: filteredScenes.length > 0
       };
       
     } catch (error) {
@@ -1342,14 +1514,16 @@ export default function ProfessionalStoryboard() {
   // Save character image to local storage and file system
   const saveCharacterImageLocally = async (characterName, imageData) => {
     try {
-      // Save to localStorage for quick access
-      const storageKey = `character_image_${characterName}`;
+      // Save to localStorage for quick access - SCOPED BY SCRIPT ID
+      const scriptId = currentScriptId || 'default';
+      const storageKey = `character_image_${scriptId}_${characterName}`;
       localStorage.setItem(storageKey, JSON.stringify({
         url: imageData.url,
         prompt: imageData.prompt,
         seed: imageData.seed,
         timestamp: new Date().toISOString(),
-        characterName
+        characterName,
+        scriptId
       }));
 
       // Also save to indexedDB for larger storage
@@ -1416,13 +1590,16 @@ export default function ProfessionalStoryboard() {
   // Save location image to local storage
   const saveLocationImageLocally = async (locationName, imageData) => {
     try {
-      const storageKey = `location_image_${locationName}`;
+      // SCOPED BY SCRIPT ID
+      const scriptId = currentScriptId || 'default';
+      const storageKey = `location_image_${scriptId}_${locationName}`;
       localStorage.setItem(storageKey, JSON.stringify({
         url: imageData.url,
         prompt: imageData.prompt,
         seed: imageData.seed,
         timestamp: new Date().toISOString(),
-        locationName
+        locationName,
+        scriptId
       }));
 
       if (window.indexedDB) {
@@ -1488,8 +1665,9 @@ export default function ProfessionalStoryboard() {
   // Load saved character image from local storage
   const loadSavedCharacterImage = async (characterName) => {
     try {
-      // Try localStorage first
-      const storageKey = `character_image_${characterName}`;
+      // Try localStorage first - SCOPED BY SCRIPT ID
+      const scriptId = currentScriptId || 'default';
+      const storageKey = `character_image_${scriptId}_${characterName}`;
       const savedData = localStorage.getItem(storageKey);
       
       if (savedData) {
@@ -1549,7 +1727,9 @@ export default function ProfessionalStoryboard() {
   // Load saved location image from local storage
   const loadSavedLocationImage = async (locationName) => {
     try {
-      const storageKey = `location_image_${locationName}`;
+      // SCOPED BY SCRIPT ID
+      const scriptId = currentScriptId || 'default';
+      const storageKey = `location_image_${scriptId}_${locationName}`;
       const savedData = localStorage.getItem(storageKey);
       
       if (savedData) {
@@ -2012,6 +2192,9 @@ export default function ProfessionalStoryboard() {
           color_palette: colorPalette,
           visual_language: visualLanguage,
           scenes: extractedScenes,
+          storyboardFrames: storyboardFrames,  // Üretilen görselleri kaydet
+          characterApprovals: characterApprovals,  // Karakter onay durumlarını kaydet
+          locationApprovals: locationApprovals,  // Mekan onay durumlarını kaydet
           timestamp: new Date().toISOString(),
           source: 'Storyboard Panel'
         };
@@ -2090,6 +2273,48 @@ export default function ProfessionalStoryboard() {
         return;
       }
 
+      // FIRST: Clear ALL old storyboard data from localStorage and IndexedDB
+      console.log('🧹 Script değişti - eski storyboard verileri temizleniyor...');
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (
+          key.startsWith('character_image_') ||
+          key.startsWith('location_image_') ||
+          key.startsWith('character_reference_') ||
+          key.startsWith('location_reference_') ||
+          key.startsWith('mgx_storyboard_')
+        )) {
+          keysToRemove.push(key);
+        }
+      }
+      
+      keysToRemove.forEach(key => {
+        localStorage.removeItem(key);
+      });
+      
+      if (keysToRemove.length > 0) {
+        console.log(`🗑️ ${keysToRemove.length} localStorage key temizlendi`);
+      }
+      
+      // Clear IndexedDB
+      if (window.indexedDB) {
+        try {
+          const deleteRequest = indexedDB.deleteDatabase('StoryboardDB');
+          deleteRequest.onsuccess = () => {
+            console.log('✅ StoryboardDB IndexedDB temizlendi');
+          };
+        } catch (e) {
+          console.error('❌ IndexedDB temizleme hatası:', e);
+        }
+      }
+      
+      // Clear state before loading new data
+      setCharacterApprovals({});
+      setLocationApprovals({});
+      setSceneApprovals({});
+      setStoryboardFrames([]);
+      
       // Check if analysis exists AND load analysis data
       const currentScript = getCurrentScript();
       if (currentScript) {
@@ -2124,6 +2349,20 @@ export default function ProfessionalStoryboard() {
             console.log('📊 Görsel dil yüklendi');
           }
           
+          // Kaydedilen storyboard görsellerini ve onayları yükle
+          if (results.storyboardFrames) {
+            setStoryboardFrames(results.storyboardFrames);
+            console.log('🎬 Storyboard görselleri yüklendi:', results.storyboardFrames.length, 'frame');
+          }
+          if (results.characterApprovals) {
+            setCharacterApprovals(results.characterApprovals);
+            console.log('✅ Karakter onayları yüklendi:', Object.keys(results.characterApprovals).length);
+          }
+          if (results.locationApprovals) {
+            setLocationApprovals(results.locationApprovals);
+            console.log('✅ Mekan onayları yüklendi:', Object.keys(results.locationApprovals).length);
+          }
+          
           // Load storyboard approvals
           await loadApprovalsFromStorage();
           return;
@@ -2133,8 +2372,10 @@ export default function ProfessionalStoryboard() {
         const existingAnalysis = await analysisStorageService.loadAnalysis(scriptText, fileName);
         
         if (!existingAnalysis || !existingAnalysis.customResults || Object.keys(existingAnalysis.customResults).length === 0) {
-          // No analysis found - clear storyboard data
+          // No analysis found - clear ALL storyboard data including localStorage and IndexedDB
           console.log('⚠️ Analiz kaydı bulunamadı - storyboard verileri temizleniyor');
+          
+          // Clear state
           setCharacterAnalysis(null);
           setLocationAnalysis(null);
           setStyleAnalysis(null);
@@ -2146,7 +2387,49 @@ export default function ProfessionalStoryboard() {
           setLocationApprovals({});
           setSceneApprovals({});
           setCurrentPhase(null);
-          console.log('🗑️ Analiz yok - tüm storyboard verileri temizlendi');
+          setPhaseCompletion({
+            character: { total: 0, approved: 0, generated: 0, complete: false },
+            location: { total: 0, approved: 0, generated: 0, complete: false },
+            scene: { total: 0, approved: 0, complete: false },
+            storyboard: { total: 0, generated: 0, complete: false }
+          });
+          
+          // Clear localStorage character/location images
+          const keysToRemove = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (
+              key.startsWith('character_image_') ||
+              key.startsWith('location_image_') ||
+              key.startsWith('character_reference_') ||
+              key.startsWith('location_reference_') ||
+              key.startsWith('mgx_storyboard_')
+            )) {
+              keysToRemove.push(key);
+            }
+          }
+          
+          keysToRemove.forEach(key => {
+            localStorage.removeItem(key);
+            console.log(`🗑️ Storyboard localStorage key silindi: ${key}`);
+          });
+          
+          // Clear IndexedDB
+          if (window.indexedDB) {
+            try {
+              const deleteRequest = indexedDB.deleteDatabase('StoryboardDB');
+              deleteRequest.onsuccess = () => {
+                console.log('✅ StoryboardDB IndexedDB silindi');
+              };
+              deleteRequest.onerror = (e) => {
+                console.error('❌ IndexedDB silme hatası:', e);
+              };
+            } catch (e) {
+              console.error('❌ IndexedDB temizleme hatası:', e);
+            }
+          }
+          
+          console.log(`🗑️ Analiz yok - tüm storyboard verileri temizlendi (${keysToRemove.length} localStorage key)`);
         } else {
           // Analysis exists - load both analysis data and storyboard approvals
           console.log('✅ analysisStorageService\'den analiz yükleniyor:', Object.keys(existingAnalysis.customResults));
@@ -2172,6 +2455,20 @@ export default function ProfessionalStoryboard() {
           if (results.visual_language) {
             setVisualLanguage(results.visual_language);
             console.log('📊 Görsel dil yüklendi');
+          }
+          
+          // Kaydedilen storyboard görsellerini ve onayları yükle
+          if (results.storyboardFrames) {
+            setStoryboardFrames(results.storyboardFrames);
+            console.log('🎬 Storyboard görselleri yüklendi:', results.storyboardFrames.length, 'frame');
+          }
+          if (results.characterApprovals) {
+            setCharacterApprovals(results.characterApprovals);
+            console.log('✅ Karakter onayları yüklendi:', Object.keys(results.characterApprovals).length);
+          }
+          if (results.locationApprovals) {
+            setLocationApprovals(results.locationApprovals);
+            console.log('✅ Mekan onayları yüklendi:', Object.keys(results.locationApprovals).length);
           }
           
           // Load storyboard approvals
@@ -2326,9 +2623,31 @@ export default function ProfessionalStoryboard() {
       if (currentScript.analysisData?.customResults) {
         console.log('✅ Script store\'da analiz bulundu!');
         existingAnalysis = currentScript.analysisData;
-      } else {
-        // Priority 2: Load from analysisStorageService
-        console.log('🔍 Analysis storage\'dan yükleniyor...');
+      }
+      
+      // Priority 2: ALWAYS load from analysisStorageService to get ALL analysis types
+      // Even if script store has some analysis, we need to merge with stored analyses
+      console.log('🔍 Analysis storage\'dan tüm analiz türleri yükleniyor...');
+      const projectName = fileName.replace(/\.(pdf|txt|fountain)$/i, '');
+      const storedAnalyses = await analysisStorageService.loadAllAnalyses(projectName);
+      
+      if (storedAnalyses && storedAnalyses.customResults && Object.keys(storedAnalyses.customResults).length > 0) {
+        console.log(`✅ ${Object.keys(storedAnalyses.customResults).length} analiz türü storage'dan yüklendi`);
+        
+        // Merge with existing analysis (script store has priority for conflicts)
+        if (existingAnalysis?.customResults) {
+          existingAnalysis.customResults = {
+            ...storedAnalyses.customResults,  // Storage'dan gelen tüm analizler
+            ...existingAnalysis.customResults  // Script store'dan gelen öncelikli
+          };
+          console.log('🔄 Script store ve storage analizleri birleştirildi');
+        } else {
+          existingAnalysis = storedAnalyses;
+          console.log('📥 Sadece storage analizleri kullanılıyor');
+        }
+      } else if (!existingAnalysis) {
+        // Legacy fallback: try old loadAnalysis
+        console.log('⚠️ Yeni sistemde analiz bulunamadı, eski sistemi deneniyor...');
         existingAnalysis = await analysisStorageService.loadAnalysis(scriptText, fileName);
       }
       
@@ -3018,8 +3337,10 @@ export default function ProfessionalStoryboard() {
         }
         
         if (generatedScenes.length > 0) {
-          setExtractedScenes(generatedScenes);
-          console.log(`✅ ${generatedScenes.length} sahne otomatik oluşturuldu`);
+          // Meta bilgileri filtrele
+          const filteredGeneratedScenes = filterValidScenes(generatedScenes);
+          setExtractedScenes(filteredGeneratedScenes);
+          console.log(`✅ ${filteredGeneratedScenes.length} sahne otomatik oluşturuldu (${generatedScenes.length - filteredGeneratedScenes.length} sahne filtrelendi)`);
         } else {
           console.warn('⚠️ Hiç sahne oluşturulamadı');
           setExtractedScenes([]);
@@ -3662,11 +3983,22 @@ Lütfen JSON formatında yanıt ver:
   ]
 }`;
 
-      const characterResult = await getAIHandlerFromStore().generateText(
+      const characterFullResult = await getAIHandlerFromStore().generateText(
         'Sen bir senaryo analiz uzmanısın.',
         shortCharacterPrompt,
-        { timeout: 300000 } // 5 dakika
+        { timeout: 300000, includeMetadata: true } // 5 dakika
       );
+      
+      const characterResult = typeof characterFullResult === 'string' ? characterFullResult : characterFullResult.text;
+      
+      // Log token usage for character analysis
+      if (characterFullResult.usage) {
+        console.log('📊 Karakter analizi token kullanımı:', {
+          tokens: characterFullResult.usage.totalTokenCount,
+          model: characterFullResult.model,
+          cost: characterFullResult.cost ? `$${characterFullResult.cost.total.toFixed(6)}` : 'N/A'
+        });
+      }
 
       // Mekan analizi
       console.log('🏢 Mekan analizi başlıyor...');
@@ -3701,11 +4033,22 @@ Lütfen JSON formatında yanıt ver:
   ]
 }`;
 
-      const locationResult = await getAIHandlerFromStore().generateText(
+      const locationFullResult = await getAIHandlerFromStore().generateText(
         'Sen bir senaryo analiz uzmanısın.',
         shortLocationPrompt,
-        { timeout: 300000 } // 5 dakika
+        { timeout: 300000, includeMetadata: true } // 5 dakika
       );
+      
+      const locationResult = typeof locationFullResult === 'string' ? locationFullResult : locationFullResult.text;
+      
+      // Log token usage for location analysis
+      if (locationFullResult.usage) {
+        console.log('📊 Mekan analizi token kullanımı:', {
+          tokens: locationFullResult.usage.totalTokenCount,
+          model: locationFullResult.model,
+          cost: locationFullResult.cost ? `$${locationFullResult.cost.total.toFixed(6)}` : 'N/A'
+        });
+      }
 
       // JSON parse etmeye çalış
       try {
@@ -3856,10 +4199,22 @@ JSON formatında yanıt ver:
 }
       `;
 
-      const styleResult = await getAIHandlerFromStore().generateText(
+      const styleFullResult = await getAIHandlerFromStore().generateText(
         'Sen bir görsel tasarım uzmanısın.',
-        stylePrompt
+        stylePrompt,
+        { includeMetadata: true }
       );
+      
+      const styleResult = typeof styleFullResult === 'string' ? styleFullResult : styleFullResult.text;
+      
+      // Log token usage for style analysis
+      if (styleFullResult.usage) {
+        console.log('📊 Stil analizi token kullanımı:', {
+          tokens: styleFullResult.usage.totalTokenCount,
+          model: styleFullResult.model,
+          cost: styleFullResult.cost ? `$${styleFullResult.cost.total.toFixed(6)}` : 'N/A'
+        });
+      }
 
       try {
         const styleData = JSON.parse(styleResult.replace(/```json|```/g, ''));
@@ -3924,6 +4279,16 @@ Create a clean character reference image showing the character from multiple ang
           try {
             const imageResult = await generateImage(characterPrompt);
             if (imageResult.success) {
+              // Track image generation cost
+              if (imageResult.cost && imageResult.usage) {
+                updateTokenUsage({
+                  cost: imageResult.cost,
+                  usage: imageResult.usage,
+                  model: imageResult.model,
+                  analysisType: 'character_reference_image'
+                });
+              }
+              
               newCharacterRefs[character.name] = {
                 ...character,
                 referenceImage: imageResult.imageUrl,
@@ -3960,6 +4325,16 @@ Create a detailed environment reference showing the location with consistent lig
           try {
             const imageResult = await generateImage(locationPrompt);
             if (imageResult.success) {
+              // Track image generation cost
+              if (imageResult.cost && imageResult.usage) {
+                updateTokenUsage({
+                  cost: imageResult.cost,
+                  usage: imageResult.usage,
+                  model: imageResult.model,
+                  analysisType: 'location_reference_image'
+                });
+              }
+              
               newLocationRefs[location.name] = {
                 ...location,
                 referenceImage: imageResult.imageUrl,
@@ -4195,6 +4570,16 @@ Focus on cinematic storytelling and professional ${storyboardStyle === 'sketch' 
           }
           
           const imageResult = await generateImage(enhancedPrompt, imageOptions);
+          
+          // Track image generation cost
+          if (imageResult && imageResult.cost && imageResult.usage) {
+            updateTokenUsage({
+              cost: imageResult.cost,
+              usage: imageResult.usage,
+              model: imageResult.model,
+              analysisType: 'storyboard_frame'
+            });
+          }
 
           if (imageResult && (imageResult.success || imageResult.imageData)) {
             const imageUrl = imageResult.imageUrl ||
@@ -4336,6 +4721,17 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
 
         try {
           const imageResult = await generateImage(storyboardPrompt);
+          
+          // Track image generation cost
+          if (imageResult && imageResult.cost && imageResult.usage) {
+            updateTokenUsage({
+              cost: imageResult.cost,
+              usage: imageResult.usage,
+              model: imageResult.model,
+              analysisType: 'storyboard_frame_legacy'
+            });
+          }
+          
           if (imageResult && (imageResult.success || imageResult.imageData)) {
             const imageUrl = imageResult.imageUrl ||
               imageResult.imageData ? `data:${imageResult.mimeType || 'image/png'};base64,${imageResult.imageData}` : null;
@@ -4635,17 +5031,7 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                     )}
                   </div>
 
-
-
                   {/* Character Management - Card Grid View */}
-                  {(() => {
-                    console.log('🎨 [UI RENDER] Character Phase UI rendering...');
-                    console.log('🎨 characterAnalysis:', characterAnalysis);
-                    console.log('🎨 characterAnalysis?.characters:', characterAnalysis?.characters);
-                    console.log('🎨 Array length:', characterAnalysis?.characters?.length);
-                    console.log('🎨 Condition result:', characterAnalysis?.characters && characterAnalysis.characters.length > 0);
-                    return null;
-                  })()}
                   {characterAnalysis?.characters && characterAnalysis.characters.length > 0 && (
                     <div className="space-y-6">
                       {/* Character Management Header */}
@@ -4745,8 +5131,9 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                       imageSize: '1K'
                                     };
 
-                                    // Load reference images from localStorage if available
-                                    const storageKey = `character_reference_${character.name}`;
+                                    // Load reference images from localStorage if available (SCOPED BY SCRIPT ID)
+                                    const scriptId = currentScriptId || 'default';
+                                    const storageKey = `character_reference_${scriptId}_${character.name}`;
                                     try {
                                       const savedReferences = localStorage.getItem(storageKey);
                                       if (savedReferences) {
@@ -4788,6 +5175,16 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                     
                                     // Generate image using AI Store (respects user's AI settings)
                                     const result = await generateImage(characterPrompt, imageOptions);
+                                    
+                                    // Track image generation cost
+                                    if (result && result.cost && result.usage) {
+                                      updateTokenUsage({
+                                        cost: result.cost,
+                                        usage: result.usage,
+                                        model: result.model,
+                                        analysisType: 'character_image'
+                                      });
+                                    }
                                     
                                     if (result && result.imageData) {
                                       const imageUrl = `data:${result.mimeType || 'image/png'};base64,${result.imageData}`;
@@ -4853,9 +5250,10 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                             {characterAnalysis.characters.length > 0 && (
                               <button
                                 onClick={() => {
+                                  const scriptId = currentScriptId || 'default';
                                   const imageCount = Object.values(characterApprovals).filter(a => a.image).length;
                                   const referenceCount = characterAnalysis.characters.filter(char => {
-                                    const storageKey = `character_reference_${char.name}`;
+                                    const storageKey = `character_reference_${scriptId}_${char.name}`;
                                     try {
                                       return !!localStorage.getItem(storageKey);
                                     } catch {
@@ -4875,11 +5273,14 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                       referansGörseller: referenceCount
                                     });
                                     
-                                    // Clear all reference images from localStorage
+                                    // Clear all reference images from localStorage (SCOPED BY SCRIPT ID)
+                                    const scriptId = currentScriptId || 'default';
                                     characterAnalysis.characters.forEach(character => {
-                                      const storageKey = `character_reference_${character.name}`;
+                                      const storageKey = `character_reference_${scriptId}_${character.name}`;
+                                      const imageKey = `character_image_${scriptId}_${character.name}`;
                                       try {
                                         localStorage.removeItem(storageKey);
+                                        localStorage.removeItem(imageKey);
                                       } catch (error) {
                                         console.warn(`⚠️ ${character.name} referans görselleri temizlenemedi:`, error);
                                       }
@@ -4987,10 +5388,13 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                       delete newApprovals[character.name];
                                       setCharacterApprovals(newApprovals);
                                       
-                                      // Remove reference images from localStorage
-                                      const storageKey = `character_reference_${character.name}`;
+                                      // Remove reference images and generated image from localStorage (SCOPED BY SCRIPT ID)
+                                      const scriptId = currentScriptId || 'default';
+                                      const storageKey = `character_reference_${scriptId}_${character.name}`;
+                                      const imageKey = `character_image_${scriptId}_${character.name}`;
                                       try {
                                         localStorage.removeItem(storageKey);
+                                        localStorage.removeItem(imageKey);
                                         console.log(`🗑️ "${character.name}" karakteri, görseli ve referans görselleri silindi`);
                                       } catch (error) {
                                         console.warn('⚠️ localStorage temizleme hatası:', error);
@@ -5132,6 +5536,16 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                               imageSize: '1K'
                                             });
                                             
+                                            // Track image generation cost
+                                            if (result && result.cost && result.usage) {
+                                              updateTokenUsage({
+                                                cost: result.cost,
+                                                usage: result.usage,
+                                                model: result.model,
+                                                analysisType: 'character_variant'
+                                              });
+                                            }
+                                            
                                             // Clear progress interval
                                             clearInterval(progressInterval);
                                             
@@ -5266,6 +5680,16 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                   };
                                   
                                   const result = await generateImage(characterPrompt.trim(), imageOptions);
+                                  
+                                  // Track image generation cost
+                                  if (result && result.cost && result.usage) {
+                                    updateTokenUsage({
+                                      cost: result.cost,
+                                      usage: result.usage,
+                                      model: result.model,
+                                      analysisType: 'character_regeneration'
+                                    });
+                                  }
                                   
                                   if (result && result.imageData) {
                                     const imageUrl = `data:${result.mimeType || 'image/png'};base64,${result.imageData}`;
@@ -5415,8 +5839,20 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                               </th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-cinema-text-dim uppercase tracking-wider w-16">#</th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-cinema-text-dim uppercase tracking-wider">Sahne Adı</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-cinema-text-dim uppercase tracking-wider">Karakterler</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-cinema-text-dim uppercase tracking-wider">Mekanlar</th>
+                              {(() => {
+                                const hasAnyCharacters = extractedScenes.some(s => (s.characters || []).length > 0);
+                                const hasAnyLocations = extractedScenes.some(s => (s.locations || []).length > 0);
+                                return (
+                                  <>
+                                    {hasAnyCharacters && (
+                                      <th className="px-4 py-3 text-left text-xs font-semibold text-cinema-text-dim uppercase tracking-wider">Karakterler</th>
+                                    )}
+                                    {hasAnyLocations && (
+                                      <th className="px-4 py-3 text-left text-xs font-semibold text-cinema-text-dim uppercase tracking-wider">Mekanlar</th>
+                                    )}
+                                  </>
+                                );
+                              })()}
                               <th className="px-4 py-3 text-left text-xs font-semibold text-cinema-text-dim uppercase tracking-wider w-24">Süre</th>
                             </tr>
                           </thead>
@@ -5476,54 +5912,64 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                     )}
                                   </td>
                                   
-                                  {/* Characters */}
-                                  <td className="px-4 py-3">
-                                    {sceneCharacters.length > 0 ? (
-                                      <div className="flex flex-wrap gap-1">
-                                        {sceneCharacters.slice(0, 3).map((charName, idx) => (
-                                          <span 
-                                            key={`char-${index}-${idx}-${charName}`} 
-                                            className="text-xs bg-cinema-accent/20 text-cinema-accent px-2 py-0.5 rounded font-medium"
-                                          >
-                                            🎭 {charName}
-                                          </span>
-                                        ))}
-                                        {sceneCharacters.length > 3 && (
-                                          <span className="text-xs text-cinema-accent font-bold">
-                                            +{sceneCharacters.length - 3}
-                                          </span>
+                                  {/* Characters - Only show if any scene has characters */}
+                                  {(() => {
+                                    const hasAnyCharacters = extractedScenes.some(s => (s.characters || []).length > 0);
+                                    return hasAnyCharacters && (
+                                      <td className="px-4 py-3">
+                                        {sceneCharacters.length > 0 ? (
+                                          <div className="flex flex-wrap gap-1">
+                                            {sceneCharacters.slice(0, 3).map((charName, idx) => (
+                                              <span 
+                                                key={`char-${index}-${idx}-${charName}`} 
+                                                className="text-xs bg-cinema-accent/20 text-cinema-accent px-2 py-0.5 rounded font-medium"
+                                              >
+                                                🎭 {charName}
+                                              </span>
+                                            ))}
+                                            {sceneCharacters.length > 3 && (
+                                              <span className="text-xs text-cinema-accent font-bold">
+                                                +{sceneCharacters.length - 3}
+                                              </span>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-xs text-cinema-text-dim">—</span>
                                         )}
-                                      </div>
-                                    ) : (
-                                      <span className="text-xs text-cinema-text-dim">—</span>
-                                    )}
-                                  </td>
+                                      </td>
+                                    );
+                                  })()}
                                   
-                                  {/* Locations */}
-                                  <td className="px-4 py-3">
-                                    {sceneLocations.length > 0 ? (
-                                      <div className="flex flex-wrap gap-1">
-                                        {sceneLocations.slice(0, 2).map((loc, idx) => {
-                                          const locName = typeof loc === 'string' ? loc : (loc.name || loc);
-                                          return (
-                                            <span 
-                                              key={`loc-${index}-${idx}-${locName}`} 
-                                              className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-medium"
-                                            >
-                                              🏛️ {locName}
-                                            </span>
-                                          );
-                                        })}
-                                        {sceneLocations.length > 2 && (
-                                          <span className="text-xs text-blue-400 font-bold">
-                                            +{sceneLocations.length - 2}
-                                          </span>
+                                  {/* Locations - Only show if any scene has locations */}
+                                  {(() => {
+                                    const hasAnyLocations = extractedScenes.some(s => (s.locations || []).length > 0);
+                                    return hasAnyLocations && (
+                                      <td className="px-4 py-3">
+                                        {sceneLocations.length > 0 ? (
+                                          <div className="flex flex-wrap gap-1">
+                                            {sceneLocations.slice(0, 2).map((loc, idx) => {
+                                              const locName = typeof loc === 'string' ? loc : (loc.name || loc);
+                                              return (
+                                                <span 
+                                                  key={`loc-${index}-${idx}-${locName}`} 
+                                                  className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-medium"
+                                                >
+                                                  🏛️ {locName}
+                                                </span>
+                                              );
+                                            })}
+                                            {sceneLocations.length > 2 && (
+                                              <span className="text-xs text-blue-400 font-bold">
+                                                +{sceneLocations.length - 2}
+                                              </span>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-xs text-cinema-text-dim">—</span>
                                         )}
-                                      </div>
-                                    ) : (
-                                      <span className="text-xs text-cinema-text-dim">—</span>
-                                    )}
-                                  </td>
+                                      </td>
+                                    );
+                                  })()}
                                   
                                   {/* Duration */}
                                   <td className="px-4 py-3">
@@ -5595,14 +6041,20 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                     : `⚠️ Tüm mekanları (${locationAnalysis.locations.length}) silmek istediğinizden emin misiniz?`;
                                   
                                   if (window.confirm(message)) {
-                                    // Clear all reference images from localStorage
+                                    // Clear all reference images from localStorage (SCOPED BY SCRIPT ID)
+                                    const scriptId = currentScriptId || 'default';
                                     let referenceCount = 0;
                                     locationAnalysis.locations.forEach(location => {
                                       const locName = typeof location === 'string' ? location : location.name;
-                                      const storageKey = `location_reference_${locName}`;
+                                      const storageKey = `location_reference_${scriptId}_${locName}`;
+                                      const imageKey = `location_image_${scriptId}_${locName}`;
                                       try {
                                         if (localStorage.getItem(storageKey)) {
                                           localStorage.removeItem(storageKey);
+                                          referenceCount++;
+                                        }
+                                        if (localStorage.getItem(imageKey)) {
+                                          localStorage.removeItem(imageKey);
                                           referenceCount++;
                                         }
                                       } catch (error) {
@@ -5762,10 +6214,13 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                       delete newApprovals[locName];
                                       setLocationApprovals(newApprovals);
                                       
-                                      // Remove reference images from localStorage
-                                      const storageKey = `location_reference_${locName}`;
+                                      // Remove reference images and generated image from localStorage (SCOPED BY SCRIPT ID)
+                                      const scriptId = currentScriptId || 'default';
+                                      const storageKey = `location_reference_${scriptId}_${locName}`;
+                                      const imageKey = `location_image_${scriptId}_${locName}`;
                                       try {
                                         localStorage.removeItem(storageKey);
+                                        localStorage.removeItem(imageKey);
                                         console.log(`🗑️ "${locName}" mekanı, görseli ve referans görselleri silindi`);
                                       } catch (error) {
                                         console.warn('⚠️ localStorage temizleme hatası:', error);
@@ -5900,6 +6355,16 @@ Frame format: Cinematic 16:9 aspect ratio, storyboard sketch style
                                           const result = await generateImage(locationPrompt, {
                                             imageSize: '1K'
                                           });
+                                          
+                                          // Track image generation cost
+                                          if (result && result.cost && result.usage) {
+                                            updateTokenUsage({
+                                              cost: result.cost,
+                                              usage: result.usage,
+                                              model: result.model,
+                                              analysisType: 'location_image'
+                                            });
+                                          }
                                           
                                           if (result?.success && result?.imageData) {
                                             const imageUrl = `data:${result.mimeType || 'image/jpeg'};base64,${result.imageData}`;
@@ -6290,6 +6755,17 @@ Create a ${storyboardStyle === 'sketch' ? 'professional sketch/drawing' : 'cinem
                                   });
                                   
                                   const result = await generateImage(prompt, imageOptions);
+                                  
+                                  // Track image generation cost
+                                  if (result && result.cost && result.usage) {
+                                    updateTokenUsage({
+                                      cost: result.cost,
+                                      usage: result.usage,
+                                      model: result.model,
+                                      analysisType: 'location_regeneration'
+                                    });
+                                  }
+                                  
                                   if (result && (result.success || result.imageData)) {
                                     const imageUrl = result.imageUrl ||
                                       (result.imageData ? `data:${result.mimeType || 'image/png'};base64,${result.imageData}` : null);
@@ -7085,6 +7561,17 @@ ${styleDesc}`;
                       });
                       
                       const result = await generateImage(prompt, imageOptions);
+                      
+                      // Track image generation cost
+                      if (result && result.cost && result.usage) {
+                        updateTokenUsage({
+                          cost: result.cost,
+                          usage: result.usage,
+                          model: result.model,
+                          analysisType: 'final_storyboard_image'
+                        });
+                      }
+                      
                       if (result && (result.success || result.imageData)) {
                         const imageUrl = result.imageUrl ||
                           (result.imageData ? `data:${result.mimeType || 'image/png'};base64,${result.imageData}` : null);

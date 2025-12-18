@@ -886,3 +886,19 @@ ipcMain.handle('file:getTempDir', async () => {
     throw error;
   }
 });
+
+ipcMain.handle('file:getStats', async (event, filePath) => {
+  try {
+    const stats = await fs.stat(filePath);
+    return {
+      size: stats.size,
+      mtime: stats.mtime.toISOString(),
+      ctime: stats.ctime.toISOString(),
+      isFile: stats.isFile(),
+      isDirectory: stats.isDirectory()
+    };
+  } catch (error) {
+    console.error('Error getting file stats:', error);
+    throw error;
+  }
+});

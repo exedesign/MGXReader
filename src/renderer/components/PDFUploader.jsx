@@ -209,6 +209,7 @@ export default function PDFUploader() {
         const scriptData = {
           title: titleWithChapter,
           fileName: titleWithChapter,
+          name: titleWithChapter, // ✅ Consistency for analysis
           scriptText: screenplay.text,
           cleanedText: screenplay.text,
           pageCount: screenplay.scenes?.length || 1,

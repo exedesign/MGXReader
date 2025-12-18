@@ -18,9 +18,94 @@ export class AnalysisStorageService {
         // Browser fallback - use localStorage
         this.tempDir = 'localStorage';
       }
+      
+      // Run startup cleanup after initialization
+      await this.cleanupOnStartup();
     } catch (error) {
       console.error('Failed to initialize temp directory:', error);
       this.tempDir = 'localStorage';
+    }
+  }
+
+  // Cleanup orphaned analysis files on startup
+  async cleanupOnStartup() {
+    try {
+      console.log('🧹 AnalysisStorageService: Başlangıç temizliği başlatılıyor...');
+      
+      // Get list of all analysis files
+      if (this.tempDir === 'localStorage') {
+        // Clean up old format and temp files from localStorage
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('mgx_analysis_')) {
+            // Check if it's a temp file or old format
+            if (key.includes('temp_')) {
+              keysToRemove.push(key);
+              continue;
+            }
+            
+            try {
+              const content = localStorage.getItem(key);
+              if (content) {
+                const parsed = JSON.parse(content);
+                // Remove old format files (no projectName)
+                if (!parsed.projectName) {
+                  keysToRemove.push(key);
+                  console.log('🗑️ Eski format dosya temizlenecek:', key);
+                }
+              }
+            } catch (e) {
+              // Invalid JSON, remove it
+              keysToRemove.push(key);
+            }
+          }
+        }
+        
+        // Remove all identified keys
+        keysToRemove.forEach(key => {
+          localStorage.removeItem(key);
+          console.log('✅ Temizlendi:', key);
+        });
+        
+        if (keysToRemove.length > 0) {
+          console.log(`✅ localStorage temizliği: ${keysToRemove.length} eski/temp dosya silindi`);
+        }
+        return;
+      }
+      
+      // FileSystem cleanup - check for files older than 7 days
+      if (window.electronAPI && window.electronAPI.listFiles) {
+        const files = await window.electronAPI.listFiles(this.tempDir);
+        let cleanedCount = 0;
+        
+        for (const file of files) {
+          try {
+            const filePath = path.join(this.tempDir, file);
+            const stats = await window.electronAPI.getFileStats(filePath);
+            
+            // Delete files older than 7 days
+            const fileAge = Date.now() - new Date(stats.mtime).getTime();
+            const sevenDays = 7 * 24 * 60 * 60 * 1000;
+            
+            if (fileAge > sevenDays) {
+              await window.electronAPI.deleteFile(filePath);
+              cleanedCount++;
+              console.log(`  ❌ Eski dosya silindi: ${file} (${Math.floor(fileAge / (24 * 60 * 60 * 1000))} gün önce)`);
+            }
+          } catch (err) {
+            console.warn(`  ⚠️ Dosya temizlenemedi: ${file}`, err);
+          }
+        }
+        
+        if (cleanedCount > 0) {
+          console.log(`✅ FileSystem temizliği: ${cleanedCount} eski analiz dosyası silindi`);
+        } else {
+          console.log('✅ FileSystem temizliği: Temizlenecek eski dosya bulunamadı');
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Başlangıç temizliği hatası:', error);
     }
   }
 
@@ -43,8 +128,8 @@ export class AnalysisStorageService {
     return `analysis_${Math.abs(hash).toString(36)}.json`;
   }
 
-  // Generate human-readable analysis filename
-  generateReadableFileName(projectName, analysisType = 'full', version = '1.0') {
+  // Generate analysis filename by type (NO TIMESTAMP - each type overwrites previous)
+  generateAnalysisFileName(projectName, analysisType) {
     // Clean project name: remove special chars, limit length
     const cleanName = (projectName || 'Unnamed_Project')
       .replace(/[^a-zA-Z0-9\u00C0-\u017F_-]/g, '_') // Keep alphanumeric, Turkish chars, underscore, hyphen
@@ -52,67 +137,34 @@ export class AnalysisStorageService {
       .replace(/^_|_$/g, '') // Remove leading/trailing underscores
       .substring(0, 50); // Limit to 50 chars
     
-    // Format date: YYYY-MM-DD
-    const date = new Date();
-    const dateStr = date.toISOString().split('T')[0]; // 2025-12-06
-    
-    // Format time: HH-MM
-    const timeStr = date.toTimeString().split(':').slice(0, 2).join('-'); // 15-30
-    
     // Clean analysis type
     const cleanType = analysisType.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
     
-    // Format: projectname_analysistype_v1.0_2025-12-06_15-30.json
-    return `${cleanName}_${cleanType}_v${version}_${dateStr}_${timeStr}.json`;
+    // Format: projectname_analysistype.json (NO VERSION, NO TIMESTAMP!)
+    // Examples: script_character.json, script_location.json
+    return `${cleanName}_${cleanType}.json`;
   }
 
-  // Save analysis data to persistent storage
-  async saveAnalysis(scriptText, fileName, analysisData, scriptMetadata = {}) {
+  // Save analysis data by type (each type = separate file, overwrites previous)
+  async saveAnalysisByType(projectName, analysisType, analysisResult, scriptMetadata = {}) {
     try {
-      // Determine project name from metadata or fileName
-      const projectName = scriptMetadata.projectName || 
-                          scriptMetadata.originalFileName || 
-                          fileName.replace(/\.(pdf|txt|fountain)$/i, '');
-      
-      // Determine analysis type
-      const analysisType = scriptMetadata.analysisType || 
-                           scriptMetadata.isPartialAnalysis ? 'partial' : 'full';
-      
-      // Use readable filename for storage
-      const readableFileName = this.generateReadableFileName(projectName, analysisType, '1.1');
-      
-      // Also keep hash-based key for backwards compatibility and quick lookup
-      const analysisKey = this.generateAnalysisKey(scriptText, fileName);
+      const fileName = this.generateAnalysisFileName(projectName, analysisType);
       
       const dataToSave = {
-        fileName,
-        readableFileName, // NEW: Human-readable name
-        projectName, // NEW: Extracted project name
-        analysisType, // NEW: Analysis type
+        projectName,
+        analysisType,
         timestamp: new Date().toISOString(),
-        scriptHash: this.generateAnalysisKey(scriptText, ''), // Hash without filename
-        analysisData,
-        scriptMetadata: {
-          originalFileName: scriptMetadata.originalFileName || fileName,
-          fileType: scriptMetadata.fileType || 'unknown',
-          uploadDate: scriptMetadata.uploadDate || new Date().toISOString(),
-          projectName: projectName, // Store project name
-          analysisType: analysisType, // Store analysis type
-          ...scriptMetadata
-        },
+        result: analysisResult,
         metadata: {
-          scriptLength: scriptText.length,
-          wordCount: scriptText.split(/\s+/).length,
-          version: '1.1'
+          ...scriptMetadata,
+          version: '1.2' // New version for per-type system
         }
       };
 
       if (this.tempDir === 'localStorage') {
-        // Browser fallback - use readable name as key
-        localStorage.setItem(`mgx_analysis_${readableFileName}`, JSON.stringify(dataToSave));
+        localStorage.setItem(`mgx_analysis_${fileName}`, JSON.stringify(dataToSave));
       } else {
-        // Electron environment - use readable filename
-        const filePath = path.join(this.tempDir, readableFileName);
+        const filePath = path.join(this.tempDir, fileName);
         await window.electronAPI.saveFileContent({
           filePath,
           data: JSON.stringify(dataToSave, null, 2),
@@ -120,10 +172,105 @@ export class AnalysisStorageService {
         });
       }
 
-      console.log(`✅ Analiz kaydedildi: ${readableFileName}`);
-      console.log(`   📁 Proje: ${projectName}`);
-      console.log(`   📊 Tip: ${analysisType}`);
-      return readableFileName.replace('.json', '');
+      console.log(`✅ ${analysisType} analizi kaydedildi: ${fileName}`);
+      return fileName;
+    } catch (error) {
+      console.error(`Failed to save ${analysisType} analysis:`, error);
+      throw error;
+    }
+  }
+
+  // Load specific analysis type
+  async loadAnalysisByType(projectName, analysisType) {
+    try {
+      const fileName = this.generateAnalysisFileName(projectName, analysisType);
+      
+      if (this.tempDir === 'localStorage') {
+        const stored = localStorage.getItem(`mgx_analysis_${fileName}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          console.log(`✅ ${analysisType} yüklendi (localStorage)`);
+          return parsed.result;
+        }
+      } else {
+        const filePath = path.join(this.tempDir, fileName);
+        if (await window.electronAPI.fileExists(filePath)) {
+          const content = await window.electronAPI.readFileContent(filePath);
+          const parsed = JSON.parse(content);
+          console.log(`✅ ${analysisType} yüklendi: ${fileName}`);
+          return parsed.result;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error(`Failed to load ${analysisType}:`, error);
+      return null;
+    }
+  }
+
+  // Load ALL analysis types for a project
+  async loadAllAnalyses(projectName) {
+    try {
+      console.log(`📥 ${projectName} için tüm analizler yükleniyor...`);
+      
+      const analyses = await this.listAnalyses();
+      const projectAnalyses = analyses.filter(a => a.projectName === projectName);
+      
+      if (projectAnalyses.length === 0) {
+        console.warn(`⚠️ ${projectName} için analiz bulunamadı`);
+        return null;
+      }
+      
+      const customResults = {};
+      let loadedCount = 0;
+      
+      for (const analysis of projectAnalyses) {
+        if (analysis.analysisType) {
+          const result = await this.loadAnalysisByType(projectName, analysis.analysisType);
+          if (result) {
+            customResults[analysis.analysisType] = result;
+            loadedCount++;
+          } else {
+            console.warn(`⚠️ ${analysis.analysisType} analizi yüklenemedi`);
+          }
+        }
+      }
+      
+      if (loadedCount === 0) {
+        console.error(`❌ ${projectName} için hiçbir analiz yüklenemedi`);
+        return null;
+      }
+      
+      console.log(`✅ ${Object.keys(customResults).length}/${projectAnalyses.length} analiz türü yüklendi`);
+      return { customResults };
+    } catch (error) {
+      console.error('Failed to load all analyses:', error);
+      return null;
+    }
+  }
+
+  // LEGACY: Keep old saveAnalysis for backward compatibility
+  async saveAnalysis(scriptText, fileName, analysisData, scriptMetadata = {}) {
+    try {
+      const projectName = scriptMetadata.projectName || 
+                          scriptMetadata.originalFileName || 
+                          fileName.replace(/\.(pdf|txt|fountain)$/i, '');
+      
+      // If analysisData has customResults, save each type separately
+      if (analysisData.customResults) {
+        const results = [];
+        for (const [type, result] of Object.entries(analysisData.customResults)) {
+          await this.saveAnalysisByType(projectName, type, result, scriptMetadata);
+          results.push(type);
+        }
+        console.log(`✅ ${results.length} analiz türü kaydedildi: ${results.join(', ')}`);
+        return projectName;
+      }
+      
+      // Otherwise save as single analysis
+      const analysisType = scriptMetadata.analysisType || 'full';
+      return await this.saveAnalysisByType(projectName, analysisType, analysisData, scriptMetadata);
     } catch (error) {
       console.error('Failed to save analysis:', error);
       throw error;
@@ -210,26 +357,34 @@ export class AnalysisStorageService {
     }
   }
 
-  // Load analysis data from persistent storage
+  // LEGACY: Load analysis (tries new system first, falls back to old)
   async loadAnalysis(scriptText, fileName) {
     try {
+      const projectName = fileName.replace(/\.(pdf|txt|fountain)$/i, '');
+      
+      // Try new system first
+      const newResults = await this.loadAllAnalyses(projectName);
+      if (newResults && Object.keys(newResults.customResults || {}).length > 0) {
+        console.log(`✅ Yeni sistemden ${Object.keys(newResults.customResults).length} analiz yüklendi`);
+        return newResults;
+      }
+      
+      // Fallback to old system
       const analysisKey = this.generateAnalysisKey(scriptText, fileName);
       
       if (this.tempDir === 'localStorage') {
-        // Browser fallback
         const stored = localStorage.getItem(`mgx_analysis_${analysisKey}`);
         if (stored) {
           const parsed = JSON.parse(stored);
-          console.log(`Analysis loaded for ${fileName} from localStorage`);
+          console.log(`⚠️ Eski sistemden analiz yüklendi (localStorage)`);
           return parsed.analysisData;
         }
       } else {
-        // Electron environment
         const filePath = path.join(this.tempDir, analysisKey);
         if (await window.electronAPI.fileExists(filePath)) {
           const content = await window.electronAPI.readFileContent(filePath);
           const parsed = JSON.parse(content);
-          console.log(`Analysis loaded for ${fileName} from file: ${filePath}`);
+          console.log(`⚠️ Eski sistemden analiz yüklendi: ${filePath}`);
           return parsed.analysisData;
         }
       }
@@ -258,7 +413,7 @@ export class AnalysisStorageService {
     }
   }
 
-  // List all saved analyses
+  // List all saved analyses (NEW: groups by project)
   async listAnalyses() {
     try {
       const analyses = [];
@@ -270,38 +425,49 @@ export class AnalysisStorageService {
             const content = localStorage.getItem(key);
             if (content) {
               const parsed = JSON.parse(content);
+              
+              // Skip temp files and old format files
+              if (key.includes('temp_')) {
+                console.log('🗑️ Geçici dosya atlandı:', key);
+                continue;
+              }
+              if (!parsed.projectName) {
+                console.log('⚠️ Eski format dosya atlandı (projectName yok):', key);
+                continue;
+              }
+              
               analyses.push({
                 key: key.replace('mgx_analysis_', '').replace('.json', ''),
-                fileName: parsed.fileName,
-                readableFileName: parsed.readableFileName || parsed.fileName, // NEW
-                projectName: parsed.projectName || parsed.fileName, // NEW
-                analysisType: parsed.analysisType || 'full', // NEW
+                fileName: parsed.fileName || key,
+                projectName: parsed.projectName,
+                analysisType: parsed.analysisType,
                 timestamp: parsed.timestamp,
-                metadata: parsed.metadata,
-                scriptMetadata: parsed.scriptMetadata
+                metadata: parsed.metadata
               });
             }
           }
         }
       } else {
-        // Electron environment - list files in analysis directory
+        // Electron environment
         if (await window.electronAPI.directoryExists(this.tempDir)) {
           const files = await window.electronAPI.listDirectory(this.tempDir);
           for (const file of files) {
-            if (file.endsWith('.json')) {
+            if (file.endsWith('.json') && !file.includes('temp_')) {
               try {
                 const filePath = path.join(this.tempDir, file);
                 const content = await window.electronAPI.readFileContent(filePath);
                 const parsed = JSON.parse(content);
+                
+                // Skip old format files
+                if (!parsed.projectName) continue;
+                
                 analyses.push({
                   key: file.replace('.json', ''),
-                  fileName: parsed.fileName,
-                  readableFileName: parsed.readableFileName || file, // NEW
-                  projectName: parsed.projectName || parsed.fileName, // NEW
-                  analysisType: parsed.analysisType || 'full', // NEW
+                  fileName: file,
+                  projectName: parsed.projectName,
+                  analysisType: parsed.analysisType,
                   timestamp: parsed.timestamp,
-                  metadata: parsed.metadata,
-                  scriptMetadata: parsed.scriptMetadata
+                  metadata: parsed.metadata
                 });
               } catch (e) {
                 console.warn(`⚠️ Analiz dosyası okunamadı (${file}):`, e);
@@ -314,6 +480,39 @@ export class AnalysisStorageService {
       return analyses.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     } catch (error) {
       console.error('Failed to list analyses:', error);
+      return [];
+    }
+  }
+
+  // List analyses grouped by project
+  async listProjectAnalyses() {
+    try {
+      const analyses = await this.listAnalyses();
+      const projects = new Map();
+      
+      for (const analysis of analyses) {
+        if (!projects.has(analysis.projectName)) {
+          projects.set(analysis.projectName, {
+            projectName: analysis.projectName,
+            analyses: [],
+            lastUpdate: analysis.timestamp
+          });
+        }
+        
+        const project = projects.get(analysis.projectName);
+        project.analyses.push(analysis);
+        
+        // Update last update time
+        if (new Date(analysis.timestamp) > new Date(project.lastUpdate)) {
+          project.lastUpdate = analysis.timestamp;
+        }
+      }
+      
+      // Convert to array and sort by last update
+      return Array.from(projects.values())
+        .sort((a, b) => new Date(b.lastUpdate) - new Date(a.lastUpdate));
+    } catch (error) {
+      console.error('Failed to list project analyses:', error);
       return [];
     }
   }
@@ -335,46 +534,129 @@ export class AnalysisStorageService {
     }
   }
 
-  // Delete specific analysis
+  // Delete specific analysis - KAPSAMLI TEMİZLEME
   async deleteAnalysis(analysisKey) {
     try {
+      console.log('🗑️ Analiz siliniyor:', analysisKey);
+      let deletedCount = 0;
+      
+      // 1. FileSystem'den sil
       if (this.tempDir === 'localStorage') {
-        localStorage.removeItem(`mgx_analysis_${analysisKey}`);
+        // LocalStorage'dan sil
+        const mainKey = `mgx_analysis_${analysisKey}`;
+        if (localStorage.getItem(mainKey)) {
+          localStorage.removeItem(mainKey);
+          deletedCount++;
+          console.log(`🗑️ LocalStorage key silindi: ${mainKey}`);
+        }
       } else {
-        // Handle both with and without .json extension
+        // FileSystem'den sil
         const fileName = analysisKey.endsWith('.json') ? analysisKey : `${analysisKey}.json`;
         const filePath = path.join(this.tempDir, fileName);
         if (await window.electronAPI.fileExists(filePath)) {
           await window.electronAPI.deleteFile(filePath);
-          console.log(`🗑️ Deleted: ${fileName}`);
+          deletedCount++;
+          console.log(`🗑️ Dosya silindi: ${fileName}`);
         } else {
-          console.warn(`⚠️ File not found: ${filePath}`);
+          console.warn(`⚠️ Dosya bulunamadı: ${filePath}`);
         }
       }
+      
+      // 2. LocalStorage'daki ilgili tüm anahtarları temizle
+      const baseKey = analysisKey.replace('.json', '').replace('analysis_', '');
+      const keysToRemove = [];
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (
+          key.includes(baseKey) ||
+          key.includes(analysisKey) ||
+          (key.startsWith('mgx_analysis_') && key.includes(baseKey)) ||
+          (key.startsWith('analysis_checkpoint_') && key.includes(baseKey)) ||
+          (key.startsWith('temp_') && key.includes(baseKey))
+        )) {
+          keysToRemove.push(key);
+        }
+      }
+      
+      keysToRemove.forEach(key => {
+        localStorage.removeItem(key);
+        deletedCount++;
+        console.log(`🗑️ İlişkili key silindi: ${key}`);
+      });
+      
+      console.log(`✅ Toplam ${deletedCount} kayıt silindi`);
     } catch (error) {
       console.error('Failed to delete analysis:', error);
       throw error; // Re-throw to let caller handle
     }
   }
 
-  // Clear all analyses
+  // Delete all analyses for a specific project
+  async deleteProject(projectName) {
+    try {
+      console.log('🗑️ Proje analizleri siliniyor:', projectName);
+      
+      const analyses = await this.listAnalyses();
+      const projectAnalyses = analyses.filter(a => a.projectName === projectName);
+      
+      let deletedCount = 0;
+      for (const analysis of projectAnalyses) {
+        await this.deleteAnalysis(analysis.key);
+        deletedCount++;
+      }
+      
+      // Also clean up localStorage keys with scriptId
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        // Try to match keys that might belong to this project
+        if (key && (
+          key.includes(projectName) ||
+          key.startsWith('character_image_') ||
+          key.startsWith('location_image_') ||
+          key.startsWith('character_reference_') ||
+          key.startsWith('location_reference_') ||
+          key.startsWith('mgx_storyboard_')
+        )) {
+          // For image keys, we can't easily determine which project they belong to
+          // So we'll be conservative and only remove if they contain the project name
+          if (key.includes(projectName)) {
+            keysToRemove.push(key);
+          }
+        }
+      }
+      
+      keysToRemove.forEach(key => {
+        localStorage.removeItem(key);
+        console.log(`🗑️ Proje key silindi: ${key}`);
+      });
+      
+      console.log(`✅ ${projectName}: ${deletedCount} analiz + ${keysToRemove.length} localStorage key silindi`);
+      return { deletedCount, localStorageKeys: keysToRemove.length };
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      throw error;
+    }
+  }
+
+  // Clear all analyses - KAPSAMLI TEMİZLEME
   async clearAll() {
     try {
+      console.log('🧹 KAPSAMLI ANALİZ TEMİZLEME BAŞLIYOR...');
+      
       // Ensure tempDir is initialized
       if (!this.tempDir) {
         await this.initializeTempDir();
       }
 
-      const analyses = await this.listAnalyses();
-      
-      if (analyses.length === 0) {
-        console.log('ℹ️ No analyses to clear');
-        return { successCount: 0, errorCount: 0 };
-      }
-
       let successCount = 0;
       let errorCount = 0;
 
+      // 1. FileSystem'den analizleri sil
+      const analyses = await this.listAnalyses();
+      console.log(`📁 ${analyses.length} dosya bulundu`);
+      
       for (const analysis of analyses) {
         try {
           await this.deleteAnalysis(analysis.key);
@@ -385,44 +667,206 @@ export class AnalysisStorageService {
         }
       }
 
-      console.log(`✅ Cleared ${successCount} analyses (${errorCount} errors)`);
+      // 2. LocalStorage'dan TÜM analiz anahtarlarını temizle
+      const lsKeysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (
+          key.startsWith('mgx_analysis_') || 
+          key.startsWith('mgx_storyboard_') ||
+          key.startsWith('analysis_checkpoint_') ||
+          key.startsWith('temp_') ||
+          key.startsWith('character_image_') ||       // Karakter görselleri
+          key.startsWith('location_image_') ||        // Mekan görselleri
+          key.startsWith('character_reference_') ||   // Karakter referans görselleri
+          key.startsWith('location_reference_')       // Mekan referans görselleri
+        )) {
+          lsKeysToRemove.push(key);
+        }
+      }
       
-      if (errorCount > 0) {
-        throw new Error(`${errorCount} analiz silinemedi`);
+      lsKeysToRemove.forEach(key => {
+        try {
+          localStorage.removeItem(key);
+          successCount++;
+          console.log(`🗑️ LocalStorage key silindi: ${key}`);
+        } catch (error) {
+          console.error(`LocalStorage key silinemedi: ${key}`, error);
+          errorCount++;
+        }
+      });
+
+      console.log(`✅ Temizlik tamamlandı: ${successCount} başarılı, ${errorCount} hata`);
+      console.log(`📁 ${analyses.length} dosya + ${lsKeysToRemove.length} localStorage kaydı`);
+      
+      if (errorCount > 0 && successCount === 0) {
+        throw new Error(`Tüm analizler silinemedi (${errorCount} hata)`);
       }
 
-      return { successCount, errorCount };
+      return { 
+        successCount, 
+        errorCount,
+        fileCount: analyses.length,
+        localStorageCount: lsKeysToRemove.length
+      };
     } catch (error) {
       console.error('Failed to clear all analyses:', error);
       throw error;
     }
   }
 
-  // 🔄 ARA KAYIT İÇİN: Yarım kalan analizleri bul
-  async findPartialAnalyses(fileName) {
+  // 🧹 MIGRATION: Clean up old temp/timestamp files
+  async migrateOldAnalyses() {
     try {
-      const allAnalyses = await this.listAnalyses();
+      console.log('🔄 Eski analiz dosyaları temizleniyor...');
       
-      // Partial analizleri filtrele
-      const partialAnalyses = allAnalyses.filter(analysis => {
-        try {
-          // Temp_ ile başlayan veya isPartialAnalysis flag'i olan analizler
-          return analysis.key.includes('temp_') || 
-                 analysis.key.includes('partial') ||
-                 (analysis.fileName && analysis.fileName.includes(fileName));
-        } catch (e) {
-          return false;
+      let deletedCount = 0;
+      let migratedCount = 0;
+      
+      if (this.tempDir === 'localStorage') {
+        const keysToDelete = [];
+        const keysToMigrate = [];
+        
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('mgx_analysis_')) {
+            const content = localStorage.getItem(key);
+            if (content) {
+              try {
+                const parsed = JSON.parse(content);
+                
+                // Delete temp files
+                if (key.includes('temp_') || key.includes('partial')) {
+                  keysToDelete.push(key);
+                  continue;
+                }
+                
+                // Migrate old format (has readableFileName with timestamp)
+                if (parsed.readableFileName && parsed.readableFileName.match(/_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}/)) {
+                  keysToMigrate.push({ key, parsed });
+                }
+              } catch (e) {
+                keysToDelete.push(key);
+              }
+            }
+          }
         }
-      });
-
-      // Tarihe göre sırala (en yeni önce)
-      partialAnalyses.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Delete temp files
+        for (const key of keysToDelete) {
+          localStorage.removeItem(key);
+          deletedCount++;
+        }
+        
+        // Migrate old files (keep only latest for each project/type)
+        const projectTypes = new Map();
+        for (const { key, parsed } of keysToMigrate) {
+          const projectKey = `${parsed.projectName}_${parsed.analysisType}`;
+          
+          if (!projectTypes.has(projectKey) || 
+              new Date(parsed.timestamp) > new Date(projectTypes.get(projectKey).timestamp)) {
+            projectTypes.set(projectKey, { key, parsed });
+          }
+        }
+        
+        // Save migrated files with new naming, delete old ones
+        for (const { key, parsed } of keysToMigrate) {
+          const projectKey = `${parsed.projectName}_${parsed.analysisType}`;
+          const latest = projectTypes.get(projectKey);
+          
+          if (latest.key === key) {
+            // This is the latest, migrate it
+            await this.saveAnalysisByType(
+              parsed.projectName,
+              parsed.analysisType,
+              parsed.analysisData,
+              parsed.scriptMetadata
+            );
+            migratedCount++;
+          }
+          
+          // Delete old file
+          localStorage.removeItem(key);
+          deletedCount++;
+        }
+        
+      } else {
+        // Electron environment
+        if (await window.electronAPI.directoryExists(this.tempDir)) {
+          const files = await window.electronAPI.listDirectory(this.tempDir);
+          
+          const filesToDelete = [];
+          const filesToMigrate = [];
+          
+          for (const file of files) {
+            if (file.endsWith('.json')) {
+              // Delete temp files
+              if (file.includes('temp_') || file.includes('partial')) {
+                filesToDelete.push(file);
+                continue;
+              }
+              
+              // Check if old format (has timestamp in name)
+              if (file.match(/_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}/)) {
+                try {
+                  const filePath = path.join(this.tempDir, file);
+                  const content = await window.electronAPI.readFileContent(filePath);
+                  const parsed = JSON.parse(content);
+                  filesToMigrate.push({ file, parsed });
+                } catch (e) {
+                  filesToDelete.push(file);
+                }
+              }
+            }
+          }
+          
+          // Delete temp files
+          for (const file of filesToDelete) {
+            const filePath = path.join(this.tempDir, file);
+            await window.electronAPI.deleteFile(filePath);
+            deletedCount++;
+          }
+          
+          // Migrate old files (keep only latest for each project/type)
+          const projectTypes = new Map();
+          for (const { file, parsed } of filesToMigrate) {
+            const projectKey = `${parsed.projectName}_${parsed.analysisType}`;
+            
+            if (!projectTypes.has(projectKey) || 
+                new Date(parsed.timestamp) > new Date(projectTypes.get(projectKey).timestamp)) {
+              projectTypes.set(projectKey, { file, parsed });
+            }
+          }
+          
+          // Save migrated files with new naming, delete old ones
+          for (const { file, parsed } of filesToMigrate) {
+            const projectKey = `${parsed.projectName}_${parsed.analysisType}`;
+            const latest = projectTypes.get(projectKey);
+            
+            if (latest.file === file) {
+              // This is the latest, migrate it
+              await this.saveAnalysisByType(
+                parsed.projectName,
+                parsed.analysisType,
+                parsed.analysisData,
+                parsed.scriptMetadata
+              );
+              migratedCount++;
+            }
+            
+            // Delete old file
+            const filePath = path.join(this.tempDir, file);
+            await window.electronAPI.deleteFile(filePath);
+            deletedCount++;
+          }
+        }
+      }
       
-      console.log(`🔍 ${fileName} için ${partialAnalyses.length} ara kayıt bulundu`);
-      return partialAnalyses;
+      console.log(`✅ Migration tamamlandı: ${migratedCount} dosya migrate edildi, ${deletedCount} dosya silindi`);
+      return { migratedCount, deletedCount };
     } catch (error) {
-      console.error('findPartialAnalyses hatası:', error);
-      return [];
+      console.error('❌ Migration hatası:', error);
+      return { migratedCount: 0, deletedCount: 0 };
     }
   }
 

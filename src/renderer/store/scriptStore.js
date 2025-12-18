@@ -131,6 +131,7 @@ export const useScriptStore = create(
       id: uuidv4(),
       title: scriptData.title || scriptData.fileName || 'Untitled Script',
       fileName: scriptData.fileName,
+      name: scriptData.fileName, // Add name property for consistency
       scriptText: scriptData.scriptText,
       cleanedText: scriptData.cleanedText || scriptData.scriptText,
       pageCount: scriptData.pageCount || 0,
@@ -318,6 +319,12 @@ export const useScriptStore = create(
     if (!script) {
       console.error('Script not found:', scriptId);
       return;
+    }
+    
+    // Ensure backward compatibility: add name property if missing
+    if (!script.name && script.fileName) {
+      script.name = script.fileName;
+      get().updateScript(scriptId, { name: script.fileName });
     }
     
     set({ currentScriptId: scriptId });
@@ -760,7 +767,63 @@ export const useScriptStore = create(
         storyboardProgress: null,
         storyboardAbortController: null,
         currentView: 'editor', // Reset to default view
-      })
+      }),
+      // Cleanup handler after rehydration
+      onRehydrateStorage: () => {
+        return (state, error) => {
+          if (error) {
+            console.error('❌ Store rehydration hatası:', error);
+            return;
+          }
+          
+          console.log('🔄 Store rehydration tamamlandı, temizlik kontrol ediliyor...');
+          
+          // Clean up analysis data for deleted scripts
+          if (state?.scripts) {
+            const existingScriptIds = new Set(state.scripts.map(s => s.id));
+            
+            // Check if current script still exists
+            if (state.currentScriptId && !existingScriptIds.has(state.currentScriptId)) {
+              console.log('⚠️ Aktif script bulunamadı, temizleniyor...');
+              state.currentScriptId = null;
+              state.analysisData = null;
+              state.scenes = [];
+              state.characters = [];
+              state.locations = [];
+              state.equipment = [];
+              state.scriptText = null;
+              state.cleanedText = null;
+              state.originalFileName = null;
+            }
+            
+            // Clean orphaned localStorage keys
+            const keysToCheck = ['mgx_analysis_', 'mgx_storyboard_', 'analysis_checkpoint_', 'temp_'];
+            let cleanedCount = 0;
+            
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+              const key = localStorage.key(i);
+              if (!key) continue;
+              
+              const isAnalysisKey = keysToCheck.some(prefix => key.startsWith(prefix));
+              if (isAnalysisKey) {
+                const scriptStillExists = Array.from(existingScriptIds).some(scriptId => 
+                  key.includes(scriptId) || key.includes(scriptId.substring(0, 8))
+                );
+                
+                if (!scriptStillExists) {
+                  localStorage.removeItem(key);
+                  cleanedCount++;
+                  console.log(`  ❌ Temizlendi: ${key}`);
+                }
+              }
+            }
+            
+            if (cleanedCount > 0) {
+              console.log(`✅ Rehydration temizliği: ${cleanedCount} eski kayıt silindi`);
+            }
+          }
+        };
+      }
     }
   )
 );

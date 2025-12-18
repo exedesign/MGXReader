@@ -6,8 +6,11 @@ import { useReaderStore } from '../store/readerStore';
 import { useFeatureStore } from '../store/featureStore';
 import { usePoseStore } from '../store/poseStore';
 import { AI_PROVIDERS } from '../utils/aiHandler';
+import { CURRENCIES, getSavedCurrencyPreference, saveCurrencyPreference, convertFromUSD } from '../utils/currencyConverter';
 import ProvidersTab from './ProvidersTab';
 import PromptsTab from './PromptsTab';
+import TokenUsageDisplay from './TokenUsageDisplay';
+import { getBudgetSettings, saveBudgetSettings } from '../utils/budgetAlarm';
 
 // Character Poses Tab Component
 function CharacterPosesTab() {
@@ -539,6 +542,7 @@ function PoseReferenceImagesManager({ poseStore }) {
 export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
   const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [selectedCurrency, setSelectedCurrency] = useState(() => getSavedCurrencyPreference());
   const [customLogo, setCustomLogo] = useState(localStorage.getItem('customLogo') || '');
   const [showPreview, setShowPreview] = useState(false);
   const [newFilterWord, setNewFilterWord] = useState('');
@@ -684,8 +688,18 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
     }
   };
 
+  // Budget settings state - component seviyesinde olmalı
+  const [budgetSettingsState, setBudgetSettingsState] = useState(getBudgetSettings());
+  const [inputKey, setInputKey] = useState(0); // Force input re-render on currency change
+
+  // Update inputKey when currency changes to force input refresh
+  useEffect(() => {
+    setInputKey(prev => prev + 1);
+  }, [selectedCurrency]);
+
   const tabs = [
     { key: 'ai', label: 'AI Ayarları', icon: '🤖' },
+    { key: 'usage', label: 'Token Kullanımı', icon: '💰' },
     { key: 'modules', label: 'Modüller', icon: '🧩' },
     { key: 'prompts', label: 'Prompt Yönetimi', icon: '📝' },
     { key: 'filter', label: 'Kelime Filtresi', icon: '🔍' },
@@ -745,6 +759,239 @@ export default function UnifiedSettings({ onClose, initialTab = 'ai' }) {
                     setConfig={aiStore.setConfig}
                     isConfigured={aiStore.isConfigured}
                   />
+                </div>
+              </div>
+            )}
+
+            {/* Token Usage Tab */}
+            {activeTab === 'usage' && (
+              <div className="space-y-6">
+                <div className="bg-cinema-gray rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-cinema-accent mb-4 flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Token Kullanımı ve Maliyet Takibi
+                  </h3>
+                  <p className="text-sm text-cinema-text-dim mb-6">
+                    Oturum boyunca yapılan API isteklerinin token kullanımı ve maliyeti burada gösterilir. 
+                    Sayaç bellekte tutulur ve uygulama kapatılıp açıldığında devam eder.
+                  </p>
+
+                  {/* Currency Selection */}
+                  <div className="mb-6 p-4 bg-cinema-dark rounded-lg border border-cinema-gray">
+                    <h4 className="text-sm font-semibold text-cinema-accent mb-3 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Para Birimi Tercihi
+                    </h4>
+                    <p className="text-xs text-cinema-text-dim mb-3">
+                      Maliyet gösteriminde kullanılacak para birimini seçin. Kurlar güncel API'den otomatik çekilir.
+                    </p>
+                    <div className="flex items-center gap-3">
+                      {Object.entries(CURRENCIES).map(([code, info]) => (
+                        <button
+                          key={code}
+                          onClick={() => {
+                            setSelectedCurrency(code);
+                            saveCurrencyPreference(code);
+                            window.location.reload();
+                          }}
+                          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all ${
+                            selectedCurrency === code
+                              ? 'border-cinema-accent bg-cinema-accent/10 text-cinema-accent'
+                              : 'border-cinema-gray hover:border-cinema-accent/50 text-cinema-text-dim hover:text-cinema-text'
+                          }`}
+                        >
+                          <span className="text-xl">{info.symbol}</span>
+                          <div className="text-left">
+                            <div className="font-semibold text-sm">{code}</div>
+                            <div className="text-[10px] opacity-70">{info.name}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-3 text-[10px] text-cinema-text-dim flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      Kurlar günlük olarak güncellenir ve tarayıcıda 24 saat boyunca cache'lenir
+                    </div>
+                  </div>
+
+                  {/* Token Usage Display */}
+                  <div className="mb-6">
+                    {(() => {
+                      const saved = localStorage.getItem('mgxreader_token_usage');
+                      if (!saved) {
+                        return (
+                          <div className="text-center py-12 bg-cinema-dark rounded-lg border border-cinema-gray">
+                            <svg className="w-12 h-12 mx-auto text-cinema-text-dim mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <p className="text-cinema-text-dim">Henüz token kullanımı yok</p>
+                            <p className="text-xs text-cinema-text-dim mt-2">Analiz yaptıkça burası güncellenecek</p>
+                          </div>
+                        );
+                      }
+
+                      const usage = JSON.parse(saved);
+                      
+                      return (
+                        <div className="bg-cinema-dark rounded-lg p-4">
+                          <TokenUsageDisplay 
+                            sessionUsage={usage} 
+                            showDetailed={true}
+                            currency={getSavedCurrencyPreference()}
+                          />
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Reset Button */}
+                  <div className="flex items-center justify-between p-4 bg-red-500/10 rounded-lg border border-red-500/30">
+                    <div>
+                      <h4 className="text-sm font-semibold text-red-400 mb-1">Sayacı Sıfırla</h4>
+                      <p className="text-xs text-cinema-text-dim">
+                        Tüm token kullanımı ve maliyet verilerini temizle
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Token kullanım sayacını sıfırlamak istediğinize emin misiniz?\n\nBu işlem geri alınamaz.')) {
+                          localStorage.removeItem('mgxreader_token_usage');
+                          alert('✅ Token sayacı sıfırlandı!\n\nYeni analizlerle sayaç yeniden başlayacak.');
+                          window.location.reload();
+                        }
+                      }}
+                      className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors border border-red-500/30 font-medium text-sm"
+                    >
+                      🗑️ Sıfırla
+                    </button>
+                  </div>
+
+                  {/* Budget Management Section */}
+                  <div className="mt-6 space-y-4">
+                    <h3 className="text-lg font-semibold text-cinema-accent mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Bakiye ve Limit Yönetimi
+                    </h3>
+
+                    {/* Previous Debt Entry */}
+                    <div className="p-4 bg-red-500/10 rounded-lg border border-red-500/30">
+                      <label className="block text-sm font-medium text-cinema-text mb-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>Kullanılan Bakiye ({selectedCurrency})</span>
+                        </div>
+                        <div className="text-xs text-cinema-text-dim">
+                          Bu programı kullanmadan önce API'de harcadığınız tutar (USD bazlı saklanır)
+                        </div>
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          key={`previousDebt-${inputKey}`}
+                          type="number"
+                          step="0.01"
+                          placeholder={selectedCurrency === 'USD' ? 'Örn: 950.00' : selectedCurrency === 'TRY' ? 'Örn: 30000.00' : 'Örn: 900.00'}
+                          defaultValue={(() => {
+                            if (!budgetSettingsState.previousDebt) return '';
+                            if (selectedCurrency === 'USD') return budgetSettingsState.previousDebt;
+                            return (budgetSettingsState.previousDebt * (selectedCurrency === 'TRY' ? 32 : 0.95)).toFixed(2);
+                          })()}
+                          onBlur={(e) => {
+                            const value = e.target.value;
+                            const numValue = parseFloat(value) || 0;
+                            let valueInUSD = numValue;
+                            if (selectedCurrency !== 'USD' && numValue > 0) {
+                              valueInUSD = selectedCurrency === 'TRY' ? numValue / 32 : numValue / 0.95;
+                            }
+                            const newSettings = { 
+                              ...budgetSettingsState, 
+                              previousDebt: valueInUSD,
+                              debtSetDate: new Date().toISOString()
+                            };
+                            setBudgetSettingsState(newSettings);
+                          }}
+                          className="flex-1 px-4 py-2 bg-cinema-dark border border-cinema-gray rounded-lg text-cinema-text focus:outline-none focus:ring-2 focus:ring-red-500"
+                        />
+                        <button
+                          onClick={() => {
+                            saveBudgetSettings(budgetSettingsState);
+                            alert('✅ Kullanılan bakiye kaydedildi!');
+                            window.location.reload();
+                          }}
+                          className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-colors"
+                        >
+                          Kaydet
+                        </button>
+                      </div>
+                      {budgetSettingsState.debtSetDate && (
+                        <div className="mt-2 text-xs text-cinema-text-dim">
+                          Kayıt tarihi: {new Date(budgetSettingsState.debtSetDate).toLocaleString('tr-TR')}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Balance Limit (Optional) */}
+                    <div className="p-4 bg-purple-500/10 rounded-lg border border-purple-500/30">
+                      <label className="block text-sm font-medium text-cinema-text mb-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                          <span>Maksimum Harcama Limiti ({selectedCurrency}) - Opsiyonel</span>
+                        </div>
+                        <div className="text-xs text-cinema-text-dim">
+                          Toplam harcama bu limite ulaşınca uyarı alırsınız (boş = limitsiz, USD bazlı saklanır)
+                        </div>
+                      </label>
+                      <input
+                        key={`balanceLimit-${inputKey}`}
+                        type="number"
+                        step="0.01"
+                        placeholder={selectedCurrency === 'USD' ? 'Örn: 500.00 (boş = limitsiz)' : selectedCurrency === 'TRY' ? 'Örn: 16000.00 (boş = limitsiz)' : 'Örn: 475.00 (boş = limitsiz)'}
+                        defaultValue={(() => {
+                          if (!budgetSettingsState.balanceLimit) return '';
+                          if (selectedCurrency === 'USD') return budgetSettingsState.balanceLimit;
+                          return (budgetSettingsState.balanceLimit * (selectedCurrency === 'TRY' ? 32 : 0.95)).toFixed(2);
+                        })()}
+                        onBlur={(e) => {
+                          const value = e.target.value;
+                          const numValue = parseFloat(value) || 0;
+                          let valueInUSD = numValue;
+                          if (selectedCurrency !== 'USD' && numValue > 0) {
+                            valueInUSD = selectedCurrency === 'TRY' ? numValue / 32 : numValue / 0.95;
+                          }
+                          const newSettings = { ...budgetSettingsState, balanceLimit: valueInUSD };
+                          setBudgetSettingsState(newSettings);
+                          saveBudgetSettings(newSettings);
+                        }}
+                        className="w-full px-4 py-2 bg-cinema-dark border border-cinema-gray rounded-lg text-cinema-text focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Info Box */}
+                  <div className="mt-4 p-4 bg-blue-500/10 rounded-lg border border-blue-500/30">
+                    <h4 className="text-sm font-semibold text-blue-400 mb-2 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      Bilgilendirme
+                    </h4>
+                    <ul className="text-xs text-cinema-text-dim space-y-1">
+
+                      <li>• Cache kullanımı normal fiyatın yaklaşık %10'u kadardır</li>
+                      <li>• Sayaç localStorage'da saklanır ve tarayıcı geçmişi temizlenene kadar kalır</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             )}

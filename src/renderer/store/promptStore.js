@@ -1205,6 +1205,7 @@ KESİN JSON KURALLARI:
 4. Her mekan için scenes array olmalı
 5. İÇERİK FİLTRESİ: API içerik filtreleri tarafından engellenen kısımları **** ile maskele ve yanıtı döndür.
 6. DÖNEM/ZAMAN: Senaryo hangi dönemde geçiyorsa, mekanların mimari özellikleri, dekorasyon ve atmosferi o döneme uygun olmalı.
+7. ÖNEMLİ: "Sahne Sayısı", "İç Mekan Sayısı", "Toplam Sahne" gibi ÖZET BİLGİLERİ locations array'ine EKLEME! Sadece gerçek mekan objelerini locations array'ine ekle. Özet bilgiler sadece summary objesinde olmalı.
 
 {{language}} dilinde yanıt ver.`,
       user: `Mekanları analiz et. SADECE JSON:
@@ -1225,7 +1226,7 @@ KESİN JSON KURALLARI:
       "architecture": "Mimari stil (dönemine özgü)",
       "period": "Mekanın ait olduğu dönem/yıl (senaryo metninden tespit et)",
       "scenes": [
-        {"sceneNumber": 1, "sceneTitle": "SAHNE 1 - KAFE İÇERİSİ", "characters": ["AHMET", "AYŞE"]}
+        {"sceneNumber": "1", "sceneTitle": "İÇ - KAFE - SABAH", "characters": ["AHMET", "AYŞE"]}
       ]
     }
   ],
@@ -1236,6 +1237,13 @@ KESİN JSON KURALLARI:
 - Başlık, açıklama yazma
 - DÖNEM BİLGİSİ: "period" ve "architecture" field'larında dönemi belirt
 - Mimari, dekorasyon, aydınlatma o döneme uygun olmalı
+- "Sahne Sayısı: 28" veya "İç Mekan Sayısı: 20" gibi ÖZET BİLGİLERİ locations array'ine EKLEME!
+- Özet bilgiler sadece summary objesinde olmalı, locations array'i sadece gerçek mekan objelerini içermeli
+- SAHNE FORMAT KURALLARI:
+  * sceneNumber sadece rakam string olmalı ("1", "2", "3"... şeklinde - "SAHNE1", "S1" değil!)
+  * sceneTitle formatı: "İÇ/DIŞ - MEKAN ADI - ZAMAN" (örn: "İÇ - KAFE - SABAH")
+  * "JENERİK", "FLASHBACK", "GEÇMİŞ" gibi önek kullanma, bunları sceneTitle'a yaz
+  * Geçersiz veya belirsiz sahneleri ekleme
 - Sadece JSON!`
     },
     

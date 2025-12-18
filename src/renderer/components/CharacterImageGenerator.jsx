@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAIStore } from '../store/aiStore';
 import { useScriptStore } from '../store/scriptStore';
+import { GEMINI_PRICING } from '../utils/aiHandler';
 
 export default function CharacterImageGenerator({ character, onImageGenerated }) {
     const { t } = useTranslation();
@@ -102,11 +103,23 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
     }, [character?.name, referenceImages]);
 
     // Auto-generate prompt from character data
+    // Use specific properties instead of entire character object to avoid infinite re-renders
     useEffect(() => {
         if (character && character.name) {
             generatePromptFromCharacter();
         }
-    }, [character]);
+    }, [
+        character?.name, 
+        character?.physicalDescription, 
+        character?.physical, 
+        character?.description, 
+        character?.personality, 
+        character?.age, 
+        character?.role, 
+        character?.occupation, 
+        character?.style,
+        referenceImages.length  // Only track count, not entire array
+    ]);
 
     const generatePromptFromCharacter = () => {
         if (!character) {
@@ -322,6 +335,17 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
             const result = await generateImage(prompt.trim(), imageOptions);
 
             if (result && result.imageData) {
+                // Track image generation cost
+                if (result.cost && result.usage) {
+                    const { updateTokenUsage } = await import('../utils/tokenTracker');
+                    updateTokenUsage({
+                        cost: result.cost.total,
+                        usage: result.usage,
+                        model: result.model,
+                        analysisType: 'character_image'
+                    });
+                }
+
                 const imageUrl = `data:${result.mimeType || 'image/png'};base64,${result.imageData}`;
                 const imageData = {
                     url: imageUrl,
@@ -558,6 +582,16 @@ export default function CharacterImageGenerator({ character, onImageGenerated })
                         <div>
                             <div className="text-4xl mb-3 text-cinema-text-dim">🖼️</div>
                             <p className="text-cinema-text-dim mb-4">Henüz görsel oluşturulmamış</p>
+                            {(() => {
+                                const { geminiImageModel } = useAIStore.getState();
+                                const pricing = GEMINI_PRICING[geminiImageModel];
+                                const costPerImage = pricing?.perImage || 0.039;
+                                return (
+                                    <div className="mb-3 text-xs text-cinema-text-dim">
+                                        <span className="text-yellow-400">💰 Tahmini Maliyet:</span> ${costPerImage.toFixed(3)} USD / görsel
+                                    </div>
+                                );
+                            })()}
                             <button
                                 onClick={generateCharacterImage}
                                 className="btn-primary"

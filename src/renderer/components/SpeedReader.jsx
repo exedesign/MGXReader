@@ -7,6 +7,9 @@ import { usePromptStore } from '../store/promptStore';
 import { parseWordsWithMetadata, calculatePagePosition } from '../utils/textProcessing';
 import ReaderSettings from './ReaderSettings';
 import ReadingTimeline from './ReadingTimeline';
+import { updateTokenUsage } from '../utils/tokenTracker';
+import { calculateGeminiCost } from '../utils/aiHandler';
+import { estimateTokens, estimateOutputTokens } from '../utils/tokenEstimator';
 
 /**
  * SpeedReader - Professional RSVP Engine with Pixel-Perfect ORP Alignment
@@ -180,12 +183,42 @@ export default function SpeedReader() {
         };
       }
 
-      const summary = await aiHandler.analyzeWithCustomPrompt(text, {
+      // Estimate tokens before API call
+      const fullPromptText = prompt.system + '\n\n' + prompt.user + '\n\n' + text;
+      const estimatedTokens = estimateTokens(fullPromptText) + estimateOutputTokens('summary');
+      
+      const result = await aiHandler.analyzeWithCustomPrompt(text, {
         systemPrompt: prompt.system,
         userPrompt: prompt.user,
-        language: i18n.language
+        language: i18n.language,
+        includeMetadata: true
       });
-      setAiSummary(summary);
+      
+      // Extract text and metadata from result
+      const summaryText = typeof result === 'string' ? result : result.text;
+      const usage = typeof result === 'object' ? result.usage : null;
+      const model = typeof result === 'object' ? result.model : 'unknown';
+      
+      // Track token usage if metadata available
+      if (usage && usage.totalTokenCount) {
+        const cost = calculateGeminiCost(model, usage);
+        updateTokenUsage({
+          cost: cost,
+          usage: usage,
+          model: model,
+          analysisType: 'speed_reading_summary',
+          estimatedTokens: estimatedTokens
+        });
+        
+        console.log('📊 Speed reading summary cost tracked:', {
+          model: model,
+          estimated: estimatedTokens,
+          actual: usage.totalTokenCount,
+          cost: `$${cost.total.toFixed(6)}`
+        });
+      }
+      
+      setAiSummary(summaryText);
       setShowSummaryModal(true);
     } catch (error) {
       console.error('Summary generation error:', error);

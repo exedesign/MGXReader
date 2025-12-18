@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAIStore } from '../store/aiStore';
 import { useScriptStore } from '../store/scriptStore';
+import { GEMINI_PRICING } from '../utils/aiHandler';
 
 export default function LocationImageGenerator({ location, onImageGenerated, characterReferences = [] }) {
     const { t } = useTranslation();
@@ -351,6 +352,17 @@ export default function LocationImageGenerator({ location, onImageGenerated, cha
             const result = await generateImage(prompt.trim(), imageOptions);
 
             if (result && result.imageData) {
+                // Track image generation cost
+                if (result.cost && result.usage) {
+                    const { updateTokenUsage } = await import('../utils/tokenTracker');
+                    updateTokenUsage({
+                        cost: result.cost.total,
+                        usage: result.usage,
+                        model: result.model,
+                        analysisType: 'location_image'
+                    });
+                }
+
                 const imageUrl = `data:${result.mimeType || 'image/png'};base64,${result.imageData}`;
                 const imageData = {
                     url: imageUrl,
@@ -587,6 +599,16 @@ export default function LocationImageGenerator({ location, onImageGenerated, cha
                         <div>
                             <div className="text-4xl mb-3 text-cinema-text-dim">🖼️</div>
                             <p className="text-cinema-text-dim mb-4">Henüz görsel oluşturulmamış</p>
+                            {(() => {
+                                const { geminiImageModel } = useAIStore.getState();
+                                const pricing = GEMINI_PRICING[geminiImageModel];
+                                const costPerImage = pricing?.perImage || 0.039;
+                                return (
+                                    <div className="mb-3 text-xs text-cinema-text-dim">
+                                        <span className="text-yellow-400">💰 Tahmini Maliyet:</span> ${costPerImage.toFixed(3)} USD / görsel
+                                    </div>
+                                );
+                            })()}
                             <button
                                 onClick={generateLocationImage}
                                 className="btn-primary"
