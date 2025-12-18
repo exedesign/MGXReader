@@ -53,11 +53,12 @@ export const useScriptStore = create(
     return title
       .toLowerCase()
       .replace(/[''\u2019]/g, "'") // Normalize apostrophes
-      .replace(/[i̇ı]/g, 'i') // Normalize Turkish i
-      .replace(/[çğöşü]/g, match => ({ 'ç': 'c', 'ğ': 'g', 'ö': 'o', 'ş': 's', 'ü': 'u' })[match])
+      .replace(/İ/g, 'i')   // Turkish capital I
+      .replace(/I/g, 'ı')   // English capital I → Turkish ı
       .replace(/\s+/g, ' ') // Normalize spaces
-      .replace(/\.pdf$/i, '') // Remove .pdf
-      .replace(/[^a-z0-9\s]/g, '') // Remove special chars
+      .replace(/\.pdf$/i, '') // Remove .pdf extension
+      .replace(/[_\-\.]+/g, ' ') // Convert separators to spaces
+      .replace(/\s+/g, ' ') // Collapse multiple spaces
       .trim();
   },
 
