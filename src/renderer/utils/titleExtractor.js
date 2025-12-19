@@ -97,12 +97,14 @@ const LAYOUT_PROFILES = {
  */
 function detectScriptSource(meta, elements = []) {
   // DEBUG: Mevcut veriler
-  console.log('🔍 detectScriptSource çağrıldı:', { 
-    hasMeta: !!meta,
-    fontList: meta?.fontList,
-    detectedProgram: meta?.detectedProgram,
-    elementsLength: elements?.length || 0
-  });
+  console.log('\n🔍 detectScriptSource çağrıldı');
+  console.log('  hasMeta:', !!meta);
+  console.log('  meta.fontList:', meta?.fontList);
+  console.log('  meta.detectedProgram:', meta?.detectedProgram);
+  console.log('  elements length:', elements?.length || 0);
+  if (elements?.[0]) {
+    console.log('  First element:', elements[0]);
+  }
   
   // SEVİYE 1: ELECTRON-SIDE DETECTION KONTROLÜ (En hızlı ve en güvenilir)
   if (meta?.detectedProgram && meta.detectedProgram !== 'Unknown') {
@@ -516,12 +518,14 @@ export function extractBestTitle(text, metadata = {}, fileNames = null, fileInde
     // ADIM 1: DEDEKTİFLİK - Kaynak tespit et (font + metadata)
     const elements = metadata?.elements || [];
     
-    console.log('🎯 extractBestTitle çağrıldı - metadata yapısı:', { 
-      metadataKeys: Object.keys(metadata || {}),
-      hasElements: !!elements,
-      elementsLength: elements.length,
-      firstElementSample: elements[0]
-    });
+    console.log('🎯 extractBestTitle çağrıldı - metadata yapısı:');
+    console.log('  Metadata keys:', Object.keys(metadata || {}));
+    console.log('  metadata.fontList:', metadata?.fontList);
+    console.log('  metadata.detectedProgram:', metadata?.detectedProgram);
+    console.log('  metadata.elements length:', metadata?.elements?.length);
+    if (metadata?.elements?.[0]) {
+      console.log('  First element sample:', metadata.elements[0]);
+    }
     
     const profile = selectLayoutProfile(metadata, elements);
     

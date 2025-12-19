@@ -407,21 +407,31 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
         console.log('📄 pdf2json parsing complete');
         
         // FONT COLLECTION: TÜM SAYFALARDAKI TÜM FONTLARI TOPLA
+        // Her sayfanın kendi font table'ı var, bunları birleştir
         const fontTable = {};
         const uniqueFonts = new Set();
         
+        console.log(`📚 Toplam ${pdfData.Pages?.length || 0} sayfa taranacak...`);
+        
         pdfData.Pages?.forEach((page, pageIdx) => {
-          if (page.Fonts) {
+          if (page.Fonts && Array.isArray(page.Fonts)) {
+            console.log(`📄 Sayfa ${pageIdx + 1}: ${page.Fonts.length} font tanımı bulundu`);
             page.Fonts.forEach((font, idx) => {
               const fontName = font.name || `Font${idx}`;
               fontTable[idx] = fontName;
               uniqueFonts.add(fontName);
+              if (pageIdx === 0) {
+                console.log(`   Font[${idx}]: ${fontName}`);
+              }
             });
+          } else {
+            console.log(`⚠️ Sayfa ${pageIdx + 1}: Font tanımı yok`);
           }
         });
         
         const fontList = Array.from(uniqueFonts);
-        console.log(`🔤 Toplam ${fontList.length} farklı font bulundu:`, fontList);
+        console.log(`🔤 Toplam ${fontList.length} farklı font bulundu:`);
+        fontList.forEach(f => console.log(`   - ${f}`));
         
         // SENARYO PROGRAMI DETECTION: Font signature matching
         let detectedProgram = 'Unknown';
@@ -484,6 +494,11 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
             // Font index'ini font ismine çevir
             const fontIndex = textItem.R?.[0]?.TS?.[0];
             const fontName = fontTable[fontIndex] || `Font${fontIndex}`;
+            
+            // Debug: İlk birkaç elementi logla
+            if (elements.length < 3) {
+              console.log(`📝 Element ${elements.length}: fontIndex=${fontIndex}, fontName="${fontName}", text="${decodedText.substring(0, 20)}..."`);
+            }
             
             elements.push({
               text: decodedText,
