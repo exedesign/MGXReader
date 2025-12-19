@@ -451,33 +451,125 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
         console.log(`🔤 Toplam ${fontList.length} farklı unique font bulundu:`);
         fontList.forEach(f => console.log(`   - ${f}`));
         
-        // SENARYO PROGRAMI DETECTION: Font signature matching
-        let detectedProgram = 'Unknown';
-        const fontString = fontList.join('|').toLowerCase();
+        // XMP METADATA PARSING: Application field ve gelişmiş metadata
+        let xmpMetadata = {};
+        let applicationName = '';
         
-        if (fontString.includes('courierfinal') || fontString.includes('courier final draft')) {
-          detectedProgram = 'Final Draft';
-        } else if (fontString.includes('courier-prime') || fontString.includes('courier prime')) {
-          detectedProgram = 'Celtx / Highland';
-        } else if (fontString.includes('courier screenplay')) {
-          detectedProgram = 'WriterDuet';
-        } else if (fontString.includes('fadein')) {
-          detectedProgram = 'Fade In';
-        } else if (fontString.includes('courier') || fontString.includes('courier new')) {
-          detectedProgram = 'Generic Screenplay';
+        // XMP metadata genellikle pdfData.Meta.Metadata veya pdfData.Metadata'da
+        const xmpData = pdfData.Meta?.Metadata || pdfData.Metadata;
+        
+        if (xmpData) {
+          console.log('📝 XMP Metadata bulundu, parsing...');
+          
+          // XMP metadata string olarak gelebilir, parse et
+          if (typeof xmpData === 'string') {
+            // XML/XMP string'i parse et
+            try {
+              // Application field'ini bul (xmp:CreatorTool veya dc:creator)
+              const appMatch = xmpData.match(/<xmp:CreatorTool>(.*?)<\/xmp:CreatorTool>/i) ||
+                               xmpData.match(/<stEvt:softwareAgent>(.*?)<\/stEvt:softwareAgent>/i) ||
+                               xmpData.match(/<pdf:Producer>(.*?)<\/pdf:Producer>/i);
+              
+              if (appMatch) {
+                applicationName = appMatch[1].trim();
+                console.log(`   Application: ${applicationName}`);
+              }
+              
+              // Diğer XMP fields
+              const titleMatch = xmpData.match(/<dc:title>.*?<rdf:li[^>]*>(.*?)<\/rdf:li>/i);
+              const authorMatch = xmpData.match(/<dc:creator>.*?<rdf:li[^>]*>(.*?)<\/rdf:li>/i);
+              const subjectMatch = xmpData.match(/<dc:subject>.*?<rdf:li[^>]*>(.*?)<\/rdf:li>/i);
+              
+              xmpMetadata = {
+                application: applicationName,
+                title: titleMatch?.[1] || '',
+                author: authorMatch?.[1] || '',
+                subject: subjectMatch?.[1] || '',
+                raw: xmpData
+              };
+            } catch (e) {
+              console.warn('⚠️ XMP parsing hatası:', e.message);
+            }
+          } else if (typeof xmpData === 'object') {
+            // Object olarak gelmişse direkt kullan
+            applicationName = xmpData.application || xmpData.CreatorTool || xmpData.softwareAgent || '';
+            xmpMetadata = xmpData;
+          }
         }
         
-        console.log(`🎬 Tespit Edilen Program: ${detectedProgram}`);
+        // SENARYO PROGRAMI DETECTION: Multi-source detection
+        let detectedProgram = 'Unknown';
+        let detectionSource = 'none';
+        
+        // 1. ÖNCELİK: Application field (en güvenilir)
+        if (applicationName) {
+          const appLower = applicationName.toLowerCase();
+          if (appLower.includes('final draft')) {
+            detectedProgram = 'Final Draft';
+            detectionSource = 'xmp-application';
+            // Version bilgisini çıkar
+            const versionMatch = applicationName.match(/final\s*draft\s*(\d+(?:\.\d+)*)/i);
+            if (versionMatch) {
+              detectedProgram += ` ${versionMatch[1]}`;
+            }
+          } else if (appLower.includes('celtx')) {
+            detectedProgram = 'Celtx';
+            detectionSource = 'xmp-application';
+          } else if (appLower.includes('writerduet')) {
+            detectedProgram = 'WriterDuet';
+            detectionSource = 'xmp-application';
+          } else if (appLower.includes('fade in')) {
+            detectedProgram = 'Fade In';
+            detectionSource = 'xmp-application';
+          }
+        }
+        
+        // 2. FALLBACK: Creator field
+        if (detectedProgram === 'Unknown' && pdfData.Meta?.Creator) {
+          const creatorLower = pdfData.Meta.Creator.toLowerCase();
+          if (creatorLower.includes('final draft')) {
+            detectedProgram = 'Final Draft';
+            detectionSource = 'creator-field';
+          } else if (creatorLower.includes('celtx')) {
+            detectedProgram = 'Celtx / Highland';
+            detectionSource = 'creator-field';
+          }
+        }
+        
+        // 3. FALLBACK: Font signature matching
+        if (detectedProgram === 'Unknown') {
+          const fontString = fontList.join('|').toLowerCase();
+          
+          if (fontString.includes('courierfinal') || fontString.includes('courier final draft')) {
+            detectedProgram = 'Final Draft';
+            detectionSource = 'font-signature';
+          } else if (fontString.includes('courier-prime') || fontString.includes('courier prime')) {
+            detectedProgram = 'Celtx / Highland';
+            detectionSource = 'font-signature';
+          } else if (fontString.includes('courier screenplay')) {
+            detectedProgram = 'WriterDuet';
+            detectionSource = 'font-signature';
+          } else if (fontString.includes('fadein')) {
+            detectedProgram = 'Fade In';
+            detectionSource = 'font-signature';
+          } else if (fontString.includes('courier') || fontString.includes('courier new')) {
+            detectedProgram = 'Generic Screenplay';
+            detectionSource = 'font-signature';
+          }
+        }
+        
+        console.log(`🎬 Tespit Edilen Program: ${detectedProgram} (kaynak: ${detectionSource})`);
         
         // METADATA EXTRACTION: TÜM PDF METADATA FIELDS
         metadata = {
           // Basic Info
-          title: pdfData.Meta?.Title || '',
-          author: pdfData.Meta?.Author || '',
-          subject: pdfData.Meta?.Subject || '',
+          title: xmpMetadata.title || pdfData.Meta?.Title || '',
+          author: xmpMetadata.author || pdfData.Meta?.Author || '',
+          subject: xmpMetadata.subject || pdfData.Meta?.Subject || '',
           keywords: pdfData.Meta?.Keywords || '',
           
           // Technical Info
+          application: applicationName, // XMP Application field (Final Draft 11 gibi)
           creator: pdfData.Meta?.Creator || '', // Önemli: Hangi programda oluşturuldu
           producer: pdfData.Meta?.Producer || '', // PDF üreteci (ghostscript, Adobe, vb)
           
@@ -497,6 +589,10 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
           
           // Auto-Detection
           detectedProgram: detectedProgram, // Tespit edilen senaryo programı
+          detectionSource: detectionSource, // Tespit yöntemi (xmp-application, creator-field, font-signature)
+          
+          // XMP Metadata
+          xmp: xmpMetadata,
           
           // Raw Metadata (gelişmiş kullanım için)
           raw: pdfData.Meta || {}
@@ -506,10 +602,12 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
         console.log(`📊 PDF Metadata:`);
         console.log(`   Title: ${metadata.title || '(empty)'}`);
         console.log(`   Author: ${metadata.author || '(empty)'}`);
+        console.log(`   Application: ${metadata.application || '(empty)'}`);
         console.log(`   Creator: ${metadata.creator || '(empty)'}`);
         console.log(`   Producer: ${metadata.producer || '(empty)'}`);
         console.log(`   Pages: ${totalPages}`);
         console.log(`   PDF Version: ${metadata.pdfVersion || '(unknown)'}`);
+        console.log(`   Detection: ${detectedProgram} via ${detectionSource}`);
 
         // Filter pages if selectedPages is provided
         const pagesToProcess = selectedPages 
