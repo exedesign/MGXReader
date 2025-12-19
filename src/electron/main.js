@@ -407,30 +407,48 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
         console.log('📄 pdf2json parsing complete');
         
         // FONT COLLECTION: TÜM SAYFALARDAKI TÜM FONTLARI TOPLA
-        // Her sayfanın kendi font table'ı var, bunları birleştir
-        const fontTable = {};
+        // Her sayfanın kendi font table'ı var, global mapping oluştur
+        const fontTableByPage = []; // Her sayfa için font table
+        const globalFontTable = {}; // Global font index -> name mapping
         const uniqueFonts = new Set();
+        let fontIndexCounter = 0;
         
         console.log(`📚 Toplam ${pdfData.Pages?.length || 0} sayfa taranacak...`);
         
         pdfData.Pages?.forEach((page, pageIdx) => {
+          const pageFontTable = {};
+          
           if (page.Fonts && Array.isArray(page.Fonts)) {
             console.log(`📄 Sayfa ${pageIdx + 1}: ${page.Fonts.length} font tanımı bulundu`);
-            page.Fonts.forEach((font, idx) => {
-              const fontName = font.name || `Font${idx}`;
-              fontTable[idx] = fontName;
+            
+            page.Fonts.forEach((font, localIdx) => {
+              const fontName = font.name || `Font${localIdx}`;
+              const fontType = font.type || 'Unknown';
+              const encoding = font.encoding || 'Unknown';
+              
+              // Sayfa-local mapping
+              pageFontTable[localIdx] = fontName;
+              
+              // Global mapping
+              const globalIdx = `${pageIdx}_${localIdx}`;
+              globalFontTable[globalIdx] = fontName;
+              
               uniqueFonts.add(fontName);
+              
               if (pageIdx === 0) {
-                console.log(`   Font[${idx}]: ${fontName}`);
+                console.log(`   Font[${localIdx}]: ${fontName} (${fontType}, ${encoding})`);
               }
             });
+            
+            fontTableByPage[pageIdx] = pageFontTable;
           } else {
             console.log(`⚠️ Sayfa ${pageIdx + 1}: Font tanımı yok`);
+            fontTableByPage[pageIdx] = {};
           }
         });
         
         const fontList = Array.from(uniqueFonts);
-        console.log(`🔤 Toplam ${fontList.length} farklı font bulundu:`);
+        console.log(`🔤 Toplam ${fontList.length} farklı unique font bulundu:`);
         fontList.forEach(f => console.log(`   - ${f}`));
         
         // SENARYO PROGRAMI DETECTION: Font signature matching
@@ -451,21 +469,47 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
         
         console.log(`🎬 Tespit Edilen Program: ${detectedProgram}`);
         
-        // Extract metadata
+        // METADATA EXTRACTION: TÜM PDF METADATA FIELDS
         metadata = {
+          // Basic Info
           title: pdfData.Meta?.Title || '',
           author: pdfData.Meta?.Author || '',
-          creator: pdfData.Meta?.Creator || '', // Important for screenplay format detection
-          producer: pdfData.Meta?.Producer || '',
+          subject: pdfData.Meta?.Subject || '',
+          keywords: pdfData.Meta?.Keywords || '',
+          
+          // Technical Info
+          creator: pdfData.Meta?.Creator || '', // Önemli: Hangi programda oluşturuldu
+          producer: pdfData.Meta?.Producer || '', // PDF üreteci (ghostscript, Adobe, vb)
+          
+          // Dates
           creationDate: pdfData.Meta?.CreationDate || '',
+          modificationDate: pdfData.Meta?.ModDate || '',
+          
+          // PDF Structure
           pages: pdfData.Pages?.length || 0,
-          fonts: fontTable, // Font mapping (index -> name)
+          pdfVersion: pdfData.Meta?.PDFFormatVersion || '',
+          
+          // Font Information
+          fonts: fontTableByPage[0] || {}, // İlk sayfanın font table'ı (compat)
           fontList: fontList, // Unique font names array
-          detectedProgram: detectedProgram // Auto-detected software
+          fontTableByPage: fontTableByPage, // Her sayfa için font mapping
+          globalFontTable: globalFontTable, // Tüm sayfalar için global mapping
+          
+          // Auto-Detection
+          detectedProgram: detectedProgram, // Tespit edilen senaryo programı
+          
+          // Raw Metadata (gelişmiş kullanım için)
+          raw: pdfData.Meta || {}
         };
         
         totalPages = metadata.pages;
-        console.log(`📊 Metadata: ${metadata.creator || 'Unknown'} | ${totalPages} pages`);
+        console.log(`📊 PDF Metadata:`);
+        console.log(`   Title: ${metadata.title || '(empty)'}`);
+        console.log(`   Author: ${metadata.author || '(empty)'}`);
+        console.log(`   Creator: ${metadata.creator || '(empty)'}`);
+        console.log(`   Producer: ${metadata.producer || '(empty)'}`);
+        console.log(`   Pages: ${totalPages}`);
+        console.log(`   PDF Version: ${metadata.pdfVersion || '(unknown)'}`);
 
         // Filter pages if selectedPages is provided
         const pagesToProcess = selectedPages 
@@ -475,11 +519,15 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
         // Extract text elements with coordinates
         pagesToProcess.forEach((page, pageIdx) => {
           const actualPageNumber = selectedPages ? selectedPages[pageIdx] : pageIdx + 1;
+          const originalPageIdx = actualPageNumber - 1;
           
           // pdf2json uses normalized coordinates (0-1 range multiplied by 1000)
           // Convert to points (1/72 inch)
           const pageWidth = page.Width || 612; // Default letter width
           const pageHeight = page.Height || 792; // Default letter height
+
+          // Bu sayfa için font table'ı al
+          const pageFontTable = fontTableByPage[originalPageIdx] || {};
 
           page.Texts?.forEach((textItem) => {
             // pdf2json splits text into runs with different fonts
@@ -491,13 +539,15 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
             const y = textItem.y * pageHeight / 1000;
             const width = textItem.w * pageWidth / 1000;
             
-            // Font index'ini font ismine çevir
+            // Font index'ini font ismine çevir (sayfa-specific table kullan)
             const fontIndex = textItem.R?.[0]?.TS?.[0];
-            const fontName = fontTable[fontIndex] || `Font${fontIndex}`;
+            const fontName = pageFontTable[fontIndex] || globalFontTable[`${originalPageIdx}_${fontIndex}`] || `Font${fontIndex}`;
             
             // Debug: İlk birkaç elementi logla
             if (elements.length < 3) {
-              console.log(`📝 Element ${elements.length}: fontIndex=${fontIndex}, fontName="${fontName}", text="${decodedText.substring(0, 20)}..."`);
+              console.log(`📝 Element ${elements.length} (page ${actualPageNumber}):`);
+              console.log(`   fontIndex=${fontIndex}, fontName="${fontName}"`);
+              console.log(`   text="${decodedText.substring(0, 30)}..."`);
             }
             
             elements.push({
