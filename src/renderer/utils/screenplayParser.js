@@ -187,7 +187,11 @@ export class ScreenplayParser {
       metadata: {
         format: 'PDF',
         source: sourceApp,
-        parsingMethod: 'COORDINATE_GRID_V3_DYNAMIC'
+        parsingMethod: 'COORDINATE_GRID_V3_DYNAMIC',
+        // Font tespiti için ilk 10 elementi ekle (font isimleri)
+        elements: elements.slice(0, 10).map(el => ({
+          fontName: el.fontName || ''
+        }))
       }
     };
 

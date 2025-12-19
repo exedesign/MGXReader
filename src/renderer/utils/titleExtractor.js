@@ -59,23 +59,65 @@ const LAYOUT_PROFILES = {
  * PDF'in kimlik kartına bakarak hangi yazılımla oluşturulduğunu bulur
  * 
  * @param {object} meta - PDF metadata (pdfData.Meta veya metadata objesi)
+ * @param {array} elements - PDF elements array (font bilgisi için)
  * @returns {string} - 'FINAL_DRAFT', 'CELTX', veya 'GENERIC'
  */
-function detectScriptSource(meta) {
+function detectScriptSource(meta, elements = []) {
+  // ÖNCE: FONT KONTROLÜ (En güvenilir yöntem)
+  // Font isimleri yazılımı kesin olarak belirtir
+  if (elements && elements.length > 0) {
+    // İlk 10 elementi kontrol et (yeterli numune)
+    const sampleSize = Math.min(10, elements.length);
+    for (let i = 0; i < sampleSize; i++) {
+      const fontName = (elements[i].fontName || '').toLowerCase();
+      
+      if (fontName.includes('courierfinal') || fontName.includes('courier final draft')) {
+        console.log('🔍 Font tespiti: CourierFinalDraft bulundu → FINAL_DRAFT');
+        return 'FINAL_DRAFT';
+      }
+      if (fontName.includes('celtx')) {
+        console.log('🔍 Font tespiti: Celtx font bulundu → CELTX');
+        return 'CELTX';
+      }
+      if (fontName.includes('fadein')) {
+        console.log('🔍 Font tespiti: FadeIn font bulundu → GENERIC');
+        return 'GENERIC';
+      }
+    }
+  }
+  
+  // SONRA: METADATA KONTROLÜ (Yedek yöntem)
   if (!meta) return 'GENERIC';
   
-  // Metadata'nın tüm değerlerini lowercase string'e çevir
   const metaString = JSON.stringify(meta).toLowerCase();
   
   // Creator field'da anahtar kelimeler ara
-  if (metaString.includes('final draft')) return 'FINAL_DRAFT';
-  if (metaString.includes('celtx')) return 'CELTX';
-  if (metaString.includes('writerduet')) return 'FINAL_DRAFT'; // WriterDuet de standart format
-  if (metaString.includes('fade in')) return 'GENERIC';
-  if (metaString.includes('word') || metaString.includes('microsoft')) return 'GENERIC';
-  if (metaString.includes('fountain')) return 'GENERIC';
+  if (metaString.includes('final draft')) {
+    console.log('📄 Metadata tespiti: Final Draft creator → FINAL_DRAFT');
+    return 'FINAL_DRAFT';
+  }
+  if (metaString.includes('celtx')) {
+    console.log('📄 Metadata tespiti: Celtx creator → CELTX');
+    return 'CELTX';
+  }
+  if (metaString.includes('writerduet')) {
+    console.log('📄 Metadata tespiti: WriterDuet → FINAL_DRAFT');
+    return 'FINAL_DRAFT';
+  }
+  if (metaString.includes('fade in')) {
+    console.log('📄 Metadata tespiti: Fade In → GENERIC');
+    return 'GENERIC';
+  }
+  if (metaString.includes('word') || metaString.includes('microsoft')) {
+    console.log('📄 Metadata tespiti: Microsoft Word → GENERIC');
+    return 'GENERIC';
+  }
+  if (metaString.includes('fountain')) {
+    console.log('📄 Metadata tespiti: Fountain → GENERIC');
+    return 'GENERIC';
+  }
   
-  console.log('⚠️ Bilinmeyen PDF kaynağı, GENERIC profil kullanılacak');
+  console.log('⚠️ Font ve metadata tespiti başarısız → GENERIC profil');
   return 'GENERIC';
 }
 
@@ -84,10 +126,11 @@ function detectScriptSource(meta) {
  * Tespit edilen kaynağa göre doğru margin profilini yükler
  * 
  * @param {object} metadata - PDF metadata objesi
+ * @param {array} elements - PDF elements array (font bilgisi için)
  * @returns {object} - Seçilen layout profile
  */
-function selectLayoutProfile(metadata) {
-  const sourceApp = detectScriptSource(metadata);
+function selectLayoutProfile(metadata, elements = []) {
+  const sourceApp = detectScriptSource(metadata, elements);
   const profile = LAYOUT_PROFILES[sourceApp] || LAYOUT_PROFILES['GENERIC'];
   
   console.log(`✅ Kaynak Tespit: ${sourceApp} (${profile.description})`);
@@ -396,14 +439,16 @@ export function findCommonProjectTitle(fileNames) {
  */
 export function extractBestTitle(text, metadata = {}, fileNames = null, fileIndex = 0) {
   try {
-    // ADIM 1: DEDEKTİFLİK - Kaynak tespit et
-    const profile = selectLayoutProfile(metadata);
+    // ADIM 1: DEDEKTİFLİK - Kaynak tespit et (font + metadata)
+    const elements = metadata?.elements || [];
+    const profile = selectLayoutProfile(metadata, elements);
     
     console.log('🎯 extractBestTitle çağrıldı:', { 
       hasText: !!text, 
       fileNames, 
       fileIndex,
-      source: profile.name 
+      source: profile.name,
+      elementCount: elements.length
     });
     
     // ADIM 2: METADATA'DAN BAŞLIK ÇIKART (Varsa)
