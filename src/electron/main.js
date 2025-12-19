@@ -406,14 +406,40 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
       try {
         console.log('📄 pdf2json parsing complete');
         
-        // Extract font table from PDF (font index -> font name mapping)
+        // FONT COLLECTION: TÜM SAYFALARDAKI TÜM FONTLARI TOPLA
         const fontTable = {};
-        if (pdfData.Pages?.[0]?.Fonts) {
-          pdfData.Pages[0].Fonts.forEach((font, idx) => {
-            fontTable[idx] = font.name || `Font${idx}`;
-          });
-          console.log('🔤 Font table extracted:', fontTable);
+        const uniqueFonts = new Set();
+        
+        pdfData.Pages?.forEach((page, pageIdx) => {
+          if (page.Fonts) {
+            page.Fonts.forEach((font, idx) => {
+              const fontName = font.name || `Font${idx}`;
+              fontTable[idx] = fontName;
+              uniqueFonts.add(fontName);
+            });
+          }
+        });
+        
+        const fontList = Array.from(uniqueFonts);
+        console.log(`🔤 Toplam ${fontList.length} farklı font bulundu:`, fontList);
+        
+        // SENARYO PROGRAMI DETECTION: Font signature matching
+        let detectedProgram = 'Unknown';
+        const fontString = fontList.join('|').toLowerCase();
+        
+        if (fontString.includes('courierfinal') || fontString.includes('courier final draft')) {
+          detectedProgram = 'Final Draft';
+        } else if (fontString.includes('courier-prime') || fontString.includes('courier prime')) {
+          detectedProgram = 'Celtx / Highland';
+        } else if (fontString.includes('courier screenplay')) {
+          detectedProgram = 'WriterDuet';
+        } else if (fontString.includes('fadein')) {
+          detectedProgram = 'Fade In';
+        } else if (fontString.includes('courier') || fontString.includes('courier new')) {
+          detectedProgram = 'Generic Screenplay';
         }
+        
+        console.log(`🎬 Tespit Edilen Program: ${detectedProgram}`);
         
         // Extract metadata
         metadata = {
@@ -423,7 +449,9 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
           producer: pdfData.Meta?.Producer || '',
           creationDate: pdfData.Meta?.CreationDate || '',
           pages: pdfData.Pages?.length || 0,
-          fonts: fontTable // Font mapping table
+          fonts: fontTable, // Font mapping (index -> name)
+          fontList: fontList, // Unique font names array
+          detectedProgram: detectedProgram // Auto-detected software
         };
         
         totalPages = metadata.pages;

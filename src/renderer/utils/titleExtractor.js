@@ -7,6 +7,38 @@
  * 3. Ölçüm (Koordinat Ayrıştırma): X koordinatlarına göre başlık/bölüm bilgisi çıkar
  */
 
+// SENARYO YAZILIMI FONT SIGNATURE DATABASE
+// Her yazılımın kullandığı karakteristik fontlar
+const SCREENPLAY_FONT_SIGNATURES = {
+  'FINAL_DRAFT': [
+    'courierfinal',
+    'courier final draft',
+    'courierfinal-bold',
+    'courierfinal-italic'
+  ],
+  'CELTX': [
+    'courier-prime',
+    'courier prime',
+    'courierprime'
+  ],
+  'WRITERDUET': [
+    'courier screenplay',
+    'courierscreenplay'
+  ],
+  'FADE_IN': [
+    'fadein',
+    'fade in'
+  ],
+  'HIGHLAND': [
+    'courier-prime',
+    'courier prime'
+  ],
+  'ARC_STUDIO': [
+    'courier',
+    'courier new'
+  ]
+};
+
 // 1. PROFİL HARİTASI (CETVEL AYARLARI)
 // Her programın sayfa düzeni farklıdır. pdf2json birimleri ile ölçülür.
 const LAYOUT_PROFILES = {
@@ -57,82 +89,109 @@ const LAYOUT_PROFILES = {
 /**
  * PDF METADATA OKUYUCU (Dedektiflik Aşaması)
  * PDF'in kimlik kartına bakarak hangi yazılımla oluşturulduğunu bulur
+ * 4-Seviye Tespit: Electron Detection → Font List → Element Fonts → Metadata
  * 
  * @param {object} meta - PDF metadata (pdfData.Meta veya metadata objesi)
  * @param {array} elements - PDF elements array (font bilgisi için)
  * @returns {string} - 'FINAL_DRAFT', 'CELTX', veya 'GENERIC'
  */
 function detectScriptSource(meta, elements = []) {
-  // DEBUG: Elements array yapısını kontrol et
+  // DEBUG: Mevcut veriler
   console.log('🔍 detectScriptSource çağrıldı:', { 
-    hasElements: !!elements, 
-    elementsLength: elements?.length || 0,
-    firstElement: elements?.[0]
+    hasMeta: !!meta,
+    fontList: meta?.fontList,
+    detectedProgram: meta?.detectedProgram,
+    elementsLength: elements?.length || 0
   });
   
-  // ÖNCE: FONT KONTROLÜ (En güvenilir yöntem)
-  // Font isimleri yazılımı kesin olarak belirtir
-  if (elements && elements.length > 0) {
-    // İlk 10 elementi kontrol et (yeterli numune)
-    const sampleSize = Math.min(10, elements.length);
-    console.log(`🔍 Font kontrolü başlıyor: ${sampleSize} element kontrol edilecek`);
+  // SEVİYE 1: ELECTRON-SIDE DETECTION KONTROLÜ (En hızlı ve en güvenilir)
+  if (meta?.detectedProgram && meta.detectedProgram !== 'Unknown') {
+    console.log(`🎬 Electron tarafında tespit edildi: ${meta.detectedProgram}`);
     
-    for (let i = 0; i < sampleSize; i++) {
-      const el = elements[i];
-      const fontName = (el?.fontName || el?.font || el?.style?.fontFamily || '').toLowerCase();
-      
-      console.log(`   Font ${i}: "${fontName}" (raw element keys: ${Object.keys(el || {}).join(', ')})`);
-      
-      if (fontName.includes('courierfinal') || fontName.includes('courier final draft')) {
-        console.log('🔍 Font tespiti: CourierFinalDraft bulundu → FINAL_DRAFT');
-        return 'FINAL_DRAFT';
-      }
-      if (fontName.includes('celtx')) {
-        console.log('🔍 Font tespiti: Celtx font bulundu → CELTX');
-        return 'CELTX';
-      }
-      if (fontName.includes('fadein')) {
-        console.log('🔍 Font tespiti: FadeIn font bulundu → GENERIC');
-        return 'GENERIC';
+    // Program ismini profile key'e çevir
+    const programMap = {
+      'Final Draft': 'FINAL_DRAFT',
+      'Celtx / Highland': 'CELTX',
+      'WriterDuet': 'FINAL_DRAFT', // WriterDuet Final Draft formatı kullanır
+      'Fade In': 'GENERIC',
+      'Generic Screenplay': 'GENERIC'
+    };
+    
+    const profileKey = programMap[meta.detectedProgram] || 'GENERIC';
+    console.log(`✅ Profile: ${profileKey}`);
+    return profileKey;
+  }
+  
+  // SEVİYE 2: FONT LIST KONTROLÜ (metadata.fontList)
+  if (meta?.fontList && Array.isArray(meta.fontList)) {
+    const fontString = meta.fontList.join('|').toLowerCase();
+    console.log(`🔤 Font listesi: ${meta.fontList.join(', ')}`);
+    
+    // Font signature matching
+    for (const [program, signatures] of Object.entries(SCREENPLAY_FONT_SIGNATURES)) {
+      for (const signature of signatures) {
+        if (fontString.includes(signature)) {
+          console.log(`🔍 Font match: "${signature}" → ${program}`);
+          const profileMap = {
+            'FINAL_DRAFT': 'FINAL_DRAFT',
+            'CELTX': 'CELTX',
+            'WRITERDUET': 'FINAL_DRAFT',
+            'FADE_IN': 'GENERIC',
+            'HIGHLAND': 'CELTX',
+            'ARC_STUDIO': 'GENERIC'
+          };
+          return profileMap[program] || 'GENERIC';
+        }
       }
     }
-    console.log('⚠️ Font kontrolü tamamlandı, hiçbir bilinen font bulunamadı');
-  } else {
-    console.log('⚠️ Elements array boş veya undefined');
   }
   
-  // SONRA: METADATA KONTROLÜ (Yedek yöntem)
-  if (!meta) return 'GENERIC';
+  // SEVİYE 3: ELEMENT-LEVEL FONT KONTROLÜ (elements array)
+  if (elements && elements.length > 0) {
+    console.log(`🔍 Element font kontrolü: ${elements.length} element`);
+    
+    const sampleSize = Math.min(10, elements.length);
+    for (let i = 0; i < sampleSize; i++) {
+      const el = elements[i];
+      const fontName = (el?.fontName || '').toLowerCase();
+      
+      if (fontName) {
+        // Font signature matching
+        for (const [program, signatures] of Object.entries(SCREENPLAY_FONT_SIGNATURES)) {
+          for (const signature of signatures) {
+            if (fontName.includes(signature)) {
+              console.log(`🔍 Element font match: "${fontName}" → ${program}`);
+              const profileMap = {
+                'FINAL_DRAFT': 'FINAL_DRAFT',
+                'CELTX': 'CELTX',
+                'WRITERDUET': 'FINAL_DRAFT',
+                'FADE_IN': 'GENERIC',
+                'HIGHLAND': 'CELTX',
+                'ARC_STUDIO': 'GENERIC'
+              };
+              return profileMap[program] || 'GENERIC';
+            }
+          }
+        }
+      }
+    }
+  }
   
-  const metaString = JSON.stringify(meta).toLowerCase();
-  
-  // Creator field'da anahtar kelimeler ara
-  if (metaString.includes('final draft')) {
-    console.log('📄 Metadata tespiti: Final Draft creator → FINAL_DRAFT');
-    return 'FINAL_DRAFT';
-  }
-  if (metaString.includes('celtx')) {
-    console.log('📄 Metadata tespiti: Celtx creator → CELTX');
-    return 'CELTX';
-  }
-  if (metaString.includes('writerduet')) {
-    console.log('📄 Metadata tespiti: WriterDuet → FINAL_DRAFT');
-    return 'FINAL_DRAFT';
-  }
-  if (metaString.includes('fade in')) {
-    console.log('📄 Metadata tespiti: Fade In → GENERIC');
-    return 'GENERIC';
-  }
-  if (metaString.includes('word') || metaString.includes('microsoft')) {
-    console.log('📄 Metadata tespiti: Microsoft Word → GENERIC');
-    return 'GENERIC';
-  }
-  if (metaString.includes('fountain')) {
-    console.log('📄 Metadata tespiti: Fountain → GENERIC');
-    return 'GENERIC';
+  // SEVİYE 4: METADATA STRING KONTROLÜ (Fallback)
+  if (meta) {
+    const metaString = JSON.stringify(meta).toLowerCase();
+    
+    if (metaString.includes('final draft')) {
+      console.log('📄 Metadata: Final Draft bulundu');
+      return 'FINAL_DRAFT';
+    }
+    if (metaString.includes('celtx')) {
+      console.log('📄 Metadata: Celtx bulundu');
+      return 'CELTX';
+    }
   }
   
-  console.log('⚠️ Font ve metadata tespiti başarısız → GENERIC profil');
+  console.log('⚠️ Hiçbir tespit yapılamadı → GENERIC');
   return 'GENERIC';
 }
 
