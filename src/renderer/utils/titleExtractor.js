@@ -1,7 +1,98 @@
 /**
- * Basitleştirilmiş dosya adı odaklı başlık çıkarma modülü
- * PDF içe aktarımında dosya adından proje ve bölüm bilgilerini çıkarır
+ * TITLE EXTRACTOR - PDF Metadata & Profile-Based Title Extraction
+ * 
+ * 3 AŞAMA YAPISI:
+ * 1. Dedektiflik (Metadata Okuma): PDF'in hangi yazılımla oluşturulduğunu tespit et
+ * 2. Haritalama (Profil Seçimi): Tespit edilen yazılımın margin kurallarını yükle
+ * 3. Ölçüm (Koordinat Ayrıştırma): X koordinatlarına göre başlık/bölüm bilgisi çıkar
  */
+
+// 1. PROFİL HARİTASI (CETVEL AYARLARI)
+// Her programın sayfa düzeni farklıdır. pdf2json birimleri ile ölçülür.
+const LAYOUT_PROFILES = {
+  'FINAL_DRAFT': {
+    name: 'Final Draft',
+    description: 'Endüstri standardı. Kurallar çok sıkıdır.',
+    titlePage: {
+      titleY: { min: 15, max: 25 },      // Başlık yukarıda (Y koordinatı)
+      authorY: { min: 30, max: 40 },     // Yazar ortada
+      centered: true                      // Final Draft başlık sayfası ortalanır
+    },
+    margins: {
+      scene: { max: 4.5 },
+      character: { min: 18, max: 28 },
+      dialogue: { min: 10, max: 17 }
+    }
+  },
+  'CELTX': {
+    name: 'Celtx',
+    description: 'Eski popüler yazılım. Boşluklar biraz daha geniştir.',
+    titlePage: {
+      titleY: { min: 12, max: 28 },
+      authorY: { min: 28, max: 45 },
+      centered: true
+    },
+    margins: {
+      scene: { max: 5 },
+      character: { min: 19, max: 29 },
+      dialogue: { min: 9, max: 28 }
+    }
+  },
+  'GENERIC': {
+    name: 'Standart / Word',
+    description: 'Bilinmeyen kaynak. Hata payı yüksek bırakılır.',
+    titlePage: {
+      titleY: { min: 10, max: 35 },      // Word'de her şey olabilir
+      authorY: { min: 25, max: 50 },
+      centered: false                     // Ortalama garantisi yok
+    },
+    margins: {
+      scene: { max: 6 },
+      character: { min: 16, max: 32 },
+      dialogue: { min: 8, max: 35 }
+    }
+  }
+};
+
+/**
+ * PDF METADATA OKUYUCU (Dedektiflik Aşaması)
+ * PDF'in kimlik kartına bakarak hangi yazılımla oluşturulduğunu bulur
+ * 
+ * @param {object} meta - PDF metadata (pdfData.Meta veya metadata objesi)
+ * @returns {string} - 'FINAL_DRAFT', 'CELTX', veya 'GENERIC'
+ */
+function detectScriptSource(meta) {
+  if (!meta) return 'GENERIC';
+  
+  // Metadata'nın tüm değerlerini lowercase string'e çevir
+  const metaString = JSON.stringify(meta).toLowerCase();
+  
+  // Creator field'da anahtar kelimeler ara
+  if (metaString.includes('final draft')) return 'FINAL_DRAFT';
+  if (metaString.includes('celtx')) return 'CELTX';
+  if (metaString.includes('writerduet')) return 'FINAL_DRAFT'; // WriterDuet de standart format
+  if (metaString.includes('fade in')) return 'GENERIC';
+  if (metaString.includes('word') || metaString.includes('microsoft')) return 'GENERIC';
+  if (metaString.includes('fountain')) return 'GENERIC';
+  
+  console.log('⚠️ Bilinmeyen PDF kaynağı, GENERIC profil kullanılacak');
+  return 'GENERIC';
+}
+
+/**
+ * LAYOUT PROFILE SELECTOR (Haritalama Aşaması)
+ * Tespit edilen kaynağa göre doğru margin profilini yükler
+ * 
+ * @param {object} metadata - PDF metadata objesi
+ * @returns {object} - Seçilen layout profile
+ */
+function selectLayoutProfile(metadata) {
+  const sourceApp = detectScriptSource(metadata);
+  const profile = LAYOUT_PROFILES[sourceApp] || LAYOUT_PROFILES['GENERIC'];
+  
+  console.log(`✅ Kaynak Tespit: ${sourceApp} (${profile.description})`);
+  return profile;
+}
 
 /**
  * Dosya adından proje bilgilerini çıkarır (basitleştirilmiş versiyon)
@@ -296,15 +387,31 @@ export function findCommonProjectTitle(fileNames) {
 }
 
 /**
- * Ana başlık çıkarma fonksiyonu - PDF içeriği ve dosya adını birleştirir
- * @param {string} text - PDF metni (şimdi kullanılıyor!)
- * @param {object} metadata - PDF metadata
+ * Ana başlık çıkarma fonksiyonu - PDF Metadata & Profile-Based Extraction
+ * @param {string} text - PDF metni
+ * @param {object} metadata - PDF metadata (creator, title, author vb.)
  * @param {string|string[]} fileNames - Dosya adı/adları
+ * @param {number} fileIndex - Dosya index'i (çoklu dosya için)
  * @returns {string} - En uygun başlık
  */
 export function extractBestTitle(text, metadata = {}, fileNames = null, fileIndex = 0) {
   try {
-    console.log('🎯 extractBestTitle çağrıldı:', { hasText: !!text, fileNames, fileIndex });
+    // ADIM 1: DEDEKTİFLİK - Kaynak tespit et
+    const profile = selectLayoutProfile(metadata);
+    
+    console.log('🎯 extractBestTitle çağrıldı:', { 
+      hasText: !!text, 
+      fileNames, 
+      fileIndex,
+      source: profile.name 
+    });
+    
+    // ADIM 2: METADATA'DAN BAŞLIK ÇIKART (Varsa)
+    let titleFromMetadata = null;
+    if (metadata?.title && metadata.title.length > 3) {
+      titleFromMetadata = metadata.title.trim();
+      console.log('📄 Metadata başlık bulundu:', titleFromMetadata);
+    }
     
     // Dosya adını al
     let fileName = '';
@@ -317,30 +424,33 @@ export function extractBestTitle(text, metadata = {}, fileNames = null, fileInde
     }
     
     // Sadece dosya adını al, yolu kaldır
-    const cleanFileName = fileName.split(/[\\\/]/).pop().replace(/\.[^.]+$/, '');
-    console.log('📁 Temizlenmiş dosya adı:', cleanFileName);
+    const cleanedFileName = fileName.split(/[\\\/]/).pop().replace(/\.[^.]+$/, '');
+    console.log('📁 Temizlenmiş dosya adı:', cleanedFileName);
     
-    // Dosya adından proje başlığını çıkar
-    let projectTitle = cleanFileName;
+    // ADIM 3: PRİORİTE SİSTEMİ
+    // 1. Metadata başlık (varsa ve güvenilirse)
+    // 2. Dosya adı (her zaman var)
+    let projectTitle = titleFromMetadata || cleanedFileName;
     
     // Dosya adında bölüm numarası varsa temizle
     projectTitle = projectTitle
       .replace(/[-_\s]*(?:bölüm|bolum|chapter|part|episode|ep)[-_\s]*\d+/gi, '')
       .replace(/[-_\s]*\d+[-_\s]*(?:bölüm|bolum|chapter|part|episode|ep)/gi, '')
+      .replace(/[-_\s]*S\d+E\d+/gi, '') // S1E1 formatını temizle
       .replace(/[-_\s]*\d+$/gi, '') // Sondaki sayıları kaldır
       .replace(/[-_\s]+$/, '') // Sondaki tireli boşlukları temizle
       .trim();
     
     // Eğer çok kısa kaldıysa orijinal adı kullan
     if (projectTitle.length < 3) {
-      projectTitle = cleanFileName;
+      projectTitle = cleanedFileName;
     }
     
     // Bölüm numarasını hesapla (1'den başlar)
     const chapterNumber = fileIndex + 1;
     const chapterTitle = `${chapterNumber}. Bölüm`;
     
-    console.log(`📋 Proje: "${projectTitle}" - ${chapterTitle}`);
+    console.log(`📋 Proje: "${projectTitle}" - ${chapterTitle} [${profile.name}]`);
     
     // Eski API uyumluluğu için string döndür
     return `${projectTitle} - ${chapterTitle}`;

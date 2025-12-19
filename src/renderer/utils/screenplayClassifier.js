@@ -11,39 +11,8 @@
  * - PAGE_NUMBER: Page numbers
  * - UNKNOWN: Unclassified elements
  * 
- * Uses coordinate-based detection with font analysis for accurate classification.
+ * Uses coordinate-based detection with dynamic calibration.
  */
-
-// Standard screenplay format layout profiles
-export const LAYOUT_PROFILES = {
-  FINAL_DRAFT: {
-    name: 'Final Draft',
-    sceneHeading: { x0Min: 50, x0Max: 100, bold: true, fontSize: 12 },
-    character: { x0Min: 180, x0Max: 250, bold: false, allCaps: true },
-    dialogue: { x0Min: 120, x0Max: 180 },
-    parenthetical: { x0Min: 140, x0Max: 200 },
-    action: { x0Min: 50, x0Max: 100 },
-    transition: { x0Min: 400, x0Max: 550, allCaps: true }
-  },
-  CELTX: {
-    name: 'Celtx',
-    sceneHeading: { x0Min: 60, x0Max: 120, bold: true, fontSize: 12 },
-    character: { x0Min: 200, x0Max: 280, allCaps: true },
-    dialogue: { x0Min: 130, x0Max: 200 },
-    parenthetical: { x0Min: 150, x0Max: 220 },
-    action: { x0Min: 60, x0Max: 120 },
-    transition: { x0Min: 420, x0Max: 570, allCaps: true }
-  },
-  WORD: {
-    name: 'Microsoft Word (Flexible)',
-    sceneHeading: { x0Min: 40, x0Max: 150, bold: true, fontSize: 11 },
-    character: { x0Min: 150, x0Max: 300, allCaps: true },
-    dialogue: { x0Min: 100, x0Max: 200 },
-    parenthetical: { x0Min: 120, x0Max: 220 },
-    action: { x0Min: 40, x0Max: 150 },
-    transition: { x0Min: 350, x0Max: 600, allCaps: true }
-  }
-};
 
 // Scene heading patterns (multi-language)
 const SCENE_HEADING_PATTERNS = [
@@ -66,49 +35,12 @@ const PARENTHETICAL_PATTERN = /^\(.+\)$/;
 const PAGE_NUMBER_PATTERN = /^\d+\.?$/;
 
 /**
- * Detect screenplay format based on PDF metadata
- */
-export function detectFormat(metadata) {
-  const creator = (metadata?.creator || '').toLowerCase();
-  const producer = (metadata?.producer || '').toLowerCase();
-  
-  if (creator.includes('final draft') || producer.includes('final draft')) {
-    return LAYOUT_PROFILES.FINAL_DRAFT;
-  }
-  
-  if (creator.includes('celtx') || producer.includes('celtx')) {
-    return LAYOUT_PROFILES.CELTX;
-  }
-  
-  if (creator.includes('word') || creator.includes('microsoft') || 
-      producer.includes('word') || producer.includes('microsoft')) {
-    return LAYOUT_PROFILES.WORD;
-  }
-  
-  // Default to Word (most flexible)
-  return LAYOUT_PROFILES.WORD;
-}
-
-/**
  * Check if text is all uppercase
  */
 function isAllCaps(text) {
   const letters = text.replace(/[^a-zA-ZÀ-ÿ]/g, '');
   if (letters.length === 0) return false;
   return letters === letters.toUpperCase();
-}
-
-/**
- * Check if font is bold based on fontName and fontWeight
- */
-function isBold(element) {
-  const fontName = (element.fontName || '').toLowerCase();
-  const fontWeight = element.fontWeight || 1;
-  
-  return fontName.includes('bold') || 
-         fontName.includes('heavy') || 
-         fontName.includes('black') ||
-         fontWeight >= 1.5;
 }
 
 /**
@@ -140,138 +72,177 @@ function isPageNumber(text) {
 }
 
 /**
- * Classify a single element
+ * Classify a single element using Calibrated Coordinates
  */
-export function classifyElement(element, prevElement = null, profile = LAYOUT_PROFILES.WORD) {
+export function classifyElement(element, prevElement, calibration = { globalOffset: 0, SCALE_FACTOR: 1 }) {
+  const { globalOffset, SCALE_FACTOR } = calibration;
   const text = element.text.trim();
-  const bbox = element.bbox;
-  
+  const rawX = element.bbox.x0;
+
+  // Dynamic Normalization: Convert to "Character Units" from Left Margin
+  const x = Math.max(0, (rawX - globalOffset)) * SCALE_FACTOR;
+
   // Empty or whitespace-only
   if (!text || text.length === 0) {
-    return { ...element, type: 'UNKNOWN' };
+    return { ...element, type: 'UNKNOWN', x_char: x };
   }
-  
-  // Page numbers (short numeric text at top/bottom)
+
+  // Page numbers (short numeric text, usually very high or low Y, but here checked by content)
   if (isPageNumber(text) && text.length <= 4) {
-    return { ...element, type: 'PAGE_NUMBER' };
+    // Optional: check Y or alignment. For now content is strong signal.
+    return { ...element, type: 'PAGE_NUMBER', x_char: x };
   }
-  
-  // Scene headings (bold, left-aligned, matches pattern)
-  if (matchesSceneHeading(text) && 
-      bbox.x0 >= profile.sceneHeading.x0Min && 
-      bbox.x0 <= profile.sceneHeading.x0Max) {
-    
-    // Extract scene metadata
-    const intExtMatch = text.match(/^(INT\.|EXT\.|INT\/EXT\.|I\/E\.|İÇ|DIŞ|INTERIOR|EXTERIOR)/i);
-    const intExt = intExtMatch ? intExtMatch[1].replace('.', '').toUpperCase() : 'UNKNOWN';
-    
-    // Extract location and time
-    const parts = text.replace(/^(INT\.|EXT\.|INT\/EXT\.|I\/E\.|İÇ|DIŞ)\.?\s*/i, '').split('-');
-    const location = parts[0]?.trim() || '';
-    const timeOfDay = parts[1]?.trim() || '';
-    
-    return {
-      ...element,
-      type: 'SCENE_HEADING',
-      intExt,
-      location,
-      timeOfDay
-    };
-  }
-  
-  // Transitions (right-aligned, all caps)
-  if (matchesTransition(text) && 
-      bbox.x0 >= profile.transition.x0Min && 
-      bbox.x0 <= profile.transition.x0Max) {
-    return { ...element, type: 'TRANSITION' };
-  }
-  
-  // Parentheticals (wrapped in parentheses)
-  if (isParenthetical(text) && 
-      bbox.x0 >= profile.parenthetical.x0Min && 
-      bbox.x0 <= profile.parenthetical.x0Max) {
-    return {
-      ...element,
-      type: 'PARENTHETICAL',
-      character: prevElement?.type === 'CHARACTER' ? prevElement.text : prevElement?.character
-    };
-  }
-  
-  // Character names (centered, all caps, not too long)
-  if (isAllCaps(text) && 
-      text.length >= 2 && 
-      text.length <= 30 &&
-      bbox.x0 >= profile.character.x0Min && 
-      bbox.x0 <= profile.character.x0Max &&
-      !matchesTransition(text)) {
-    
-    // Filter common false positives
-    const falsePositives = ['FADE', 'CUT', 'DISSOLVE', 'CONTINUED', 'BACK TO', 
-                            'MONTAGE', 'END', 'TITLE', 'CREDITS'];
-    if (falsePositives.some(fp => text.includes(fp))) {
-      return { ...element, type: 'ACTION' };
+
+  // Debug logic for classification
+  // console.log(`Classifying: "${text.substring(0,10)}..." X=${x.toFixed(1)}`);
+
+  // --- LOGIC GATES ---
+
+  // 1. SCENE HEADING or ACTION (X < 4.5)
+  // Most Action and Scene Headers start at the left margin (0 indent).
+  if (x < 4.5) {
+    if (matchesSceneHeading(text)) {
+      // Extract metadata
+      const intExtMatch = text.match(/^(INT\.|EXT\.|INT\/EXT\.|I\/E\.|İÇ|DIŞ|INTERIOR|EXTERIOR)/i);
+      const intExt = intExtMatch ? intExtMatch[1].replace('.', '').toUpperCase() : 'UNKNOWN';
+
+      const parts = text.replace(/^(INT\.|EXT\.|INT\/EXT\.|I\/E\.|İÇ|DIŞ)\.?\s*/i, '').split('-');
+      const location = parts[0]?.trim() || '';
+      const timeOfDay = parts[1]?.trim() || '';
+
+      return {
+        ...element,
+        type: 'SCENE_HEADING',
+        intExt,
+        location,
+        timeOfDay,
+        x_char: x
+      };
+    } else if (matchesTransition(text)) {
+      // Rare: Left aligned transition
+      return { ...element, type: 'TRANSITION', x_char: x };
+    } else {
+      // Default to Action
+      return { ...element, type: 'ACTION', x_char: x };
     }
-    
-    return { ...element, type: 'CHARACTER' };
   }
-  
-  // Dialogue (follows character name, indented)
-  if (prevElement?.type === 'CHARACTER' && 
-      bbox.x0 >= profile.dialogue.x0Min && 
-      bbox.x0 <= profile.dialogue.x0Max) {
-    return {
-      ...element,
-      type: 'DIALOGUE',
-      character: prevElement.text
-    };
+
+  // 2. CHARACTER (X > 18)
+  // Character names are indented significantly (~20-25 chars).
+  // Transitions are also right-aligned or indented.
+  // Parentheticals are also indented, but usually follow Character or Dialogue.
+  if (x > 18) {
+    // Transition? (Usually distinct text patterns or very far right)
+    if (matchesTransition(text) || x > 45) { // 45 chars is very far right
+      return { ...element, type: 'TRANSITION', x_char: x };
+    }
+
+    // Character? (All Caps)
+    if (isAllCaps(text) && text.length > 1 && text.length < 50 && !isParenthetical(text)) {
+      // False positives check
+      if (['CONTINUED', 'BACK TO'].some(t => text.includes(t))) {
+        return { ...element, type: 'TRANSITION', x_char: x };
+      }
+      return { ...element, type: 'CHARACTER', x_char: x };
+    }
+
+    // Parenthetical?
+    if (isParenthetical(text)) {
+      return {
+        ...element,
+        type: 'PARENTHETICAL',
+        character: prevElement?.type === 'CHARACTER' ? prevElement.text : prevElement?.character,
+        x_char: x
+      };
+    }
+
+    // Fallback: If not all caps but indented > 18?
+    // Could be dual dialogue or weird formatting.
+    // Or simple Dialogue if Indent > 18 (e.g. 2.5 inch = 180pts = 25 chars... wait)
+    // If Dialogue starts at 2.5 inch, that is 15 chars (vs Margin).
+    // If Character starts at 3.7 inch, that is 25 chars.
+    // So 18 is between Dialogue and Character?
+    // If x > 18 and NOT all caps, it might be Dialogue (if indent is large) or Action (if widely indented).
+    // Assuming Dialogue for now if prev was Character.
+    if (prevElement?.type === 'CHARACTER' || prevElement?.type === 'DIALOGUE' || prevElement?.type === 'PARENTHETICAL') {
+      return { ...element, type: 'DIALOGUE', character: prevElement.character, x_char: x };
+    }
+
+    return { ...element, type: 'ACTION', x_char: x }; // Indented Action
   }
-  
-  // Dialogue continuation (follows dialogue or parenthetical)
-  if ((prevElement?.type === 'DIALOGUE' || prevElement?.type === 'PARENTHETICAL') && 
-      bbox.x0 >= profile.dialogue.x0Min && 
-      bbox.x0 <= profile.dialogue.x0Max) {
-    return {
-      ...element,
-      type: 'DIALOGUE',
-      character: prevElement.character
-    };
+
+  // 3. DIALOGUE (10 < X <= 18)
+  // Dialogue is indented, but less than Character.
+  if (x >= 8 && x <= 22) { // Relaxed range
+    if (isParenthetical(text)) {
+      return {
+        ...element,
+        type: 'PARENTHETICAL',
+        character: prevElement?.type === 'CHARACTER' ? prevElement.text : prevElement?.character,
+        x_char: x
+      };
+    }
+
+    if (prevElement?.type === 'CHARACTER' || prevElement?.type === 'DIALOGUE' || prevElement?.type === 'PARENTHETICAL') {
+      return {
+        ...element,
+        type: 'DIALOGUE',
+        character: prevElement.character || prevElement.text, // If prev was Character, use its text
+        x_char: x
+      };
+    }
   }
-  
-  // Action/description (left-aligned, default)
-  if (bbox.x0 >= profile.action.x0Min && 
-      bbox.x0 <= profile.action.x0Max) {
-    return { ...element, type: 'ACTION' };
-  }
-  
-  // Fallback: Unknown
-  return { ...element, type: 'UNKNOWN' };
+
+  // Fallback: Action
+  return { ...element, type: 'ACTION', x_char: x };
 }
 
 /**
  * Classify all elements in a document
  */
 export function classifyElements(elements, metadata = null) {
-  const profile = detectFormat(metadata);
-  
-  console.log(`🎯 Using screenplay profile: ${profile.name}`);
-  
+  // 1. Calculate Calibration
+  const xValues = elements.map(e => e.bbox?.x0 || 0).filter(x => x > 10).sort((a, b) => a - b);
+  const leftMarginBias = xValues.length > 0 ? xValues[0] : 0;
+
+  const sampleX = elements.slice(0, 50).map(e => e.bbox?.x0 || 0).reduce((a, b) => a + b, 0) / 50;
+  const isPointSystem = sampleX > 40;
+
+  const PT_TO_CHAR = 1 / 7.2;
+  const SCALE_FACTOR = isPointSystem ? PT_TO_CHAR : 1;
+  const globalOffset = isPointSystem ? leftMarginBias : 0;
+
+  console.log(`📏 Classifier Calibration: Offset=${globalOffset.toFixed(2)}, Scale=${SCALE_FACTOR.toFixed(3)}`);
+
   const classified = [];
   let prevElement = null;
-  
+
   for (const element of elements) {
-    const classifiedElement = classifyElement(element, prevElement, profile);
+    const classifiedElement = classifyElement(element, prevElement, { globalOffset, SCALE_FACTOR });
+
+    // Fix Character reference for Dialogue if missed
+    if (classifiedElement.type === 'DIALOGUE' && !classifiedElement.character && prevElement?.type === 'CHARACTER') {
+      classifiedElement.character = prevElement.text;
+    }
+    // Propagate character from previous dialogue/parenthetical
+    if ((classifiedElement.type === 'DIALOGUE' || classifiedElement.type === 'PARENTHETICAL') && !classifiedElement.character) {
+      if (prevElement?.character) {
+        classifiedElement.character = prevElement.character;
+      }
+    }
+
     classified.push(classifiedElement);
     prevElement = classifiedElement;
   }
-  
+
   // Statistics
   const stats = classified.reduce((acc, el) => {
     acc[el.type] = (acc[el.type] || 0) + 1;
     return acc;
   }, {});
-  
+
   console.log('📊 Classification statistics:', stats);
-  
+
   return classified;
 }
 
@@ -282,14 +253,14 @@ export function groupIntoScenes(classifiedElements) {
   const scenes = [];
   let currentScene = null;
   let sceneNumber = 0;
-  
+
   for (const element of classifiedElements) {
     if (element.type === 'SCENE_HEADING') {
       // Save previous scene
       if (currentScene) {
         scenes.push(currentScene);
       }
-      
+
       // Start new scene
       sceneNumber++;
       currentScene = {
@@ -303,23 +274,32 @@ export function groupIntoScenes(classifiedElements) {
         endPage: element.page,
         startElementId: element.id,
         endElementId: element.id,
-        elementIds: [element.id]
+        elementIds: [element.id],
+        dialogue: [], // Added for compatibility
+        action: []
       };
     } else if (currentScene) {
       // Add element to current scene
       currentScene.elementIds.push(element.id);
       currentScene.endPage = element.page;
       currentScene.endElementId = element.id;
+
+      // Collect text
+      if (element.type === 'DIALOGUE') {
+        currentScene.dialogue.push(element);
+      } else if (element.type === 'ACTION') {
+        currentScene.action.push(element);
+      }
     }
   }
-  
+
   // Add last scene
   if (currentScene) {
     scenes.push(currentScene);
   }
-  
+
   console.log(`🎬 Grouped into ${scenes.length} scenes`);
-  
+
   return scenes;
 }
 
@@ -328,20 +308,20 @@ export function groupIntoScenes(classifiedElements) {
  */
 export function extractCharacters(classifiedElements) {
   const characterSet = new Set();
-  
+
   for (const element of classifiedElements) {
     if (element.type === 'CHARACTER') {
       // Clean character name (remove extensions like (V.O.), (O.S.))
       const cleanName = element.text
         .replace(/\s*\(.*?\)\s*/g, '')
         .trim();
-      
+
       if (cleanName.length >= 2) {
         characterSet.add(cleanName);
       }
     }
   }
-  
+
   return Array.from(characterSet).sort();
 }
 
@@ -350,12 +330,12 @@ export function extractCharacters(classifiedElements) {
  */
 export function extractLocations(classifiedElements) {
   const locationSet = new Set();
-  
+
   for (const element of classifiedElements) {
     if (element.type === 'SCENE_HEADING' && element.location) {
       locationSet.add(element.location);
     }
   }
-  
+
   return Array.from(locationSet).sort();
 }

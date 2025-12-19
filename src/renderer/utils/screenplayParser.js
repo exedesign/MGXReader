@@ -71,7 +71,7 @@ export class ScreenplayParser {
    */
   async parseFile(fileBuffer, fileName) {
     const extension = fileName.toLowerCase().split('.').pop();
-    
+
     try {
       switch (extension) {
         case 'pdf':
@@ -109,7 +109,7 @@ export class ScreenplayParser {
 
     try {
       console.log('🚀 Koordinat Bazlı PDF Analizi Başlatılıyor...');
-      
+
       // Buffer'ı geçici dosyaya kaydet (Electron API dosya yolu bekler)
       const tempPath = await this.saveTempFile(buffer, fileName);
       const pdfData = await window.electronAPI.parseAdvancedPDF(tempPath);
@@ -128,7 +128,7 @@ export class ScreenplayParser {
 
       // Ana işlem: pdf2json koordinatlarını analiz et
       return this.processPDFElements(pdfData);
-      
+
     } catch (error) {
       console.error('❌ PDF koordinat ayrıştırma hatası:', error);
       console.log('📌 Fallback yöntemine geçiliyor...');
@@ -140,185 +140,221 @@ export class ScreenplayParser {
    * PDF2JSON SONUÇLARINI İŞLE - CORE LOGIC
    * Koordinatlara bakarak element türlerini %99 doğrulukla tespit eder
    */
+  /**
+ * PDF2JSON SONUÇLARINI İŞLE - YENİ NESİL ANALİZ MOTORU
+ * Kullanıcı Yol Haritası Bölüm 1.2: Koordinat Bazlı Keskin Nişancı Mantığı
+ */
   processPDFElements(pdfData) {
     const { elements, metadata, totalPages } = pdfData;
 
-    // 1. ADIM: KİMLİK TESPİTİ (Metadata Analizi)
-    // PDF'in hangi yazılımla oluşturulduğunu tespit et
+    // 1. KAYNAK TESPİTİ VE PROFİL SEÇİMİ (Source Detection)
     const sourceApp = this.detectScriptSource(metadata);
-    const profile = LAYOUT_PROFILES[sourceApp] || LAYOUT_PROFILES['GENERIC'];
-    
-    console.log(`🎬 Analiz Profili: ${sourceApp} (${profile.name})`);
-    console.log(`📊 ${elements.length} element, ${totalPages} sayfa`);
+    console.log(`🎬 Analiz Kaynağı: ${sourceApp}`);
+
+    // Koordinat Dönüştürücü (Calibration) - 3. NESİL
+    // Kullanıcının birimleri (4.5, 10, 18) "Sol Marjdan İtibaren Karakter Sayısı"dır.
+    // 1 Karakter (Courier 12) yakl. 7.2 point (veya 0.1 inch).
+    // Ancak PDF'de sol marj (1-1.5 inch) vardır. Bu yüzden önce "Sol Marjı" (Global Offset) bulmalıyız.
+
+    // 1. Sol Marj Tespiti (Global Min X)
+    // Tüm elemanların en solundaki değeri bul (büyük ihtimalle Sahne Başlıkları veya Aksiyon)
+    // Ancak Page Number veya noise (0 varyasyonları) filtrelemeliyiz.
+    const xValues = elements.map(e => e.bbox?.x0 || 0).filter(x => x > 10).sort((a, b) => a - b);
+    // İlk %10'luk dilimin medyanı sol marjdır.
+    const leftMarginBias = xValues.length > 0 ? xValues[0] : 0;
+
+    // Point Detect
+    const sampleX = elements.slice(0, 50).map(e => e.bbox?.x0 || 0).reduce((a, b) => a + b, 0) / 50;
+    const isPointSystem = sampleX > 40;
+
+    // Scale Factor: Point -> Char
+    // 1 Char ~ 7.2 Points (Courier 12)
+    // Eğer veriler "Point" ise 1/7.2 ile çarp. Değilse 1.
+    const PT_TO_CHAR = 1 / 7.2;
+    const SCALE_FACTOR = isPointSystem ? PT_TO_CHAR : 1;
+
+    const globalOffset = isPointSystem ? leftMarginBias : 0;
+
+    console.log(`📏 Kalibrasyon: Sol Marj (Offset): ${globalOffset.toFixed(2)}, Scale: ${SCALE_FACTOR.toFixed(3)}`);
 
     let screenplay = {
-      title: this.cleanText(metadata?.title) || 'Adsız Senaryo',
-      author: metadata?.author || 'Bilinmeyen Yazar',
+      title: this.cleanText(metadata?.title) || 'Analiz Edilen Senaryo',
+      author: metadata?.author || 'Yazar',
       scenes: [],
       characters: new Set(),
       locations: new Set(),
       text: '',
-      metadata: { 
-        format: 'PDF', 
-        source: profile.name,
-        pages: totalPages,
-        creator: metadata?.creator || 'Unknown',
-        parsingMethod: 'COORDINATE_BASED'
+      metadata: {
+        format: 'PDF',
+        source: sourceApp,
+        parsingMethod: 'COORDINATE_GRID_V3_DYNAMIC'
       }
     };
 
     let currentScene = null;
     let sceneNumber = 1;
-    let lastCharacter = null; // Diyalog takibi için
-    let lineBuffer = ''; // Satır birleştirme için
+    let lastCharacter = null;
+    let lineBuffer = '';
 
-    // 2. ADIM: GEOMETRİK TARAMA
-    // Elementler pdf2json tarafından Y konumuna göre sıralanmış
     elements.forEach((item, index) => {
       const text = this.cleanText(item.text);
-      const x = item.bbox.x0; // KRİTİK VERİ: Soldan girinti (points)
-      const nextItem = elements[index + 1];
-      
       if (!text.trim()) return;
 
-      // Satır birleştirme: Aynı Y konumundaki elementleri birleştir
+      let rawX = item.bbox.x0;
+
+      // Dinamik Normalizasyon:
+      // X = (HamX - SolMarj) * Scale
+      // Negatif çıkarsa 0 kabul et (Marj dışı notlar veya page number)
+      const x = Math.max(0, (rawX - globalOffset)) * SCALE_FACTOR;
+
+      // Debug log for first few items
+      if (index < 5) console.log(`   🏷️ "${text.substring(0, 10)}..." Raw: ${rawX.toFixed(0)} -> Net: ${x.toFixed(1)} chars`);
+
+      const nextItem = elements[index + 1];
+
+      // Satır birleştirme 
       if (nextItem && Math.abs(item.bbox.y0 - nextItem.bbox.y0) < 2) {
         lineBuffer += text + ' ';
-        return; // Sonraki elemana geç
+        return;
       }
 
-      // Tam satır hazır
-      const fullText = lineBuffer ? (lineBuffer + text).trim() : text;
-      lineBuffer = ''; // Buffer'ı temizle
+      const fullText = (lineBuffer + text).trim();
+      lineBuffer = '';
 
       screenplay.text += fullText + '\n';
 
-      // 3. ADIM: KOORDİNAT EŞLEŞTİRME (Logic Layer)
-      
-      // A. SAHNE BAŞLIĞI TESPİTİ
-      // Kural: En solda olmalı (x < 72) VE Sahne anahtar kelimelerini içermeli
-      if (x <= profile.margins.scene.max && this.isLikelySceneHeading(fullText)) {
-        if (currentScene) {
-          screenplay.scenes.push(this.finalizeScene(currentScene));
+      // 🧠 BÖLÜM 1: AKILLI PROFİLLEME VE MEKANSAL OKUMA LOGIC
+
+      // 1. SAHNE VEYA AKSİYON (X < 4.5)
+      // "Bir satırın ne olduğu, içinde ne yazdığına değil; X koordinatına göre belirlenir."
+      if (x < 4.5) {
+        // Sahne mi Aksiyon mu? -> İçerik kontrolü (Scene Heading Heuristics)
+        if (this.isLikelySceneHeading(fullText)) {
+          if (currentScene) screenplay.scenes.push(this.finalizeScene(currentScene));
+
+          const locationData = this.extractLocationData(fullText);
+          currentScene = {
+            number: sceneNumber++,
+            header: fullText,
+            heading: fullText,
+            dialogue: [],
+            action: [],
+            characters: new Set(),
+            location: locationData.location,
+            intExt: locationData.intExt,
+            timeOfDay: locationData.timeOfDay,
+            text: fullText + '\n'
+          };
+          screenplay.locations.add(currentScene.location);
+          lastCharacter = null;
+        } else {
+          // SAHNE DEĞİLSE AKSİYONDUR.
+          if (currentScene) {
+            currentScene.action.push(fullText);
+            currentScene.text += fullText + '\n';
+          }
+          lastCharacter = null;
         }
-        
-        const locationData = this.extractLocationData(fullText);
-        currentScene = {
-          number: sceneNumber++,
-          header: fullText,
-          heading: fullText, // Alias
-          dialogue: [],
-          action: [],
-          characters: new Set(),
-          location: locationData.location,
-          intExt: locationData.intExt,
-          timeOfDay: locationData.timeOfDay,
-          text: fullText + '\n'
-        };
-        screenplay.locations.add(currentScene.location);
-        lastCharacter = null;
-        
-        console.log(`  📍 Sahne ${sceneNumber - 1}: ${fullText.substring(0, 50)}...`);
       }
-      
-      // B. KARAKTER İSMİ TESPİTİ
-      // Kural: "Karakter Sütunu" içinde (216-324 points) VE BÜYÜK HARF
-      else if (x >= profile.margins.character.min && x <= profile.margins.character.max) {
-        if (fullText === fullText.toUpperCase() && fullText.length > 1 && fullText.length < 50) {
-          // Parantez içi notları temizle: JOHN (V.O.) -> JOHN
+
+      // 2. KARAKTER (X > 18)
+      else if (x > 18) {
+        let isCharacter = false;
+
+        if (sourceApp === 'FINAL_DRAFT') {
+          // Final Draft için kati kural: 18-35 arası (biraz esnek tutuyorum)
+          if (x >= 18 && x <= 35 && this.isLikelyCharacter(fullText)) {
+            isCharacter = true;
+          }
+        } else {
+          // Word/Diğer - Esnek
+          if (this.isLikelyCharacter(fullText)) {
+            isCharacter = true;
+          }
+        }
+
+        if (isCharacter) {
           const charName = fullText.replace(/\s*\([^)]*\)/g, '').trim();
-          
           if (charName.length > 0 && !this.isPageNumber(charName)) {
             screenplay.characters.add(charName);
             lastCharacter = charName;
-            
             if (currentScene) {
               currentScene.characters.add(charName);
-              currentScene.text += `\n${fullText}\n`;
+              currentScene.text += '\n' + fullText + '\n';
             }
           }
         }
+        // X > 18 ama Karakter değil -> Muhtemelen GEÇİŞ (Transition) veya Parantez (Parenthetical)
+        else if (this.isTransition(fullText)) {
+          if (currentScene) currentScene.text += '\n' + fullText + '\n';
+        }
+        // Parantez içi? (Diyalogla Karakter arasında)
+        else if (this.isParenthetical(fullText)) {
+          if (currentScene) currentScene.text += fullText + '\n';
+        }
+        // Bu koordinatta (ör: 20) diyalog olamaz, diyalog daha soldadır (10). 
+        // Ancak bazı formatlarda diyalog ortalanmış olabilir. Şimdilik kati kural uyguluyoruz.
       }
-      
-      // C. DİYALOG TESPİTİ
-      // Kural: "Diyalog Sütunu" içinde (144-252) VE parantez değil VE karakter sonrası
-      else if (x >= profile.margins.dialogue.min && x <= profile.margins.dialogue.max) {
-        if (!this.isParenthetical(fullText) && currentScene && lastCharacter) {
-          currentScene.dialogue.push({
-            character: lastCharacter,
-            text: fullText
-          });
-          currentScene.text += `${fullText}\n`;
+
+      // 3. DİYALOG (X > 10)
+      // Karakter (X>18) ile Sol (X<4.5) arasındaki orta bölge
+      else if (x > 10 && x <= 18) {
+        if (currentScene && lastCharacter) {
+          if (this.isParenthetical(fullText)) {
+            currentScene.text += fullText + '\n';
+          } else {
+            currentScene.dialogue.push({
+              character: lastCharacter,
+              text: fullText
+            });
+            currentScene.text += fullText + '\n';
+          }
+        } else {
+          // Sahnesiz veya karaktersiz diyalog olmaz -> Aksiyon olarak işle
+          if (currentScene) {
+            currentScene.action.push(fullText);
+            currentScene.text += fullText + '\n';
+          }
         }
       }
-      
-      // D. PARANTEZ İÇİ (PARENTHETICAL)
-      // Kural: Parantezle sarılı VE orta bölge
-      else if (this.isParenthetical(fullText) && 
-               x >= profile.margins.parenthetical.min && 
-               x <= profile.margins.parenthetical.max) {
-        if (currentScene) {
-          currentScene.text += `${fullText}\n`;
-        }
-      }
-      
-      // E. GEÇİŞ (TRANSITION)
-      // Kural: Sağda (x > 432) VE büyük harf VE geçiş anahtar kelimesi
-      else if (x >= profile.margins.transition.min && this.isTransition(fullText)) {
-        if (currentScene) {
-          currentScene.text += `\n${fullText}\n`;
-        }
-      }
-      
-      // F. AKSİYON / TASVİR
-      // Kural: En solda ama Sahne Başlığı değil
-      else if (x <= profile.margins.action.max && !this.isPageNumber(fullText)) {
+
+      // KAPSAM DIŞI (4.5 < X < 10)
+      // Bu aralık genelde boştur veya hatalı marjinli aksiyondur.
+      else if (x >= 4.5 && x <= 10) {
         if (currentScene) {
           currentScene.action.push(fullText);
-          currentScene.text += `${fullText}\n`;
+          currentScene.text += fullText + '\n';
         }
-        lastCharacter = null; // Aksiyon diyalog zincirini kırar
       }
+
     });
 
-    // Son sahneyi ekle
-    if (currentScene) {
-      screenplay.scenes.push(this.finalizeScene(currentScene));
-    }
-
-    // Veri temizliği ve dönüşüm
+    if (currentScene) screenplay.scenes.push(this.finalizeScene(currentScene));
     screenplay.characters = Array.from(screenplay.characters);
     screenplay.locations = Array.from(screenplay.locations);
-    
-    console.log(`✅ Koordinat Bazlı Ayrıştırma Tamamlandı:`);
-    console.log(`   📍 ${screenplay.scenes.length} sahne`);
-    console.log(`   👥 ${screenplay.characters.length} karakter`);
-    console.log(`   🗺️  ${screenplay.locations.length} lokasyon`);
-    
+
     return screenplay;
   }
 
   /**
-   * KİMLİK TESPİTÇİSİ: PDF'in hangi yazılımla oluşturulduğunu tespit eder
+   * Kaynak Tespiti: PDF Metadata'sından (Creator/Producer) algıla
    */
   detectScriptSource(meta) {
     if (!meta) return 'GENERIC';
-    
-    const creator = (meta.creator || '').toLowerCase();
-    const producer = (meta.producer || '').toLowerCase();
-    const metaStr = JSON.stringify(meta).toLowerCase();
+    const raw = JSON.stringify(meta).toLowerCase();
 
-    if (creator.includes('final draft') || producer.includes('final draft')) {
-      return 'FINAL_DRAFT';
-    }
-    if (creator.includes('celtx') || producer.includes('celtx')) {
-      return 'CELTX';
-    }
-    if (creator.includes('fade in')) {
-      return 'GENERIC'; 
-    }
-    
+    if (raw.includes('final draft')) return 'FINAL_DRAFT';
+    if (raw.includes('celtx')) return 'CELTX';
+    if (raw.includes('microsoft term') || raw.includes('word')) return 'WORD';
     return 'GENERIC';
+  }
+
+  /**
+   * Karakter olma ihtimali (Büyük harf kontrolü vs)
+   */
+  isLikelyCharacter(text) {
+    const t = text.trim();
+    return t === t.toUpperCase() && t.length > 0 && !this.isPageNumber(t) && !this.isTransition(t);
   }
 
   /**
@@ -329,7 +365,7 @@ export class ScreenplayParser {
     try {
       const xmlContent = buffer.toString('utf-8');
       const result = await this.parser.parseStringPromise(xmlContent);
-      
+
       const finalDraft = result.FinalDraft || result.finaldraft;
       if (!finalDraft) {
         throw new Error('Invalid Final Draft file structure');
@@ -361,7 +397,7 @@ export class ScreenplayParser {
       for (const paragraph of paragraphs) {
         const type = paragraph.$.Type;
         const text = this.extractTextFromParagraph(paragraph);
-        
+
         screenplay.text += text + '\\n';
 
         switch (type) {
@@ -416,7 +452,7 @@ export class ScreenplayParser {
       }));
 
       return screenplay;
-      
+
     } catch (error) {
       throw new Error(`Final Draft parsing error: ${error.message}`);
     }
@@ -429,11 +465,11 @@ export class ScreenplayParser {
   async parseCeltx(buffer) {
     try {
       const zip = await JSZip.loadAsync(buffer);
-      
+
       // Find the main script file (usually script.html or index.html)
       let scriptFile = null;
       const possibleFiles = ['script.html', 'index.html', 'content.html'];
-      
+
       for (const fileName of possibleFiles) {
         if (zip.files[fileName]) {
           scriptFile = zip.files[fileName];
@@ -478,7 +514,7 @@ export class ScreenplayParser {
         const $el = $(element);
         const className = $el.attr('class');
         const text = $el.text().trim();
-        
+
         if (!text) return;
 
         screenplay.text += text + '\\n';
@@ -535,7 +571,7 @@ export class ScreenplayParser {
       }));
 
       return screenplay;
-      
+
     } catch (error) {
       throw new Error(`Celtx parsing error: ${error.message}`);
     }
@@ -546,7 +582,7 @@ export class ScreenplayParser {
    */
   parseText(content) {
     const lines = content.split('\\n');
-    
+
     let screenplay = {
       title: this.extractTitleFromText(lines),
       author: this.extractAuthorFromText(lines),
@@ -654,10 +690,10 @@ export class ScreenplayParser {
    */
   isLikelySceneHeading(text) {
     const t = text.toUpperCase().trim();
-    return t.startsWith('INT') || t.startsWith('EXT') || 
-           t.startsWith('İÇ') || t.startsWith('DIŞ') || 
-           t.includes('SAHNE') || t.includes('SCENE') ||
-           /^(INT\.|EXT\.|INT\/EXT\.|I\/E\.)/.test(t);
+    return t.startsWith('INT') || t.startsWith('EXT') ||
+      t.startsWith('İÇ') || t.startsWith('DIŞ') ||
+      t.includes('SAHNE') || t.includes('SCENE') ||
+      /^(INT\.|EXT\.|INT\/EXT\.|I\/E\.)/.test(t);
   }
 
   /**
@@ -696,7 +732,7 @@ export class ScreenplayParser {
     if (!header) return { location: 'Unknown', intExt: 'INT', timeOfDay: 'DAY' };
 
     const text = header.toUpperCase().trim();
-    
+
     // INT/EXT tespiti
     let intExt = 'INT';
     if (text.startsWith('EXT') || text.startsWith('DIŞ')) {
@@ -741,12 +777,12 @@ export class ScreenplayParser {
     const tempDir = await window.electronAPI.getTempDir();
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const tempPath = `${tempDir}/mgx_temp_${Date.now()}_${safeName}`;
-    
+
     await window.electronAPI.saveFile({
       filePath: tempPath,
       data: buffer
     });
-    
+
     return tempPath;
   }
 
@@ -755,7 +791,7 @@ export class ScreenplayParser {
    */
   async parsePDFFallback(buffer) {
     console.log('📌 Fallback PDF parsing (text-only mode)');
-    
+
     // Electron'un standart PDF parser'ını kullan
     if (window.electronAPI?.parsePDF) {
       try {
@@ -767,7 +803,7 @@ export class ScreenplayParser {
         console.error('Fallback PDF parse hatası:', e);
       }
     }
-    
+
     // En son çare: Buffer'ı string olarak parse et
     const text = buffer.toString('utf-8');
     return this.parseText(text);
@@ -872,23 +908,23 @@ export class ScreenplayParser {
     const upper = line.toUpperCase();
     // Çoklu dil sahne başlıkları: SAHNE/SCENE/SZENE/SCÈNE/ESCENA/SCENA/CENA + rakam (boşluklu veya boşluksuz)
     const sceneNumberPattern = /^(SAHNE|SCENE|SZENE|SCÈNE|ESCENA|SCENA|CENA)\s*\d+/i;
-    
-    return upper.startsWith('INT.') || 
-           upper.startsWith('EXT.') || 
-           upper.startsWith('İÇ.') || 
-           upper.startsWith('DIŞ.') ||
-           sceneNumberPattern.test(upper) ||
-           /^[A-Z\\s\\.\\-]+\\s+(DAY|NIGHT|MORNING|EVENING|GECE|GÜNDÜZ|SABAH|AKŞAM)/.test(upper);
+
+    return upper.startsWith('INT.') ||
+      upper.startsWith('EXT.') ||
+      upper.startsWith('İÇ.') ||
+      upper.startsWith('DIŞ.') ||
+      sceneNumberPattern.test(upper) ||
+      /^[A-Z\\s\\.\\-]+\\s+(DAY|NIGHT|MORNING|EVENING|GECE|GÜNDÜZ|SABAH|AKŞAM)/.test(upper);
   }
 
   isCharacterName(line) {
     // Character names are usually all caps, centered, and not scene headings
-    return line === line.toUpperCase() && 
-           line.length > 1 && 
-           line.length < 50 && 
-           !this.isSceneHeading(line) &&
-           !/^[0-9]/.test(line) &&
-           !/\\.(com|org|net|edu)$/.test(line.toLowerCase());
+    return line === line.toUpperCase() &&
+      line.length > 1 &&
+      line.length < 50 &&
+      !this.isSceneHeading(line) &&
+      !/^[0-9]/.test(line) &&
+      !/\\.(com|org|net|edu)$/.test(line.toLowerCase());
   }
 
   isDialogue(line) {

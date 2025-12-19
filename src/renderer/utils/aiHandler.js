@@ -5,6 +5,7 @@
 
 import axios from 'axios';
 import { createEnhancedAnalysisEngine } from './enhancedAnalysisEngine.js';
+import useAssetStore from '../store/assetStore.js';
 
 // Set global axios timeout to prevent default 18s timeout
 axios.defaults.timeout = 300000; // 5 minutes
@@ -18,7 +19,7 @@ class GeminiContextCache {
   constructor() {
     this.caches = new Map(); // scriptHash -> { cacheId, ttl, createdAt }
   }
-  
+
   /**
    * Create a cached content entry for screenplay text
    * @param {string} apiKey - Gemini API key
@@ -34,9 +35,9 @@ class GeminiContextCache {
       console.log('✅ Reusing existing cache:', existing.cacheId);
       return existing.cacheId;
     }
-    
+
     const url = `https://generativelanguage.googleapis.com/v1beta/cachedContents`;
-    
+
     const requestBody = {
       model: `models/${model}`,
       contents: [{
@@ -53,10 +54,10 @@ class GeminiContextCache {
       ttl: '3600s', // 1 hour cache
       displayName: `screenplay_${scriptHash.substring(0, 8)}`
     };
-    
+
     try {
       console.log('🔄 Creating Gemini context cache...');
-      
+
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -65,15 +66,15 @@ class GeminiContextCache {
         },
         body: JSON.stringify(requestBody)
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(`Cache creation failed: ${errorData.error?.message || response.statusText}`);
       }
-      
+
       const data = await response.json();
       const cacheId = data.name; // Format: "cachedContents/abc123"
-      
+
       // Store cache metadata
       this.caches.set(scriptHash, {
         cacheId: cacheId,
@@ -81,17 +82,17 @@ class GeminiContextCache {
         createdAt: Date.now(),
         model: model
       });
-      
+
       console.log('✅ Context cache created:', cacheId);
       return cacheId;
-      
+
     } catch (error) {
       console.error('❌ Cache creation error:', error.message);
       // Fallback: continue without cache
       return null;
     }
   }
-  
+
   /**
    * Get cache ID for a script
    */
@@ -102,7 +103,7 @@ class GeminiContextCache {
     }
     return null;
   }
-  
+
   /**
    * Clear expired caches
    */
@@ -199,21 +200,21 @@ export const GEMINI_PRICING = {
   'gemini-2.5-flash-preview-09-2025': { input: 0.30, output: 2.50, cached: 0.03 },
   'gemini-2.5-flash-lite': { input: 0.10, output: 0.40, cached: 0.01 },
   'gemini-2.5-flash-lite-preview-09-2025': { input: 0.10, output: 0.40, cached: 0.01 },
-  
+
   // Gemini 2.0 Serisi
   'gemini-2.0-flash': { input: 0.10, output: 0.40, cached: 0.025 },
   'gemini-2.0-flash-lite': { input: 0.075, output: 0.30, cached: 0 },
   'gemini-2.0-flash-exp': { input: 0, output: 0, cached: 0 }, // Free experimental
-  
+
   // Gemini 1.5 Serisi (Legacy)
   'gemini-1.5-pro': { input: 1.25, output: 10.00, cached: 0.125 },
   'gemini-1.5-flash': { input: 0.075, output: 0.30, cached: 0.01875 },
   'gemini-1.5-flash-8b': { input: 0.0375, output: 0.15, cached: 0.009375 },
-  
+
   // Gemini 3 Serisi (Preview)
   'gemini-3-pro-preview': { input: 2.00, output: 12.00, cached: 0.20 },
   'gemini-pro': { input: 0.50, output: 1.50, cached: 0.125 },
-  
+
   // Image Generation Models (per image, not per token)
   'gemini-3-pro-image-preview': { perImage: 0.134 },
   'gemini-2.5-flash-image': { perImage: 0.039 },
@@ -277,7 +278,7 @@ export function calculateGeminiCost(model, usage) {
 
 // OpenAI Pricing (USD per image)
 export const OPENAI_PRICING = {
-  'dall-e-3': { 
+  'dall-e-3': {
     standard: { '1024x1024': 0.040, '1024x1792': 0.080, '1792x1024': 0.080 },
     hd: { '1024x1024': 0.080, '1024x1792': 0.120, '1792x1024': 0.120 }
   },
@@ -337,7 +338,7 @@ class AIHandler {
     // Handle both apiKey and geminiApiKey for backward compatibility
     this.apiKey = config.apiKey || config.geminiApiKey || '';
     this.model = config.model || (config.provider === AI_PROVIDERS.GEMINI ? 'gemini-3-pro-preview' : 'gpt-4o');
-    
+
     // CRITICAL: Use provider-specific image model from config
     // This MUST match the model selected in AI Settings
     if (config.provider === AI_PROVIDERS.GEMINI) {
@@ -361,7 +362,7 @@ class AIHandler {
     this.minDelayBetweenCalls = 1000; // 1 saniye minimum bekleme
     this.requestQueue = [];
     this.isProcessingQueue = false;
-    
+
     // Context Cache System for Gemini
     this.contextCache = new GeminiContextCache();
   }
@@ -395,7 +396,7 @@ class AIHandler {
             throw new Error('OpenAI API key is required');
           }
           const openaiResult = await this.callOpenAI(systemPrompt, userPrompt, temperature);
-          result = typeof openaiResult === 'string' 
+          result = typeof openaiResult === 'string'
             ? { text: openaiResult, usage: null, model: this.model, provider: this.provider }
             : openaiResult;
           break;
@@ -406,7 +407,7 @@ class AIHandler {
           }
           const geminiResult = await this.callGemini(systemPrompt, userPrompt, temperature);
           result = geminiResult; // Already returns { text, usage, model }
-          
+
           // Calculate cost if usage metadata exists
           if (result.usage && result.usage.promptTokenCount) {
             result.cost = calculateGeminiCost(result.model, result.usage);
@@ -452,15 +453,59 @@ class AIHandler {
     console.log('Image generation request:', { provider: this.provider, prompt: prompt.substring(0, 50) });
 
     try {
-      // Handle character-specific image generation
+      // Handle character-specific image generation with Consistency
       if (options.character) {
         console.log('🎭 Character image generation for:', options.character);
+        const assets = useAssetStore.getState().characterAssets;
+        const anchor = assets[options.character];
+
+        if (anchor && anchor.anchorImage) {
+          console.log('🔗 Found Anchor Image for', options.character);
+          // If no manual reference provided, use the anchor
+          if (!options.referenceImages) {
+            options.referenceImages = [{
+              inlineData: {
+                data: anchor.anchorImage,
+                mimeType: 'image/jpeg'
+              }
+            }];
+          }
+          // Add physical traits to prompt if available
+          if (anchor.physicalTraits) {
+            // prompt += ` (Character traits: ${anchor.physicalTraits})`;
+          }
+        }
+      }
+
+      // Handle Location Consistency
+      if (options.location) {
+        const locAssets = useAssetStore.getState().locationAssets;
+        const locMaster = locAssets[options.location];
+        if (locMaster && locMaster.masterShot && !options.referenceImages) {
+          console.log('🔗 Found Master Shot for Location:', options.location);
+          options.referenceImages = [{
+            inlineData: {
+              data: locMaster.masterShot,
+              mimeType: 'image/jpeg'
+            }
+          }];
+        }
       }
 
       // Handle reference image for "similar character" approach
       let enhancedPrompt = prompt;
+
+      // Enforce Technical Prompts (Cinematic Style)
+      // Only add if not already present
+      if (!enhancedPrompt.toLowerCase().includes('cinematic')) {
+        enhancedPrompt = `Cinematic shot, ${enhancedPrompt}`;
+      }
+      if (!enhancedPrompt.toLowerCase().includes('lens')) {
+        enhancedPrompt += `, 35mm lens, f/1.8, professional lighting, 8k resolution`;
+      }
+
       if (options.referenceImage) {
-        console.log('🖼️ Reference image provided for character generation');
+        console.log('🖼️ Reference image provided (Manual override)');
         enhancedPrompt = prompt + ', use reference image as style guide';
       }
 
@@ -615,7 +660,7 @@ class AIHandler {
     // CRITICAL: ONLY use model from constructor (which comes from store)
     // Never allow options.model to override the store-selected model
     const model = this.geminiImageModel || 'gemini-2.5-flash-image';
-    
+
     if (options.model && options.model !== model) {
       console.warn('⚠️ IGNORED model override attempt:', options.model, '→ Using store model:', model);
     }
@@ -634,7 +679,7 @@ class AIHandler {
     if (model.includes('gemini') && model.includes('image')) {
       // Gemini Native Image Generation - uses generateContent API
       apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
-      
+
       // Model-specific capabilities based on AI Settings selection
       let modelCapabilities = {
         maxReferenceImages: 3,  // Default for Flash models
@@ -677,7 +722,7 @@ class AIHandler {
       const generationConfig = {
         temperature: temperature
       };
-      
+
       // Add image config if needed
       const imageConfig = {
         aspectRatio: "1:1",  // Default aspect ratio
@@ -700,11 +745,11 @@ class AIHandler {
       // Add reference images if provided (respecting model limits)
       if (options.referenceImages && Array.isArray(options.referenceImages)) {
         const imageCount = Math.min(options.referenceImages.length, modelCapabilities.maxReferenceImages);
-        
+
         if (options.referenceImages.length > modelCapabilities.maxReferenceImages) {
           console.warn(`⚠️ ${model} supports max ${modelCapabilities.maxReferenceImages} references, using first ${imageCount}`);
         }
-        
+
         for (let i = 0; i < imageCount; i++) {
           const refImage = options.referenceImages[i];
           requestBody.contents[0].parts.push({
@@ -736,7 +781,7 @@ class AIHandler {
         prompt: (typeof prompt === 'string' ? prompt.substring(0, 100) : String(prompt).substring(0, 100)) + '...',
         requestSize: JSON.stringify(requestBody).length
       });
-      
+
       // Log full request body for debugging
       console.log('📦 Full Request Body:', JSON.stringify(requestBody, null, 2));
 
@@ -766,20 +811,20 @@ class AIHandler {
           const candidate = data.candidates[0];
           if (candidate.content && candidate.content.parts) {
             // Find image parts - API uses both inline_data and inlineData formats
-            const imageParts = candidate.content.parts.filter(part => 
+            const imageParts = candidate.content.parts.filter(part =>
               part.inline_data || part.inlineData
             );
-            
+
             if (imageParts.length > 0) {
               const imagePart = imageParts[0];
               // Support both camelCase and snake_case formats
               const imageData = imagePart.inline_data || imagePart.inlineData;
-              
+
               console.log(`✅ ${model}: ${imageParts.length} görsel oluşturuldu`);
               // Calculate cost for image generation
               const cost = calculateGeminiCost(model, { imageCount: 1 });
               console.log(`💰 Image generation cost: $${cost.total.toFixed(6)} USD (${model})`);
-              
+
               return {
                 success: true,
                 imageData: imageData.data,
@@ -800,11 +845,11 @@ class AIHandler {
       else if (model.includes('imagen')) {
         if (data.generated_images && data.generated_images.length > 0) {
           const generatedImage = data.generated_images[0];
-          
+
           // Calculate cost for image generation
           const cost = calculateGeminiCost(model, { imageCount: 1 });
           console.log(`✅ ${model}: Görsel oluşturuldu - Cost: $${cost.total.toFixed(6)} USD`);
-          
+
           return {
             success: true,
             imageData: generatedImage.image,
@@ -944,10 +989,10 @@ class AIHandler {
 
         if (data && data.data && data.data.length > 0) {
           const imageData = data.data[0];
-          
+
           // Calculate cost for OpenAI image generation
           const cost = calculateOpenAICost(model, size, quality);
-          console.log(`💰 OpenAI image generation cost: $${cost.total.toFixed(6)} USD (${model}, ${size}, ${quality})`);          
+          console.log(`💰 OpenAI image generation cost: $${cost.total.toFixed(6)} USD (${model}, ${size}, ${quality})`);
           return {
             success: true,
             imageUrl: imageData.url,
@@ -1108,8 +1153,8 @@ class AIHandler {
       // Cache yoksa hem systemPrompt hem userPrompt gönder
       contents: [{
         role: 'user',
-        parts: [{ 
-          text: cacheId 
+        parts: [{
+          text: cacheId
             ? userPrompt  // Cache varsa sadece user prompt
             : (systemPrompt ? `${systemPrompt}\n\n${userPrompt}` : userPrompt)  // Cache yoksa full prompt
         }]
@@ -1152,7 +1197,7 @@ class AIHandler {
   async makeGeminiRequestWithRetry(apiUrl, requestBodyOrSystemPrompt, userPromptOrModelName, temperatureOrUndefined, maxTokensOrUndefined, modelNameOrUndefined) {
     // Support both old signature (6 params) and new signature (3 params with requestBody)
     let requestBody, modelName;
-    
+
     if (typeof requestBodyOrSystemPrompt === 'object') {
       // New signature: (apiUrl, requestBody, modelName)
       requestBody = requestBodyOrSystemPrompt;
@@ -1163,7 +1208,7 @@ class AIHandler {
       const userPrompt = userPromptOrModelName;
       const temperature = temperatureOrUndefined;
       modelName = modelNameOrUndefined;
-      
+
       requestBody = {
         contents: [{
           role: 'user',
@@ -1226,7 +1271,7 @@ class AIHandler {
   async makeGeminiRequest(apiUrl, requestBodyOrSystemPrompt, userPromptOrUndefined, temperatureOrUndefined, maxTokensOrUndefined) {
     // Support both old signature and new signature with requestBody
     let requestBody;
-    
+
     if (typeof requestBodyOrSystemPrompt === 'object') {
       // New signature: requestBody is passed directly
       requestBody = requestBodyOrSystemPrompt;
@@ -1235,7 +1280,7 @@ class AIHandler {
       const systemPrompt = requestBodyOrSystemPrompt;
       const userPrompt = userPromptOrUndefined;
       const temperature = temperatureOrUndefined;
-      
+
       requestBody = {
         contents: [{
           role: 'user',
@@ -1302,7 +1347,7 @@ class AIHandler {
           // Extract usage metadata
           const usageMetadata = data.usageMetadata || {};
           const textResponse = candidate.content.parts[0].text;
-          
+
           // Calculate cost
           let calculatedCost = null;
           if (usageMetadata.promptTokenCount) {
@@ -1316,7 +1361,7 @@ class AIHandler {
             });
             console.log(`💰 Maliyet: $${calculatedCost.total.toFixed(6)} USD`);
           }
-          
+
           return {
             text: textResponse,
             usage: usageMetadata,
@@ -1415,7 +1460,7 @@ class AIHandler {
       onProgress({ message: 'Analiz yapılıyor...', progress: 50 });
     }
 
-    const result = await this.generateText(systemPrompt, fullPrompt, { 
+    const result = await this.generateText(systemPrompt, fullPrompt, {
       includeMetadata,
       temperature: options.temperature
       // maxTokens yok - sınırsız çıktı

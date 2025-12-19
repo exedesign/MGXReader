@@ -5,6 +5,7 @@ import { useAIStore } from '../store/aiStore';
 import { usePromptStore } from '../store/promptStore';
 import { useReaderStore } from '../store/readerStore';
 import { useFeatureStore } from '../store/featureStore';
+import useAssetStore from '../store/assetStore';
 import AIHandler, { calculateGeminiCost } from '../utils/aiHandler';
 import PDFExportService from '../utils/pdfExportService';
 import { analysisStorageService } from '../utils/analysisStorageService';
@@ -36,7 +37,7 @@ export default function AnalysisPanel() {
   const { getActivePrompt, getPromptTypes, activePrompts, getPrompt, getPromptsByModule } = usePromptStore();
   const { blacklist } = useReaderStore();
   const { t } = useTranslation();
-  
+
   // Apply blacklist filtering to text for analysis
   const filteredAnalysisText = useMemo(() => {
     const baseText = cleanedText || scriptText;
@@ -57,11 +58,11 @@ export default function AnalysisPanel() {
 
     return filtered.replace(/\s+/g, ' ').replace(/\n\s*\n/g, '\n').trim();
   }, [cleanedText, scriptText, blacklist]);
-  
+
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'scenes', 'locations', 'characters', 'equipment', 'vfx', 'production', 'evaluation', 'audience', 'custom', 'saved'
   const [useCustomAnalysis, setUseCustomAnalysis] = useState(false);
   const [selectedCustomPrompt, setSelectedCustomPrompt] = useState('character');
-  
+
   // Token usage tracking with localStorage persistence
   const [sessionTokenUsage, setSessionTokenUsage] = useState(() => {
     const saved = localStorage.getItem('mgxreader_token_usage');
@@ -99,38 +100,38 @@ export default function AnalysisPanel() {
   const [showAnalysisDropdown, setShowAnalysisDropdown] = useState(false);
   const [savedAnalyses, setSavedAnalyses] = useState([]);
   const [loadingSavedAnalyses, setLoadingSavedAnalyses] = useState(false);
-  
+
   // Multi-analysis selection - Başlangıçta HİÇBİRİ seçili değil
   const [selectedAnalysisTypes, setSelectedAnalysisTypes] = useState(() => {
     const allTypes = {};
     // Get prompts assigned to analysis_panel module
     const analysisPanelPrompts = getPromptsByModule('analysis_panel');
-    
+
     analysisPanelPrompts.forEach(({ key }) => {
       // Başlangıçta hiçbiri seçili değil
       allTypes[key] = false;
     });
-    
+
     console.log('📊 Analysis Panel başlatıldı:', analysisPanelPrompts.length, 'analiz mevcut (hiçbiri seçili değil)');
     return allTypes;
   });
-  
+
   // PromptStore değişikliklerini dinle ve selectedAnalysisTypes'ı güncelle
   useEffect(() => {
     const analysisPanelPrompts = getPromptsByModule('analysis_panel');
     const newTypes = {};
-    
+
     analysisPanelPrompts.forEach(({ key }) => {
       // Mevcut seçimi koru, yoksa default (non-llama seçili)
-      newTypes[key] = selectedAnalysisTypes[key] !== undefined 
-        ? selectedAnalysisTypes[key] 
+      newTypes[key] = selectedAnalysisTypes[key] !== undefined
+        ? selectedAnalysisTypes[key]
         : !key.includes('llama');
     });
-    
+
     // Sadece değişiklik varsa güncelle
     const currentKeys = Object.keys(selectedAnalysisTypes).sort();
     const newKeys = Object.keys(newTypes).sort();
-    
+
     if (JSON.stringify(currentKeys) !== JSON.stringify(newKeys)) {
       console.log('📊 Analysis Panel seçimleri güncellendi:', newKeys.length, 'analiz türü');
       setSelectedAnalysisTypes(newTypes);
@@ -142,10 +143,10 @@ export default function AnalysisPanel() {
     // ALWAYS clear customResults when script changes
     console.log('🔄 Script değişti, customResults temizleniyor...');
     setCustomResults({});
-    
+
     const loadExistingAnalysisData = async () => {
       const currentScript = useScriptStore.getState().getCurrentScript();
-      
+
       if (!currentScript) {
         // Clear analysis data when no script
         console.log('❌ Script yok, state temizleniyor');
@@ -154,7 +155,7 @@ export default function AnalysisPanel() {
 
       const scriptText = currentScript.scriptText || currentScript.cleanedText;
       const fileName = currentScript.fileName || currentScript.name;
-      
+
       if (!scriptText || !fileName) {
         console.log('❌ Script metni veya dosya adı yok');
         return;
@@ -176,7 +177,7 @@ export default function AnalysisPanel() {
           setCustomResults(existingAnalysis.customResults);
           setAnalysisData(existingAnalysis);
           console.log('💾 Loaded analysis from persistent storage:', Object.keys(existingAnalysis.customResults).length, 'results');
-          
+
           // Update script store with loaded analysis
           const { updateScript } = useScriptStore.getState();
           updateScript(currentScript.id, {
@@ -204,45 +205,42 @@ export default function AnalysisPanel() {
   const [shouldAutoStartAnalysis, setShouldAutoStartAnalysis] = useState(false);
 
   useEffect(() => {
-    const handleStoryboardAnalysisSelection = () => {
-      if (window.storyboardRequestedAnalysis) {
-        console.log('🎬 Storyboard için gerekli analizler otomatik seçiliyor...');
-        
+    const handleStoryboardAnalysisSelection = (event) => {
+      if (window.storyboardRequestedAnalysis || event?.detail) {
+        const { autoStart = false } = event?.detail || {};
+        console.log(`🎬 Storyboard için gerekli analizler seçiliyor... (autoStart: ${autoStart})`);
+
         // Storyboard modülü için tanımlanmış promptları al
         const storyboardPrompts = getPromptsByModule('storyboard');
         const storyboardKeys = storyboardPrompts.map(p => p.key);
-        
+
         console.log('🎯 Storyboard için gerekli analizler:', storyboardKeys);
-        console.log('📊 Toplam:', storyboardKeys.length, 'analiz seçilecek');
-        
+
         // Mevcut seçimleri koru, sadece storyboard analizlerini güncelle
         setSelectedAnalysisTypes(prevSelection => {
           const newSelection = { ...prevSelection };
-          
+
           // Önce TÜM analizleri false yap
           Object.keys(newSelection).forEach(key => {
             newSelection[key] = false;
           });
-          
+
           // Sadece storyboard için gerekli olanları true yap
           storyboardKeys.forEach(key => {
             newSelection[key] = true;
           });
-          
-          console.log('✅ Seçilen analizler:', Object.keys(newSelection).filter(k => newSelection[k]));
-          console.log('📋 Toplam seçim sayısı:', Object.keys(newSelection).filter(k => newSelection[k]).length);
-          
+
           return newSelection;
         });
-        
-        // Flag'i temizle ve otomatik başlatma flag'ini set et
+
+        // Flag'i temizle ve (istenirse) otomatik başlatma flag'ini set et
         window.storyboardRequestedAnalysis = false;
-        setShouldAutoStartAnalysis(true);
+        setShouldAutoStartAnalysis(autoStart);
       }
     };
 
     window.addEventListener('selectStoryboardAnalysis', handleStoryboardAnalysisSelection);
-    
+
     return () => {
       window.removeEventListener('selectStoryboardAnalysis', handleStoryboardAnalysisSelection);
     };
@@ -253,11 +251,11 @@ export default function AnalysisPanel() {
     if (shouldAutoStartAnalysis) {
       const selectedTypes = Object.keys(selectedAnalysisTypes).filter(key => selectedAnalysisTypes[key]);
       console.log('🚀 Otomatik başlatılacak analizler:', selectedTypes);
-      
+
       if (selectedTypes.length > 0) {
         // Reset progress tracking (storyboard modülüne bildir)
         window.dispatchEvent(new CustomEvent('storyboardAnalysisReset'));
-        
+
         // Biraz bekle ki state tam güncellensin, sonra maliyet önizlemesi göster
         setTimeout(() => {
           calculateCostEstimate(); // Maliyet önizlemesini göster
@@ -273,7 +271,7 @@ export default function AnalysisPanel() {
   // 🔄 ARA KAYITTAN DEVAM ET FONKSİYONU
   const continuePartialAnalysis = async (text, remainingTypes, existingResults, abortController) => {
     console.log(`🔄 Ara kayıttan devam: ${remainingTypes.length} analiz kaldı:`, remainingTypes);
-    
+
     const multiResults = { ...existingResults }; // Mevcut sonuçları koru
     const totalAnalyses = Object.keys(existingResults).length + remainingTypes.length;
     let completed = Object.keys(existingResults).length; // Tamamlanan sayısı
@@ -295,7 +293,7 @@ export default function AnalysisPanel() {
           analysisType.replace('_', ''),
           analysisType.toLowerCase()
         ];
-        
+
         for (const fallbackName of fallbackNames) {
           prompt = getPrompt('analysis', fallbackName);
           if (prompt) {
@@ -303,7 +301,7 @@ export default function AnalysisPanel() {
             break;
           }
         }
-        
+
         if (!prompt) {
           console.warn(`❌ Prompt not found for analysis type: ${analysisType} (tried: ${analysisType}, ${fallbackNames.join(', ')})`);
           continue;
@@ -329,7 +327,7 @@ export default function AnalysisPanel() {
         // Analiz yap
         const nonChunkingTypes = ['character', 'theme', 'dialogue', 'location_analysis', 'competitive'];
         const shouldUseChunking = text.length > 15000 && !nonChunkingTypes.includes(analysisType);
-        
+
         const analysisResult = await aiHandler.analyzeWithCustomPrompt(text, {
           systemPrompt: systemPrompt,
           userPrompt: fullPrompt,
@@ -339,7 +337,7 @@ export default function AnalysisPanel() {
           onProgress: (progressInfo) => {
             const chunkProgress = progressInfo.progress || 0;
             const overallProgress = ((completed + (chunkProgress / 100)) / totalAnalyses) * 100;
-            
+
             setAnalysisProgress({
               message: `${prompt.name} - ${progressInfo.message || 'Analiz devam ediyor...'}`,
               progress: overallProgress,
@@ -363,7 +361,7 @@ export default function AnalysisPanel() {
         try {
           const scriptFileName = currentScript?.fileName || currentScript?.name || 'Unknown_Script';
           const projectName = scriptFileName.replace(/\.(pdf|txt|fountain)$/i, '');
-          
+
           // Sadece bu analiz türünü kaydet
           await analysisStorageService.saveAnalysisByType(
             projectName,
@@ -375,7 +373,7 @@ export default function AnalysisPanel() {
               analysisProvider: provider
             }
           );
-          
+
           console.log(`✅ ${analysisType} kaydedildi (${completed + 1}/${totalAnalyses})`);
         } catch (saveError) {
           console.error(`❌ ${analysisType} kayıt hatası:`, saveError);
@@ -410,7 +408,7 @@ export default function AnalysisPanel() {
     setCustomResults(multiResults);
     const finalAnalysisData = { customResults: multiResults };
     setAnalysisData(finalAnalysisData);
-    
+
     // Final save (complete analysis)
     try {
       const scriptFileName = currentScript?.fileName || currentScript?.name || 'Unknown_Script';
@@ -426,10 +424,10 @@ export default function AnalysisPanel() {
           analysisProvider: provider
         });
         console.log('💾 Devam edilen analiz tamamlandı ve kaydedildi!');
-        
+
         // Notify other components that analysis has been updated
-        window.dispatchEvent(new CustomEvent('analysisUpdated', { 
-          detail: { customResults: multiResults } 
+        window.dispatchEvent(new CustomEvent('analysisUpdated', {
+          detail: { customResults: multiResults }
         }));
       } else {
         console.warn('⚠️ Script bilgisi eksik, analiz kaydedilemedi');
@@ -437,7 +435,7 @@ export default function AnalysisPanel() {
     } catch (error) {
       console.error('Final save error:', error);
     }
-    
+
     setActiveTab('custom');
     return multiResults;
   };
@@ -477,7 +475,7 @@ export default function AnalysisPanel() {
 
     // Get language variable
     const currentLanguage = t('language.name', 'Türkçe');
-    
+
     // Get current Gemini model from store (already available from useAIStore hook)
     const currentGeminiModel = geminiModel || 'gemini-2.0-flash-exp';
 
@@ -489,19 +487,19 @@ export default function AnalysisPanel() {
       const prompt = getPrompt('analysis', type);
       const systemPrompt = prompt.system.replace(/{{language}}/g, currentLanguage);
       const userPrompt = prompt.user.replace(/{{language}}/g, currentLanguage);
-      
+
       // Combine all text that will be sent
       const fullPromptText = systemPrompt + '\n\n' + userPrompt + '\n\n' + text;
-      
+
       // Estimate input tokens
       const inputTokens = estimateTokens(fullPromptText);
-      
+
       // Estimate output tokens based on analysis type
       const outputTokens = estimateOutputTokens(type, inputTokens);
-      
+
       // Get model name
       const model = currentGeminiModel;
-      
+
       // Simulate token counts for cost calculation
       const cachedTokens = willUseCache ? Math.floor(inputTokens * 0.9) : 0;
       const tokenCounts = {
@@ -509,7 +507,7 @@ export default function AnalysisPanel() {
         candidatesTokenCount: outputTokens,
         cachedContentTokenCount: cachedTokens
       };
-      
+
       // Calculate cost
       const costResult = calculateGeminiCost(model, tokenCounts);
       const costWithoutCacheResult = calculateGeminiCost(model, {
@@ -517,11 +515,11 @@ export default function AnalysisPanel() {
         candidatesTokenCount: outputTokens,
         cachedContentTokenCount: 0
       });
-      
+
       // Extract total cost from result object
       const cost = costResult?.total || 0;
       const costWithoutCache = costWithoutCacheResult?.total || 0;
-      
+
       return {
         type,
         inputTokens,
@@ -579,7 +577,7 @@ export default function AnalysisPanel() {
       console.log('📝 Text to analyze:', text ? `${text.substring(0, 100)}... (${text.length} chars)` : 'NO TEXT!');
       console.log('🔍 AIHandler instance:', aiHandler);
       console.log('🔍 Has analyzeWithCustomPrompt?', typeof aiHandler.analyzeWithCustomPrompt);
-      
+
       if (!text || text.trim().length === 0) {
         alert('❌ Analiz yapılacak metin bulunamadı! Lütfen bir senaryo yükleyin.');
         setIsAnalyzing(false);
@@ -589,31 +587,31 @@ export default function AnalysisPanel() {
       // Check if analysis already exists in cache
       const scriptStore = useScriptStore.getState();
       const fileName = scriptStore.currentScript?.fileName || scriptStore.currentScript?.name || 'Unnamed Script';
-      
+
       // Selected analysis types'ı önce belirle
       const selectedTypes = Object.keys(selectedAnalysisTypes).filter(key => selectedAnalysisTypes[key]);
-      
+
       console.log('📊 Seçili analiz türleri (selectedAnalysisTypes):', selectedTypes);
       console.log('📋 Tüm selectedAnalysisTypes state:', selectedAnalysisTypes);
-      
+
       if (selectedTypes.length === 0) {
         alert(t('analysis.selectAtLeastOne', 'Lütfen en az bir analiz türü seçin'));
         setIsAnalyzing(false);
         return;
       }
-      
+
       // 🔄 Cache kontrolü - sadece TÜM analizler yapılacaksa cache'e bak
       // Kullanıcı belirli analiz türlerini seçmişse (yeniden yapmak istiyor), cache'i atla
       const isFullAnalysis = selectedTypes.length >= 10; // Çoğu analiz seçiliyse full sayılır
       let cachedAnalysis = null;
-      
+
       if (isFullAnalysis) {
         console.log('📁 Full analiz - cache kontrol ediliyor...');
         cachedAnalysis = await analysisStorageService.loadAnalysis(text, fileName);
       } else {
         console.log('🔄 Belirli analiz türleri seçildi - cache atlanıyor, yeniden analiz yapılacak');
       }
-      
+
       // If no exact match, try PDF filename matching (only for full analysis)
       if (isFullAnalysis && !cachedAnalysis && fileName.endsWith('.pdf')) {
         const pdfMatch = await analysisStorageService.findAnalysisByFileName(fileName, 0.7);
@@ -625,7 +623,7 @@ export default function AnalysisPanel() {
             `📊 Benzerlik: ${(pdfMatch.similarity * 100).toFixed(0)}%\n\n` +
             `Bu analizi kullanmak istiyor musunuz? (İptal = Yeni analiz yap)`
           );
-          
+
           if (shouldReuse) {
             cachedAnalysis = await analysisStorageService.loadAnalysisByKey(pdfMatch.key);
             if (cachedAnalysis) {
@@ -634,7 +632,7 @@ export default function AnalysisPanel() {
           }
         }
       }
-      
+
       if (cachedAnalysis && cachedAnalysis.customResults) {
         console.log('📁 Loading cached/matched analysis...');
         setCustomResults(cachedAnalysis.customResults);
@@ -655,7 +653,7 @@ export default function AnalysisPanel() {
       console.log('📋 Seçili Analizler:', selectedTypes);
       console.log('🔍 selectedAnalysisTypes State:', selectedAnalysisTypes);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
+
       if (selectedTypes.length === 0) {
         console.error('❌ Hiç analiz seçilmedi!');
         alert('❌ Lütfen en az bir analiz türü seçin!');
@@ -666,7 +664,7 @@ export default function AnalysisPanel() {
       // 🆕 STEP 1: Create context cache for Gemini (if using Gemini)
       let cacheId = null;
       const scriptHash = hashString(text); // Simple hash function
-      
+
       if (provider === 'gemini') {
         console.log('🔄 Creating Gemini context cache for screenplay...');
         try {
@@ -693,7 +691,7 @@ export default function AnalysisPanel() {
       const multiResults = {};
       const totalAnalyses = selectedTypes.length;
       let completed = 0;
-      
+
       // 🆕 Optimized rate limiting: 500ms between requests (instead of 1000ms)
       const RATE_LIMIT_DELAY = 500;
 
@@ -708,7 +706,7 @@ export default function AnalysisPanel() {
 
       for (const analysisType of selectedTypes) {
         const prompt = getPrompt('analysis', analysisType);
-        
+
         if (!prompt || !prompt.system || !prompt.user) {
           console.warn(`Prompt for ${analysisType} not found, skipping`);
           continue;
@@ -723,11 +721,11 @@ export default function AnalysisPanel() {
           total: totalAnalyses,
           status: 'in-progress'
         };
-        
+
         setAnalysisProgress(progressData);
-        
+
         // Broadcast to storyboard module
-        window.dispatchEvent(new CustomEvent('storyboardAnalysisProgress', { 
+        window.dispatchEvent(new CustomEvent('storyboardAnalysisProgress', {
           detail: progressData
         }));
 
@@ -744,23 +742,23 @@ export default function AnalysisPanel() {
 
           // Use chunking system for complete analysis of long scripts
           let fullPrompt = userPrompt + '\n\n=== SENARYO METNİ ===\n{{text}}';
-          
+
           console.log(`📄 Script length: ${text.length} characters - Using chunking for complete analysis`);
-          
+
           setAnalysisProgress({
             message: `${prompt.name} - Kapsamlı analiz başlıyor...`,
             progress: ((completed + 0.5) / totalAnalyses) * 100
           });
-          
+
           // 🆕 STEP 3: Call AI with cache (for Gemini) or regular call
           let analysisResult;
-          
+
           console.log(`📝 [${completed + 1}/${totalAnalyses}] Analyzing: ${prompt.name}`);
-          
+
           if (cacheId && provider === 'gemini') {
             // Use cached context - no need to send full text again
             console.log(`💾 Using cache for ${prompt.name}`);
-            
+
             const shortPrompt = userPrompt.replace(/{{text}}/g, '').replace(/=== SENARYO METNİ ===/g, '');
             const cacheResult = await aiHandler.callGeminiWithCache(
               systemPrompt,
@@ -770,13 +768,13 @@ export default function AnalysisPanel() {
             );
             // callGeminiWithCache returns object with { text, usage, model }
             analysisResult = typeof cacheResult === 'string' ? cacheResult : cacheResult.text;
-            
+
             // Track token usage if metadata available
             if (cacheResult.usage) {
               const costValue = cacheResult.cost?.total || 0;
               const actualTokens = cacheResult.usage.totalTokenCount || 0;
               const estimatedTokens = estimateTokens(systemPrompt + '\n\n' + fullPrompt + '\n\n' + text) + estimateOutputTokens(analysisType);
-              
+
               // Use updateTokenUsage helper for localStorage persistence and budget tracking
               updateTokenUsage({
                 cost: cacheResult.cost || { total: costValue },
@@ -791,7 +789,7 @@ export default function AnalysisPanel() {
             console.log(`📄 Standard analysis for ${prompt.name} (no cache)`);
             const nonChunkingTypes = ['character', 'theme', 'dialogue', 'location_analysis', 'competitive'];
             const shouldUseChunking = text.length > 15000 && !nonChunkingTypes.includes(analysisType);
-            
+
             const fullResult = await aiHandler.analyzeWithCustomPrompt(text, {
               systemPrompt: systemPrompt,
               userPrompt: fullPrompt,
@@ -802,7 +800,7 @@ export default function AnalysisPanel() {
               onProgress: (progressInfo) => {
                 const chunkProgress = progressInfo.progress || 0;
                 const overallProgress = ((completed + (chunkProgress / 100)) / totalAnalyses) * 100;
-                
+
                 const progressData = {
                   message: `${prompt.name} - ${progressInfo.message || 'Analiz yapılıyor...'}`,
                   progress: overallProgress,
@@ -813,9 +811,9 @@ export default function AnalysisPanel() {
                   status: 'in-progress',
                   chunkProgress: chunkProgress
                 };
-                
+
                 setAnalysisProgress(progressData);
-                
+
                 // Save checkpoint
                 if (progressInfo.progress === 100) {
                   localStorage.setItem(`analysis_checkpoint_${fileName}`, JSON.stringify({
@@ -825,15 +823,15 @@ export default function AnalysisPanel() {
                 }
               }
             });
-            
+
             analysisResult = typeof fullResult === 'string' ? fullResult : fullResult.text;
-            
+
             // Track token usage
             if (fullResult.usage) {
               const costValue = fullResult.cost?.total || 0;
               const actualTokens = fullResult.usage.totalTokenCount || 0;
               const estimatedTokens = estimateTokens(systemPrompt + '\n\n' + fullPrompt + '\n\n' + text) + estimateOutputTokens(analysisType);
-              
+
               // Use updateTokenUsage helper for localStorage persistence and budget tracking
               updateTokenUsage({
                 cost: fullResult.cost || { total: costValue },
@@ -872,15 +870,15 @@ export default function AnalysisPanel() {
             provider: provider,
             usedCache: !!cacheId
           };
-          
+
           console.log(`✅ [${completed + 1}/${totalAnalyses}] Completed: ${prompt.name}`);
-          
+
           // 🔄 ARA KAYIT: Her analiz adımı bittiğinde kaydet
           try {
             const scriptStore = useScriptStore.getState();
             const currentScript = scriptStore.currentScript;
             // Use fileName from parent scope for consistency
-            
+
             const tempKey = `temp_${new Date().getTime()}_${fileName}`;
             const tempAnalysisData = {
               customResults: { ...multiResults }, // Şu ana kadar tamamlanan analizler
@@ -897,7 +895,7 @@ export default function AnalysisPanel() {
                 analysisProvider: provider
               }
             };
-            
+
             // 💾 Bu analiz türünü kaydet (üzerine yaz)
             const projectName = fileName.replace(/\.(pdf|txt|fountain)$/i, '');
             await analysisStorageService.saveAnalysisByType(
@@ -910,23 +908,23 @@ export default function AnalysisPanel() {
                 analysisProvider: provider
               }
             );
-            
+
             console.log(`✅ ${analysisType} kaydedildi (${completed}/${totalAnalyses})`);
           } catch (saveError) {
             console.error('Ara kayıt hatası:', saveError);
             // Ara kayıt hatası analizi durdurmaz, devam eder
           }
-          
+
           completed++;
-          
+
           // 🆕 Optimized rate limiting: 500ms delay between requests
           if (completed < totalAnalyses) {
             console.log(`⏳ Rate limit delay: ${RATE_LIMIT_DELAY}ms...`);
             await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
           }
-          
+
           // Broadcast completion of this analysis
-          window.dispatchEvent(new CustomEvent('storyboardAnalysisProgress', { 
+          window.dispatchEvent(new CustomEvent('storyboardAnalysisProgress', {
             detail: {
               message: `${prompt.name} tamamlandı!`,
               progress: (completed / totalAnalyses) * 100,
@@ -939,10 +937,10 @@ export default function AnalysisPanel() {
           }));
         } catch (error) {
           console.error(`Error analyzing ${analysisType}:`, error);
-          
+
           // Kullanıcı dostu hata mesajları
           let errorMessage = `❌ ${analysisType} analizi başarısız`;
-          
+
           if (error.message?.includes('quota')) {
             errorMessage += ' - API quota limitine ulaşıldı';
           } else if (error.message?.includes('429') || error.message?.includes('Too Many Requests')) {
@@ -954,7 +952,7 @@ export default function AnalysisPanel() {
           } else {
             errorMessage += `: ${error.message}`;
           }
-          
+
           multiResults[analysisType] = {
             name: prompt.name,
             type: analysisType,
@@ -964,13 +962,13 @@ export default function AnalysisPanel() {
             status: 'failed',
             error: error.message
           };
-          
+
           // 🔄 HATA DURUMUNDA DA ARA KAYIT
           try {
             const scriptStore = useScriptStore.getState();
             const currentScript = scriptStore.currentScript;
             // Use fileName from parent scope for consistency
-            
+
             const tempKey = `temp_${new Date().getTime()}_${fileName}`;
             const tempAnalysisData = {
               customResults: { ...multiResults },
@@ -988,7 +986,7 @@ export default function AnalysisPanel() {
                 analysisProvider: provider
               }
             };
-            
+
             // 💾 Hata durumunda da kaydedelim (boş sonuç)
             const projectName = fileName.replace(/\.(pdf|txt|fountain)$/i, '');
             await analysisStorageService.saveAnalysisByType(
@@ -1002,12 +1000,12 @@ export default function AnalysisPanel() {
                 hasError: true
               }
             );
-            
+
             console.log(`❌ ${analysisType} hata kaydedildi (${completed}/${totalAnalyses})`);
           } catch (saveError) {
             console.error('Hata durumunda ara kayıt hatası:', saveError);
           }
-          
+
           completed++;
         }
       }
@@ -1018,22 +1016,22 @@ export default function AnalysisPanel() {
       // 🎭 Karakter analizini yapılandırılmış formata dönüştür
       let parsedCharacters = [];
       let characterSummary = null;
-      
+
       if (multiResults['character'] && multiResults['character'].result) {
         console.log('🎭 Karakter analizi parse ediliyor...');
         try {
           const rawCharacterText = multiResults['character'].result;
           parsedCharacters = parseCharacterAnalysis(rawCharacterText);
-          
+
           // Storyboard için optimize et
           const optimizedCharacters = optimizeForStoryboard(parsedCharacters);
-          
+
           // Özet rapor oluştur
           characterSummary = generateCharacterSummary(parsedCharacters);
-          
+
           console.log(`✅ ${parsedCharacters.length} karakter başarıyla parse edildi ve yapılandırıldı`);
           console.log('📊 Karakter özeti:', characterSummary);
-          
+
           // Parse edilmiş karakterleri multiResults'a ekle
           multiResults['character'] = {
             ...multiResults['character'],
@@ -1055,8 +1053,8 @@ export default function AnalysisPanel() {
         customResults: multiResults,
         selectedTypes,
         metadata: analysisMetadata,
-        summary: { 
-          totalScenes: 0, 
+        summary: {
+          totalScenes: 0,
           estimatedShootingDays: 0,
           completedAnalysisCount: Object.keys(multiResults).filter(key => multiResults[key].status === 'completed').length,
           failedAnalysisCount: Object.keys(multiResults).filter(key => multiResults[key].status === 'failed').length,
@@ -1081,7 +1079,7 @@ export default function AnalysisPanel() {
       };
 
       setAnalysisData(result);
-      
+
       // Save analysis to storage with metadata
       try {
         const projectName = fileName.replace(/\.(pdf|txt|fountain)$/i, '');
@@ -1095,11 +1093,11 @@ export default function AnalysisPanel() {
           analysisLanguage: currentLanguage,
           completedAnalysisTypes: Object.keys(multiResults) // Store analysis types as metadata array
         };
-        
+
         // DO NOT append analysis types to project name - keep it clean!
         await analysisStorageService.saveAnalysis(text, fileName, result, scriptMetadata);
         console.log('✅ Analysis saved to storage with metadata:', projectName, '/', Object.keys(multiResults).length, 'types');
-        
+
         // Script store'u güncelle - Storyboard'ın hemen erişebilmesi için
         if (scriptStore.currentScript) {
           const { updateScript } = useScriptStore.getState();
@@ -1109,15 +1107,15 @@ export default function AnalysisPanel() {
           });
           console.log('✅ Script store güncellendi - customResults:', Object.keys(multiResults));
         }
-        
+
         // Notify other components that analysis has been updated
-        window.dispatchEvent(new CustomEvent('analysisUpdated', { 
-          detail: { customResults: multiResults } 
+        window.dispatchEvent(new CustomEvent('analysisUpdated', {
+          detail: { customResults: multiResults }
         }));
       } catch (saveError) {
         console.warn('Failed to save analysis:', saveError);
       }
-      
+
       // Auto-switch to custom tab
       setActiveTab('custom');
     } catch (error) {
@@ -1126,10 +1124,10 @@ export default function AnalysisPanel() {
         alert('Analiz iptal edildi.');
       } else {
         console.error('Analysis failed:', error);
-        
+
         // Kullanıcı dostu hata mesajları
         let userMessage = 'Analiz sırasında bir hata oluştu.';
-        
+
         if (error.message?.includes('quota')) {
           userMessage = '🚫 API quota limitine ulaşıldı. Lütfen birkaç dakika bekleyip tekrar deneyin.';
         } else if (error.message?.includes('429') || error.message?.includes('Too Many Requests')) {
@@ -1143,7 +1141,7 @@ export default function AnalysisPanel() {
         } else if (error.message?.includes('network') || error.message?.includes('ENOTFOUND')) {
           userMessage = '🌐 İnternet bağlantısı sorunu. Lütfen bağlantınızı kontrol edin.';
         }
-        
+
         alert(`${userMessage}\n\nDetay: ${error.message}`);
       }
     } finally {
@@ -1175,7 +1173,7 @@ export default function AnalysisPanel() {
 
       // Load analysis directly by key
       const cachedAnalysis = await analysisStorageService.loadAnalysisByKey(analysisKey);
-      
+
       if (cachedAnalysis) {
         setCustomResults(cachedAnalysis.customResults || {});
         setAnalysisData(cachedAnalysis);
@@ -1195,10 +1193,10 @@ export default function AnalysisPanel() {
     if (confirm('Bu analizi silmek istediğinizden emin misiniz?')) {
       try {
         console.log('🗑️ Analiz siliniyor:', analysisKey);
-        
+
         // 1. FileSystem'den sil
         await analysisStorageService.deleteAnalysis(analysisKey);
-        
+
         // 2. LocalStorage'dan ilgili tüm anahtarları sil (analiz + storyboard verileri)
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
@@ -1216,12 +1214,12 @@ export default function AnalysisPanel() {
             keysToRemove.push(key);
           }
         }
-        
+
         keysToRemove.forEach(key => {
           localStorage.removeItem(key);
           console.log('🗑️ LocalStorage key silindi:', key);
         });
-        
+
         // 2.5. IndexedDB'yi de temizle
         if (window.indexedDB) {
           try {
@@ -1231,11 +1229,11 @@ export default function AnalysisPanel() {
             console.warn('⚠️ IndexedDB temizlenemedi:', e);
           }
         }
-        
+
         // 3. Liste yenile
         await loadSavedAnalyses();
         console.log(`✅ Analiz silindi (${1 + keysToRemove.length} kayıt)`);
-        
+
         // 4. Eğer silinen analiz şu anda yüklüyse, state'i temizle
         const currentScript = useScriptStore.getState().getCurrentScript();
         if (currentScript) {
@@ -1243,11 +1241,11 @@ export default function AnalysisPanel() {
             currentScript.scriptText || currentScript.cleanedText,
             currentScript.fileName || currentScript.name
           );
-          
+
           if (currentKey === analysisKey || analysisKey.includes(currentScript.name)) {
             setCustomResults({});
             setAnalysisData(null);
-            
+
             // Script store'dan temizle
             const { updateScript } = useScriptStore.getState();
             updateScript(currentScript.id, {
@@ -1258,10 +1256,10 @@ export default function AnalysisPanel() {
               locations: [],
               equipment: []
             });
-            
+
             // Diğer componentlere bildir
             window.dispatchEvent(new CustomEvent('analysisCleared'));
-            
+
             console.log('🗑️ Mevcut analiz state\'ten temizlendi');
           }
         }
@@ -1279,20 +1277,20 @@ export default function AnalysisPanel() {
       if (!filteredAnalysisText || analysisData) {
         return;
       }
-      
+
       const scriptStore = useScriptStore.getState();
       const fileName = scriptStore.currentScript?.fileName || scriptStore.currentScript?.name;
-      
+
       if (!fileName) {
         return;
       }
-      
+
       console.log('🔍 Auto-loading analysis check for:', fileName);
-      
+
       try {
         // First try exact match
         let cachedAnalysis = await analysisStorageService.loadAnalysis(filteredAnalysisText, fileName);
-        
+
         // If no exact match and it's a PDF, try PDF filename matching
         if (!cachedAnalysis && fileName.endsWith('.pdf')) {
           const pdfMatch = await analysisStorageService.findAnalysisByFileName(fileName, 0.7);
@@ -1301,10 +1299,10 @@ export default function AnalysisPanel() {
             cachedAnalysis = await analysisStorageService.loadAnalysisByKey(pdfMatch.key);
           }
         }
-        
+
         if (cachedAnalysis && typeof cachedAnalysis === 'object') {
           console.log('✅ Auto-loaded cached analysis');
-          
+
           // Restore analysis data
           if (cachedAnalysis.customResults && typeof cachedAnalysis.customResults === 'object') {
             setCustomResults(cachedAnalysis.customResults);
@@ -1316,12 +1314,12 @@ export default function AnalysisPanel() {
         console.error('❌ Auto-load failed:', error);
       }
     };
-    
+
     // Debounce to avoid too many calls
     const timeoutId = setTimeout(() => {
       autoLoadCachedAnalysis();
     }, 300);
-    
+
     return () => clearTimeout(timeoutId);
   }, [filteredAnalysisText]); // Run when text changes
 
@@ -1330,12 +1328,12 @@ export default function AnalysisPanel() {
     if (!analysisData || !analysisData.customResults) {
       return { hasRequired: false, missing: STORYBOARD_REQUIRED_ANALYSIS };
     }
-    
+
     const existingTypes = Object.keys(analysisData.customResults);
-    const missing = STORYBOARD_REQUIRED_ANALYSIS.filter(required => 
+    const missing = STORYBOARD_REQUIRED_ANALYSIS.filter(required =>
       !existingTypes.includes(required)
     );
-    
+
     return {
       hasRequired: missing.length === 0,
       missing,
@@ -1363,7 +1361,7 @@ export default function AnalysisPanel() {
       console.log(`🔍 Starting specific analysis with provider: ${provider}`);
       console.log('📝 Text to analyze:', text ? `${text.substring(0, 100)}... (${text.length} chars)` : 'NO TEXT!');
       console.log('🎯 Analysis types:', specificTypes);
-      
+
       if (!text || text.trim().length === 0) {
         throw new Error('Analiz yapılacak metin bulunamadı! Lütfen bir senaryo yükleyin.');
       }
@@ -1375,7 +1373,7 @@ export default function AnalysisPanel() {
       // Check if analysis already exists in cache
       const scriptStore = useScriptStore.getState();
       const fileName = scriptStore.currentScript?.fileName || scriptStore.currentScript?.name || 'Unnamed Script';
-      
+
       console.log('Running multi-analysis with specific types:', specificTypes);
 
       // Get language variable first
@@ -1419,15 +1417,15 @@ export default function AnalysisPanel() {
             displayName: typeDisplayName,
             includeMetadata: true
           });
-          
+
           let result = typeof fullResult === 'string' ? fullResult : fullResult.text;
-          
+
           // Track token usage
           if (fullResult.usage) {
             const costValue = fullResult.cost?.total || 0;
             const actualTokens = fullResult.usage.totalTokenCount || 0;
             const estimatedTokens = estimateTokens(text) + estimateOutputTokens(analysisType);
-            
+
             // Use updateTokenUsage helper for localStorage persistence and budget tracking
             updateTokenUsage({
               cost: fullResult.cost || { total: costValue },
@@ -1452,7 +1450,7 @@ export default function AnalysisPanel() {
 
         } catch (error) {
           console.error(`Error analyzing ${analysisType}:`, error);
-          
+
           // Hata ile ara kayıt yap  
           await analysisStorageService.savePartialAnalysis(fileName, {
             type: analysisType,
@@ -1463,7 +1461,7 @@ export default function AnalysisPanel() {
         }
 
         completed++;
-        
+
         if (!abortController.signal.aborted && completed < totalAnalyses) {
           await new Promise(resolve => setTimeout(resolve, 1500));
         }
@@ -1496,7 +1494,7 @@ export default function AnalysisPanel() {
         fileType: currentScript?.fileType || 'unknown',
         analysisProvider: provider
       });
-      
+
       setCustomResults(multiResults);
       setAnalysisData(finalResults);
       setActiveTab('custom');
@@ -1543,7 +1541,7 @@ export default function AnalysisPanel() {
     };
 
     window.addEventListener('analysisUpdated', handleAnalysisUpdate);
-    
+
     return () => {
       window.removeEventListener('analysisUpdated', handleAnalysisUpdate);
     };
@@ -1582,23 +1580,23 @@ export default function AnalysisPanel() {
       if (format === 'pdf') {
         // PDF Export with improved error handling
         console.log('PDF Export başlatılıyor:', analysisData);
-        
+
         if (!analysisData || Object.keys(analysisData).length === 0) {
           alert('Dışa aktarılacak analiz verisi yok. Lütfen önce analiz çalıştırın.');
           return;
         }
-        
+
         try {
           const pdfService = new PDFExportService();
-          
+
           // JSON formatını optimize et ve PDF için işle
           console.log('Analiz verisi JSON formatında işleniyor...');
           const doc = pdfService.exportAnalysis(analysisData);
-          
+
           if (!doc) {
             throw new Error('PDF belgesi oluşturulamadı');
           }
-          
+
           const success = await pdfService.save('senaryo-analiz-raporu.pdf');
           if (success) {
             alert(t('analysis.exportSuccess', 'PDF raporu başarıyla kaydedildi! JSON formatı otomatik olarak işlendi.'));
@@ -1620,11 +1618,11 @@ export default function AnalysisPanel() {
       // JSON Export with optimization
       const defaultPath = 'screenplay-analysis.json';
       const filters = [{ name: 'JSON Files', extensions: ['json'] }, { name: 'All Files', extensions: ['*'] }];
-      
+
       // PDF servisini kullanarak JSON'ı temizle ve optimize et
       const pdfService = new PDFExportService();
       const optimizedData = pdfService.exportAnalysisAsJSON(analysisData);
-      
+
       console.log('JSON export için veri optimize edildi, boyut:', optimizedData.length, 'karakter');
 
       if (window.electronAPI && window.electronAPI.saveFile) {
@@ -1706,7 +1704,7 @@ export default function AnalysisPanel() {
                 )}
               </div>
             )}
-            
+
             <button
               onClick={calculateCostEstimate}
               disabled={isAnalyzing || !isConfigured()}
@@ -1761,7 +1759,7 @@ export default function AnalysisPanel() {
               </button>
             </div>
           </div>
-          
+
           {/* Dropdown Analysis Selection */}
           <div className="relative mb-4" ref={analysisDropdownRef}>
             <button
@@ -1775,23 +1773,23 @@ export default function AnalysisPanel() {
                     {Object.keys(selectedAnalysisTypes).filter(key => selectedAnalysisTypes[key]).length} analiz seçili
                   </div>
                   <div className="text-xs text-cinema-text-dim">
-                    {Object.keys(selectedAnalysisTypes).filter(key => selectedAnalysisTypes[key]).length === 0 
-                      ? 'Analiz türü seçin' 
+                    {Object.keys(selectedAnalysisTypes).filter(key => selectedAnalysisTypes[key]).length === 0
+                      ? 'Analiz türü seçin'
                       : `${getPromptTypes('analysis').length} analiz mevcut`
                     }
                   </div>
                 </div>
               </div>
-              <svg 
+              <svg
                 className={`w-5 h-5 text-cinema-text-dim transition-transform ${showAnalysisDropdown ? 'rotate-180' : ''}`}
-                fill="none" 
-                stroke="currentColor" 
+                fill="none"
+                stroke="currentColor"
                 viewBox="0 0 24 24"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
-            
+
             {/* Dropdown Content */}
             {showAnalysisDropdown && (
               <div className="absolute top-full left-0 right-0 z-50 bg-cinema-dark border-2 border-cinema-gray rounded-lg shadow-2xl max-h-80 overflow-y-auto mt-1">
@@ -1806,10 +1804,10 @@ export default function AnalysisPanel() {
                         // Storyboard modülüne atananları en üste al
                         const storyboardPrompts = getPromptsByModule('storyboard');
                         const storyboardKeys = storyboardPrompts.map(p => p.key);
-                        
+
                         const aInStoryboard = storyboardKeys.includes(a.key);
                         const bInStoryboard = storyboardKeys.includes(b.key);
-                        
+
                         // Her ikisi de storyboard'daysa, storyboard sırasına göre
                         if (aInStoryboard && bInStoryboard) {
                           return storyboardKeys.indexOf(a.key) - storyboardKeys.indexOf(b.key);
@@ -1823,9 +1821,8 @@ export default function AnalysisPanel() {
                       }).map(({ key, name }) => (
                         <label
                           key={key}
-                          className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-all hover:bg-cinema-gray/50 ${
-                            selectedAnalysisTypes[key] ? 'bg-cinema-accent/10 border-l-4 border-cinema-accent' : ''
-                          }`}
+                          className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-all hover:bg-cinema-gray/50 ${selectedAnalysisTypes[key] ? 'bg-cinema-accent/10 border-l-4 border-cinema-accent' : ''
+                            }`}
                         >
                           <input
                             type="checkbox"
@@ -1852,7 +1849,7 @@ export default function AnalysisPanel() {
               </div>
             )}
           </div>
-          
+
           <div className="flex items-center justify-between text-xs bg-cinema-black/30 p-3 rounded">
             <div className="flex items-center gap-2 text-cinema-text-dim">
               <span className="text-base">💡</span>
@@ -2066,7 +2063,7 @@ export default function AnalysisPanel() {
             <p className="text-cinema-text-dim text-lg mb-4">
               {analysisProgress?.message || 'AI analiz gerçekleştiriyor...'}
             </p>
-            
+
             {/* Progress Details */}
             {analysisProgress && (
               <div className="bg-cinema-dark/50 rounded-lg p-4 mb-6 border border-cinema-gray">
@@ -2075,42 +2072,42 @@ export default function AnalysisPanel() {
                     🎯 {analysisProgress.currentType} Analizi
                   </p>
                 )}
-                
-                  {/* Basit Progress Bar */}
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-cinema-text text-sm font-medium">İlerleme</span>
-                      <span className="text-cinema-accent font-bold">
+
+                {/* Basit Progress Bar */}
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-cinema-text text-sm font-medium">İlerleme</span>
+                    <span className="text-cinema-accent font-bold">
+                      {Math.round(analysisProgress.progress || 0)}%
+                    </span>
+                  </div>
+
+                  {/* Progress Bar Kutusu */}
+                  <div className="w-full h-8 bg-cinema-gray/30 border-2 border-cinema-gray rounded-lg overflow-hidden relative">
+                    {/* Dolum Çubuğu */}
+                    <div
+                      className="h-full transition-all duration-500 ease-out relative"
+                      style={{
+                        width: `${Math.min(analysisProgress.progress || 0, 100)}%`,
+                        background: analysisProgress.progress > 80 ? 'linear-gradient(90deg, #10b981, #22c55e)' :
+                          analysisProgress.progress > 60 ? 'linear-gradient(90deg, #eab308, #f59e0b)' :
+                            analysisProgress.progress > 30 ? 'linear-gradient(90deg, #f97316, #fb923c)' :
+                              'linear-gradient(90deg, #ef4444, #f87171)'
+                      }}
+                    >
+                      {/* Animasyon */}
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+                    </div>
+
+                    {/* Yüzde Text */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-white text-xs font-bold drop-shadow-md">
                         {Math.round(analysisProgress.progress || 0)}%
                       </span>
                     </div>
-                    
-                    {/* Progress Bar Kutusu */}
-                    <div className="w-full h-8 bg-cinema-gray/30 border-2 border-cinema-gray rounded-lg overflow-hidden relative">
-                      {/* Dolum Çubuğu */}
-                      <div 
-                        className="h-full transition-all duration-500 ease-out relative"
-                        style={{ 
-                          width: `${Math.min(analysisProgress.progress || 0, 100)}%`,
-                          background: analysisProgress.progress > 80 ? 'linear-gradient(90deg, #10b981, #22c55e)' :
-                                    analysisProgress.progress > 60 ? 'linear-gradient(90deg, #eab308, #f59e0b)' :
-                                    analysisProgress.progress > 30 ? 'linear-gradient(90deg, #f97316, #fb923c)' :
-                                    'linear-gradient(90deg, #ef4444, #f87171)'
-                        }}
-                      >
-                        {/* Animasyon */}
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
-                      </div>
-                      
-                      {/* Yüzde Text */}
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-white text-xs font-bold drop-shadow-md">
-                          {Math.round(analysisProgress.progress || 0)}%
-                        </span>
-                      </div>
-                    </div>
                   </div>
-                
+                </div>
+
                 {analysisProgress.completed !== undefined && analysisProgress.total && (
                   <p className="text-cinema-text-dim text-sm mb-2">
                     📊 Tamamlanan: {analysisProgress.completed}/{analysisProgress.total}
@@ -2123,7 +2120,7 @@ export default function AnalysisPanel() {
                 )}
               </div>
             )}
-            
+
             <button
               onClick={cancelAnalysis}
               className="px-6 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors border border-red-500/30 font-medium"
@@ -2212,6 +2209,29 @@ function ScenesTab({ scenes }) {
 
 function LocationsTab({ locations }) {
   const { t } = useTranslation();
+  const { locationAssets, setLocationMaster } = useAssetStore();
+
+  const handleSetMasterShot = async (locName) => {
+    try {
+      const filePath = await window.electronAPI.openFile();
+      if (filePath) {
+        const result = await window.electronAPI.readFile(filePath);
+        if (result.success) {
+          // Convert to base64 safely
+          const blob = new Blob([result.buffer]);
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = reader.result.split(',')[1];
+            setLocationMaster(locName, base64);
+          };
+          reader.readAsDataURL(blob);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to set master shot:", e);
+    }
+  };
+
   if (!locations || locations.length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
@@ -2233,59 +2253,85 @@ function LocationsTab({ locations }) {
 
       {/* Locations Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {locations.map((location, index) => (
-          <div key={index} className="p-5 bg-cinema-gray rounded-lg border border-cinema-gray-light hover:border-cinema-accent/30 transition-colors">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="text-2xl">
-                {location.type === 'INTERIOR' ? '🏠' : location.type === 'EXTERIOR' ? '🌍' : '📍'}
-              </div>
-              <div className="flex-1">
-                <h4 className="text-cinema-text font-bold text-lg mb-1">{location.name || `Location ${index + 1}`}</h4>
-                <span className="text-xs px-2 py-1 bg-cinema-accent/20 rounded text-cinema-accent">
-                  {location.type || t('common.unknownType')}
-                </span>
-              </div>
-            </div>
+        {locations.map((location, index) => {
+          const asset = locationAssets[location.name];
 
-            <div className="space-y-3">
-              {location.description && (
-                <p className="text-cinema-text-dim text-sm leading-relaxed">{location.description}</p>
-              )}
+          return (
+            <div key={index} className="p-5 bg-cinema-gray rounded-lg border border-cinema-gray-light hover:border-cinema-accent/30 transition-colors relative">
 
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-cinema-text-dim">Scenes:</span>
-                    <span className="text-cinema-text font-medium">{location.sceneCount || '0'}</span>
+              {/* Master Shot UI */}
+              <div
+                title="Mekân Master Shot (Referans Görsel)"
+                className="absolute top-4 right-4 w-24 h-16 rounded-lg bg-black/50 overflow-hidden border border-cinema-gray hover:border-cinema-accent cursor-pointer group z-10 transition-all"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSetMasterShot(location.name);
+                }}
+              >
+                {asset?.masterShot ? (
+                  <div className="relative w-full h-full">
+                    <img src={`data:image/jpeg;base64,${asset.masterShot}`} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 text-xs text-white">Değiştir</div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-cinema-text-dim">Shoot Days:</span>
-                    <span className="text-cinema-accent font-bold">
-                      {location.estimatedShootingDays || 'TBD'}
-                    </span>
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center opacity-50 group-hover:opacity-100">
+                    <span className="text-lg">🖼️</span>
                   </div>
+                )}
+              </div>
+
+              <div className="flex items-start gap-3 mb-4 pr-24">
+                <div className="text-2xl">
+                  {location.type === 'INTERIOR' ? '🏠' : location.type === 'EXTERIOR' ? '🌍' : '📍'}
                 </div>
-                <div className="space-y-2">
-                  {location.requirements && location.requirements.length > 0 && (
-                    <div>
-                      <span className="text-cinema-text-dim text-xs uppercase tracking-wider">Requirements</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {location.requirements.slice(0, 3).map((req, i) => (
-                          <span key={i} className="text-xs px-1 py-0.5 bg-cinema-black rounded text-cinema-text">
-                            {req}
-                          </span>
-                        ))}
-                        {location.requirements.length > 3 && (
-                          <span className="text-xs text-cinema-text-dim">+{location.requirements.length - 3} more</span>
-                        )}
-                      </div>
+                <div className="flex-1">
+                  <h4 className="text-cinema-text font-bold text-lg mb-1">{location.name || `Location ${index + 1}`}</h4>
+                  <span className="text-xs px-2 py-1 bg-cinema-accent/20 rounded text-cinema-accent">
+                    {location.type || t('common.unknownType')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {location.description && (
+                  <p className="text-cinema-text-dim text-sm leading-relaxed">{location.description}</p>
+                )}
+
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-cinema-text-dim">Scenes:</span>
+                      <span className="text-cinema-text font-medium">{location.sceneCount || '0'}</span>
                     </div>
-                  )}
+                    <div className="flex justify-between">
+                      <span className="text-cinema-text-dim">Shoot Days:</span>
+                      <span className="text-cinema-accent font-bold">
+                        {location.estimatedShootingDays || 'TBD'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {location.requirements && location.requirements.length > 0 && (
+                      <div>
+                        <span className="text-cinema-text-dim text-xs uppercase tracking-wider">Requirements</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {location.requirements.slice(0, 3).map((req, i) => (
+                            <span key={i} className="text-xs px-1 py-0.5 bg-cinema-black rounded text-cinema-text">
+                              {req}
+                            </span>
+                          ))}
+                          {location.requirements.length > 3 && (
+                            <span className="text-xs text-cinema-text-dim">+{location.requirements.length - 3} more</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -2293,7 +2339,29 @@ function LocationsTab({ locations }) {
 
 function CharactersTab({ characters }) {
   const { t } = useTranslation();
-  
+  const { characterAssets, setCharacterAnchor } = useAssetStore();
+
+  const handleSetAnchor = async (charName) => {
+    try {
+      const filePath = await window.electronAPI.openFile();
+      if (filePath) {
+        const result = await window.electronAPI.readFile(filePath);
+        if (result.success) {
+          // Convert to base64 safely
+          const blob = new Blob([result.buffer]);
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = reader.result.split(',')[1];
+            setCharacterAnchor(charName, base64);
+          };
+          reader.readAsDataURL(blob);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to set anchor:", e);
+    }
+  };
+
   if (!characters || characters.length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
@@ -2306,11 +2374,11 @@ function CharactersTab({ characters }) {
 
   // Character statistics
   const getCharacterStats = () => {
-    const mainCharacters = characters.filter(char => 
+    const mainCharacters = characters.filter(char =>
       char.importance === 'main' || char.role === 'main' || char.type === 'protagonist'
     ).length;
-    
-    const supportingCharacters = characters.filter(char => 
+
+    const supportingCharacters = characters.filter(char =>
       char.importance === 'supporting' || char.role === 'supporting'
     ).length;
 
@@ -2398,26 +2466,47 @@ function CharactersTab({ characters }) {
           {characters.map((character, index) => {
             const isMain = character.importance === 'main' || character.role === 'main' || character.type === 'protagonist';
             const isSupporting = character.importance === 'supporting' || character.role === 'supporting';
-            
+            const asset = characterAssets[character.name];
+
             return (
-              <div key={index} className="bg-cinema-black/30 rounded-xl border border-cinema-gray p-5 hover:border-cinema-accent/30 transition-colors">
-                <div className="flex items-start gap-4 mb-4">
-                  <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl ${
-                    isMain ? 'bg-yellow-500/20 text-yellow-400' :
+              <div key={index} className="bg-cinema-black/30 rounded-xl border border-cinema-gray p-5 hover:border-cinema-accent/30 transition-colors relative">
+
+                {/* Anchor Image UI */}
+                <div
+                  title="Karakter Görselini Kilitle (Anchor Image)"
+                  className="absolute top-4 right-4 w-16 h-16 rounded-lg bg-black/50 overflow-hidden border border-cinema-gray hover:border-cinema-accent cursor-pointer group z-10 transition-all"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSetAnchor(character.name);
+                  }}
+                >
+                  {asset?.anchorImage ? (
+                    <div className="relative w-full h-full">
+                      <img src={`data:image/jpeg;base64,${asset.anchorImage}`} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 text-xs text-white">Değiştir</div>
+                    </div>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center opacity-50 group-hover:opacity-100">
+                      <span className="text-lg">📸</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-start gap-4 mb-4 pr-20">
+                  <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl ${isMain ? 'bg-yellow-500/20 text-yellow-400' :
                     isSupporting ? 'bg-blue-500/20 text-blue-400' :
-                    'bg-gray-500/20 text-gray-400'
-                  }`}>
+                      'bg-gray-500/20 text-gray-400'
+                    }`}>
                     {isMain ? '⭐' : isSupporting ? '👤' : '🎭'}
                   </div>
                   <div className="flex-1">
                     <h4 className="text-cinema-text font-bold text-xl mb-1">
                       {character.name || `Karakter ${index + 1}`}
                     </h4>
-                    <span className={`text-xs px-3 py-1 rounded-full font-medium ${
-                      isMain ? 'bg-yellow-500/20 text-yellow-400' :
+                    <span className={`text-xs px-3 py-1 rounded-full font-medium ${isMain ? 'bg-yellow-500/20 text-yellow-400' :
                       isSupporting ? 'bg-blue-500/20 text-blue-400' :
-                      'bg-gray-500/20 text-gray-400'
-                    }`}>
+                        'bg-gray-500/20 text-gray-400'
+                      }`}>
                       {isMain ? 'Ana Karakter' : isSupporting ? 'Yardımcı Karakter' : 'Figüran'}
                     </span>
                   </div>
@@ -2641,14 +2730,14 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
       setValidationReport(null);
       return;
     }
-    
+
     const keys = Object.keys(customResults);
     if (keys.length === 0) {
       setValidatedResults({});
       setValidationReport(null);
       return;
     }
-    
+
     // Artık validation yok - AI çıktısı olduğu gibi kullanılıyor
     console.log(`📊 ${keys.length} analiz yüklendi (validation devre dışı)`);
     setValidatedResults(customResults);
@@ -2658,7 +2747,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
   // Analiz ismini kısalt ve düzenle
   const shortenAnalysisName = (name) => {
     if (!name || typeof name !== 'string') return name;
-    
+
     // Türkçe karakter mapping
     const replacements = {
       'Senaryo Analizi': 'Senaryo',
@@ -2670,15 +2759,15 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
       'İçin': '',
       'için': ''
     };
-    
+
     let shortened = name;
     Object.keys(replacements).forEach(key => {
       shortened = shortened.replace(new RegExp(key, 'gi'), replacements[key]);
     });
-    
+
     // Fazla boşlukları temizle
     shortened = shortened.replace(/\s+/g, ' ').trim();
-    
+
     // Çok uzunsa kısalt (50 karakterden uzun)
     if (shortened.length > 50) {
       // Önemli kelimeleri koru
@@ -2689,7 +2778,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
         shortened = shortened.substring(0, 47) + '...';
       }
     }
-    
+
     return shortened;
   };
 
@@ -2697,7 +2786,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
   const formatJSON = (json) => {
     try {
       const jsonString = typeof json === 'string' ? json : JSON.stringify(json, null, 2);
-      
+
       // Basit syntax highlighting
       return jsonString
         .replace(/("[\w_]+"):/g, '<span class="text-blue-400">$1</span>:')  // Keys
@@ -2755,7 +2844,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
             <span>📋</span>
             <span>Genel Değerlendirme</span>
           </h4>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             {/* Sol Kolon: Analiz İstatistikleri */}
             <div className="space-y-2">
@@ -2772,7 +2861,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                 <span className="text-cinema-accent font-bold">{analysisStats?.successRate || 100}%</span>
               </div>
             </div>
-            
+
             {/* Sağ Kolon: İçerik Bilgileri */}
             <div className="space-y-2">
               <div className="flex items-center justify-between bg-cinema-black/30 rounded p-2">
@@ -2789,15 +2878,15 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
               </div>
             </div>
           </div>
-          
+
           {/* Özet Açıklama */}
           <div className="bg-cinema-black/20 rounded-lg p-4 border-l-4 border-cinema-accent">
             <p className="text-cinema-text text-sm leading-relaxed">
-              <span className="font-semibold text-cinema-accent">{availableResults.length} farklı analiz türü</span> başarıyla tamamlandı. 
-              Aşağıda her analiz türünün detaylı sonuçlarını inceleyebilir, JSON formatında dışa aktarabilir 
+              <span className="font-semibold text-cinema-accent">{availableResults.length} farklı analiz türü</span> başarıyla tamamlandı.
+              Aşağıda her analiz türünün detaylı sonuçlarını inceleyebilir, JSON formatında dışa aktarabilir
               veya başka projelerde kullanabilirsiniz.
             </p>
-            
+
             {/* Validation Status */}
             {validationReport && validationReport.summary && (
               <div className="mt-3 pt-3 border-t border-cinema-gray/40">
@@ -2824,7 +2913,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                     </div>
                   )}
                 </div>
-                
+
                 {/* Düzeltme detayları bilgi notu */}
                 {validationReport.summary.fixedCount > 0 && (
                   <div className="mt-2 text-xs text-yellow-400/80 bg-yellow-500/5 rounded px-2 py-1.5 border-l-2 border-yellow-400/30">
@@ -2844,18 +2933,18 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
           const promptName = resultData?.name || promptKey;
           const resultText = resultData?.result || resultData;
           const isExpanded = expandedResults[promptKey];
-          
+
           // Validation durumunu belirle
           const validationStatus = validationReport && validationReport.valid && validationReport.fixed && validationReport.errors ? (
             validationReport.valid[promptKey] ? 'valid' :
-            validationReport.fixed[promptKey] ? 'fixed' :
-            validationReport.errors[promptKey] ? 'error' : null
+              validationReport.fixed[promptKey] ? 'fixed' :
+                validationReport.errors[promptKey] ? 'error' : null
           ) : null;
 
           return (
             <div key={promptKey} className="bg-cinema-gray rounded-lg border border-cinema-gray-light overflow-hidden">
               {/* Header - Always visible with enhanced information */}
-              <div 
+              <div
                 className="flex items-center justify-between p-4 cursor-pointer hover:bg-cinema-gray-light transition-colors"
                 onClick={() => setExpandedResults({
                   ...expandedResults,
@@ -2874,10 +2963,10 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                       <span className={`text-sm flex-shrink-0 ${getStatusColor(resultData)}`}>
                         {getStatusIcon(resultData)}
                       </span>
-                      
+
                       {/* Validation Badge */}
                       {validationStatus === 'valid' && (
-                        <span 
+                        <span
                           className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full flex-shrink-0"
                           title="JSON yapısı doğrulandı ve geçerli"
                         >
@@ -2885,16 +2974,16 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                         </span>
                       )}
                       {validationStatus === 'fixed' && (
-                        <span 
-                          className="px-2 py-0.5 text-xs bg-yellow-500/20 text-yellow-400 rounded-full flex-shrink-0 cursor-help" 
+                        <span
+                          className="px-2 py-0.5 text-xs bg-yellow-500/20 text-yellow-400 rounded-full flex-shrink-0 cursor-help"
                           title={`Otomatik düzeltildi:\n${(validationReport?.fixed?.[promptKey]?.errors || []).slice(0, 3).join('\n')}`}
                         >
                           ⚙️ Düzeltildi
                         </span>
                       )}
                       {validationStatus === 'error' && (
-                        <span 
-                          className="px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded-full flex-shrink-0 cursor-help" 
+                        <span
+                          className="px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded-full flex-shrink-0 cursor-help"
                           title={`Hatalar:\n${(validationReport?.errors?.[promptKey]?.errors || []).slice(0, 3).join('\n')}`}
                         >
                           ⚠️ Hata
@@ -2938,9 +3027,9 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                       )}
                       {resultData.timestamp && (
                         <span className="flex-shrink-0">
-                          🕒 {new Date(resultData.timestamp).toLocaleTimeString('tr-TR', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
+                          🕒 {new Date(resultData.timestamp).toLocaleTimeString('tr-TR', {
+                            hour: '2-digit',
+                            minute: '2-digit'
                           })}
                         </span>
                       )}
@@ -2989,13 +3078,13 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                           <div>
                             <span className="text-cinema-text-dim">Durum:</span>
                             <div className={`font-medium ${getStatusColor(resultData)}`}>
-                              {resultData.status === 'completed' ? 'Başarılı' : 
-                               resultData.status === 'failed' ? 'Başarısız' : 'İşleniyor'}
+                              {resultData.status === 'completed' ? 'Başarılı' :
+                                resultData.status === 'failed' ? 'Başarısız' : 'İşleniyor'}
                             </div>
                           </div>
                         )}
                       </div>
-                      
+
                       {/* Karakter Analizi Özet Bilgisi */}
                       {promptKey === 'character' && resultData.parsed && resultData.summary && (
                         <div className="mt-4 pt-3 border-t border-cinema-gray/30">
@@ -3029,7 +3118,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
                   {/* Basit text/JSON görüntüleme */}
                   <div className="p-6 bg-cinema-black rounded-lg border border-cinema-gray/30">
                     <pre className="text-cinema-text text-sm whitespace-pre-wrap font-mono leading-relaxed overflow-x-auto">
-                      {typeof resultData.result === 'object' 
+                      {typeof resultData.result === 'object'
                         ? JSON.stringify(resultData.result, null, 2)
                         : resultData.result
                       }
@@ -3083,7 +3172,7 @@ function CustomAnalysisTab({ customResults, activePrompt, onSelectPrompt }) {
 
 function OverviewTab({ analysisData }) {
   const { t } = useTranslation();
-  
+
   if (!analysisData || Object.keys(analysisData).length === 0) {
     return (
       <div className="text-center py-12 text-cinema-text-dim">
@@ -3207,7 +3296,7 @@ function OverviewTab({ analysisData }) {
 
   const getAnalysisScore = () => {
     if (!analysisData.evaluation) return { score: 0, label: 'Belirlenmedi' };
-    
+
     const evaluation = analysisData.evaluation;
     let score = 0;
     let count = 0;
@@ -3234,7 +3323,7 @@ function OverviewTab({ analysisData }) {
     }
 
     const avgScore = count > 0 ? score / count : 0;
-    
+
     let label = 'Belirlenmedi';
     if (avgScore >= 80) label = 'Mükemmel';
     else if (avgScore >= 70) label = 'İyi';
@@ -3250,7 +3339,7 @@ function OverviewTab({ analysisData }) {
   const formatSpecialAnalysisTitle = (key) => {
     const titleMap = {
       'marketAnalysis': 'Pazar Analizi',
-      'competitorAnalysis': 'Rakip Analizi', 
+      'competitorAnalysis': 'Rakip Analizi',
       'audienceAnalysis': 'Hedef Kitle',
       'productionAnalysis': 'Prodüksiyon',
       'budgetAnalysis': 'Bütçe Analizi',
@@ -3260,7 +3349,7 @@ function OverviewTab({ analysisData }) {
       'plotStructure': 'Olay Örgüsü',
       'themeAnalysis': 'Tema Analizi'
     };
-    
+
     return titleMap[key] || key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
   };
 
@@ -3333,7 +3422,7 @@ function OverviewTab({ analysisData }) {
             <div className="flex justify-between items-center py-2">
               <span className="text-cinema-text-dim">Oluşturulma:</span>
               <span className="text-cinema-text font-medium text-sm">
-                {analysisData.metadata?.timestamp 
+                {analysisData.metadata?.timestamp
                   ? new Date(analysisData.metadata.timestamp).toLocaleDateString('tr-TR')
                   : new Date().toLocaleDateString('tr-TR')
                 }
@@ -3390,7 +3479,7 @@ function OverviewTab({ analysisData }) {
             {analysisData.isCustomAnalysis && analysisData.customResults ? (
               <div>
                 <div className="text-cinema-text-dim leading-relaxed mb-4">
-                  {Object.keys(analysisData.customResults).length} farklı analiz türü tamamlandı. 
+                  {Object.keys(analysisData.customResults).length} farklı analiz türü tamamlandı.
                   Toplam {Math.round(metrics.totalWordCount / 1000)}K kelime analiz sonucu üretildi.
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -3426,7 +3515,7 @@ function OverviewTab({ analysisData }) {
               <div>
                 {analysisData.analysis?.summary && (
                   <div className="text-cinema-text-dim leading-relaxed">
-                    {typeof analysisData.analysis.summary === 'string' 
+                    {typeof analysisData.analysis.summary === 'string'
                       ? analysisData.analysis.summary.substring(0, 200) + (analysisData.analysis.summary.length > 200 ? '...' : '')
                       : 'Analiz özeti mevcut değil'
                     }
@@ -3469,7 +3558,7 @@ function OverviewTab({ analysisData }) {
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-cinema-text">Analiz Süresi:</span>
                   <span className="text-cinema-accent font-medium">
-                    {analysisData.metadata?.timestamp 
+                    {analysisData.metadata?.timestamp
                       ? `${new Date(analysisData.metadata.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`
                       : 'Bilinmiyor'
                     }
@@ -3481,11 +3570,10 @@ function OverviewTab({ analysisData }) {
               <div className="p-3 bg-cinema-gray/20 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-cinema-text">Risk Seviyesi:</span>
-                  <span className={`font-bold px-2 py-1 rounded text-xs ${
-                    metrics.risk === 'Yüksek' || metrics.risk === 'High' ? 'bg-red-500/20 text-red-400' :
+                  <span className={`font-bold px-2 py-1 rounded text-xs ${metrics.risk === 'Yüksek' || metrics.risk === 'High' ? 'bg-red-500/20 text-red-400' :
                     metrics.risk === 'Orta' || metrics.risk === 'Medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                    'bg-green-500/20 text-green-400'
-                  }`}>
+                      'bg-green-500/20 text-green-400'
+                    }`}>
                     {metrics.risk}
                   </span>
                 </div>
@@ -3511,11 +3599,11 @@ function OverviewTab({ analysisData }) {
                   {formatSpecialAnalysisTitle(key)}
                 </div>
                 <div className="text-xs text-cinema-text-dim">
-                  {typeof value === 'string' 
+                  {typeof value === 'string'
                     ? value.substring(0, 80) + '...'
                     : typeof value === 'object' && value !== null
-                    ? Object.keys(value).length + ' öğe'
-                    : 'Analiz tamamlandı'
+                      ? Object.keys(value).length + ' öğe'
+                      : 'Analiz tamamlandı'
                   }
                 </div>
               </div>
@@ -4033,7 +4121,7 @@ function AudienceTab({ audienceAnalysis }) {
           </div>
         </div>
       </div>
-      
+
     </div>
   );
 }
@@ -4081,16 +4169,16 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
       };
     }
     groups[projectName].analyses.push(analysis);
-    
+
     // Update last update time
     if (new Date(analysis.timestamp) > new Date(groups[projectName].lastUpdate)) {
       groups[projectName].lastUpdate = analysis.timestamp;
     }
-    
+
     return groups;
   }, {});
-  
-  const projects = Object.values(projectGroups).sort((a, b) => 
+
+  const projects = Object.values(projectGroups).sort((a, b) =>
     new Date(b.lastUpdate) - new Date(a.lastUpdate)
   );
 
@@ -4115,33 +4203,33 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
             <button
               onClick={async () => {
                 // Kısmi ve tam analizleri say
-                const partialCount = savedAnalyses.filter(a => 
+                const partialCount = savedAnalyses.filter(a =>
                   a.analysisType && a.analysisType !== 'full'
                 ).length;
                 const fullCount = savedAnalyses.length - partialCount;
-                
+
                 const confirmMessage = partialCount > 0
                   ? `⚠️ ${savedAnalyses.length} adet analiz silinecek:\n` +
-                    `📊 ${fullCount} tam analiz\n` +
-                    `⏸️ ${partialCount} kısmi/yarım analiz\n\n` +
-                    `Bu işlem geri alınamaz. Emin misiniz?`
+                  `📊 ${fullCount} tam analiz\n` +
+                  `⏸️ ${partialCount} kısmi/yarım analiz\n\n` +
+                  `Bu işlem geri alınamaz. Emin misiniz?`
                   : `⚠️ ${savedAnalyses.length} adet kaydedilmiş analiz tamamen silinecek.\n\n` +
-                    `Bu işlem geri alınamaz. Emin misiniz?`;
-                
+                  `Bu işlem geri alınamaz. Emin misiniz?`;
+
                 if (confirm(confirmMessage)) {
                   try {
                     console.log('🧹 KAPSAMLI TEMİZLEME BAŞLIYOR...');
-                    
+
                     // 1. FileSystem ve localStorage'dan tüm analizleri sil
                     const clearResult = await analysisStorageService.clearAll();
                     console.log('📁 FileSystem temizlendi:', clearResult);
-                    
+
                     // 2. LocalStorage'daki TÜM analiz ve script verilerini temizle
                     const keysToRemove = [];
                     for (let i = 0; i < localStorage.length; i++) {
                       const key = localStorage.key(i);
                       if (key && (
-                        key.startsWith('mgx_analysis_') || 
+                        key.startsWith('mgx_analysis_') ||
                         key.startsWith('mgx_storyboard_') ||
                         key.startsWith('analysis_checkpoint_') ||
                         key.startsWith('temp_')
@@ -4154,7 +4242,7 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
                       console.log('🗑️ Silindi:', key);
                     });
                     console.log(`📊 LocalStorage'dan ${keysToRemove.length} anahtar silindi`);
-                    
+
                     // 3. Zustand persist storage'ı temizle
                     const scriptStoreKey = 'mgx-script-store';
                     const scriptStore = localStorage.getItem(scriptStoreKey);
@@ -4189,19 +4277,19 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
                         console.error('Zustand storage parse hatası:', e);
                       }
                     }
-                    
+
                     // 4. UI state'i temizle
                     setSavedAnalyses([]);
-                    
+
                     // 5. Mevcut analiz state'ini temizle
                     setCustomResults({});
                     setAnalysisData(null);
                     console.log('🗑️ Local component state temizlendi (customResults + analysisData)');
-                    
+
                     // 6. Script store'dan TÜM scriptlerdeki analiz verilerini temizle
                     const scriptStoreInstance = useScriptStore.getState();
                     const allScripts = scriptStoreInstance.scripts || [];
-                    
+
                     // Her script için analiz verilerini temizle
                     allScripts.forEach(script => {
                       if (script?.id) {
@@ -4215,7 +4303,7 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
                         });
                       }
                     });
-                    
+
                     // Mevcut script için de temizle
                     const currentScript = scriptStoreInstance.getCurrentScript();
                     if (currentScript) {
@@ -4228,9 +4316,9 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
                         equipment: []
                       });
                     }
-                    
+
                     console.log(`🗑️ ${allScripts.length} scriptin analiz verileri temizlendi`);
-                    
+
                     // 7. IndexedDB'yi temizle (Storyboard verileri)
                     if (window.indexedDB) {
                       try {
@@ -4248,10 +4336,10 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
                         console.error('❌ IndexedDB temizleme hatası:', e);
                       }
                     }
-                    
+
                     // 8. Diğer componentlere bildir
                     window.dispatchEvent(new CustomEvent('analysisCleared'));
-                    
+
                     // 9. Başarı mesajı
                     const totalCleaned = clearResult.successCount + keysToRemove.length;
                     alert(
@@ -4263,10 +4351,10 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
                       `📊 Toplam ${totalCleaned} kayıt temizlendi\n\n` +
                       `Sayfayı yenilemek için F5'e basın.`
                     );
-                    
+
                     // 9. Listeyi yeniden yükle
                     setTimeout(() => onRefresh(), 100);
-                    
+
                   } catch (error) {
                     console.error('❌ Temizleme hatası:', error);
                     alert(
@@ -4299,18 +4387,18 @@ function SavedAnalysesTab({ savedAnalyses, setSavedAnalyses, loadingSavedAnalyse
                 </h4>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {project.analyses.map((analysis) => (
-                    <div 
+                    <div
                       key={analysis.key}
                       className="inline-block px-2 py-0.5 rounded text-xs bg-cinema-accent/20 text-cinema-accent"
                       title={`${analysis.analysisType} - ${new Date(analysis.timestamp).toLocaleString('tr-TR')}`}
                     >
                       {analysis.analysisType === 'character' ? '👤' :
-                       analysis.analysisType === 'location' || analysis.analysisType === 'location_analysis' ? '📍' :
-                       analysis.analysisType === 'theme' ? '🎭' :
-                       analysis.analysisType === 'style' ? '🎨' :
-                       analysis.analysisType === 'cinematography' ? '🎥' :
-                       analysis.analysisType === 'visual_style' ? '🖼️' :
-                       '📋'} {analysis.analysisType}
+                        analysis.analysisType === 'location' || analysis.analysisType === 'location_analysis' ? '📍' :
+                          analysis.analysisType === 'theme' ? '🎭' :
+                            analysis.analysisType === 'style' ? '🎨' :
+                              analysis.analysisType === 'cinematography' ? '🎥' :
+                                analysis.analysisType === 'visual_style' ? '🖼️' :
+                                  '📋'} {analysis.analysisType}
                     </div>
                   ))}
                 </div>

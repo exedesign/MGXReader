@@ -15,55 +15,59 @@ export class EnhancedAnalysisEngine {
    * Each scene is broken down into 5-10 shots with technical specifications
    */
   async generateShotList(scenes, options = {}) {
-    const { onProgress = () => {} } = options;
-    
+    const { onProgress = () => { } } = options;
+
     try {
       onProgress({ progress: 0, message: 'Analyzing scenes for shot breakdown...' });
-      
+
       const shotListByScene = [];
       const totalScenes = Math.min(scenes.length, 20); // Limit to first 20 scenes to avoid token overflow
-      
+
       for (let i = 0; i < totalScenes; i++) {
         const scene = scenes[i];
         onProgress({
           progress: (i / totalScenes) * 100,
           message: `Generating shots for Scene ${i + 1}/${totalScenes}...`
         });
-        
-        // AI prompt for shot breakdown
-        const shotPrompt = `As a professional cinematographer and director, break down this scene into 5-10 individual shots.
+
+        // AI prompt for shot breakdown (Director's Cut)
+        const shotPrompt = `You are a cinematic director planning coverage for this scene.
+Create a concise 3-5 shot list that tells the story effectively.
 
 SCENE:
 ${scene.text || scene.description || ''}
 
-For each shot, provide:
-1. Shot Number (e.g., 1A, 1B, 1C...)
-2. Shot Type: (ESTABLISHING, WIDE, MEDIUM, CLOSE-UP, EXTREME CLOSE-UP, OVER THE SHOULDER, POV, INSERT, etc.)
-3. Camera Movement: (STATIC, PAN, TILT, DOLLY, TRACK, CRANE, STEADICAM, HANDHELD, etc.)
-4. Lens: (WIDE 24mm, NORMAL 35mm, PORTRAIT 50mm, TELEPHOTO 85mm+, etc.)
-5. Lighting: (NATURAL, HIGH KEY, LOW KEY, MOTIVATED, PRACTICAL, etc.)
-6. Duration: (Estimated seconds)
-7. Description: (What we see in this specific shot)
-8. Purpose: (Story purpose - establish location, reveal emotion, show action, etc.)
+REQUIREMENTS:
+- Create exactly 3-5 essential shots.
+- Include at least one MASTER SHOT (Wide) to establish geography.
+- Include Mediums/Over-the-Shoulders for key interactions.
+- Include Close-ups for critical emotional beats or details.
 
-Format your response as JSON array:
+OUTPUT FORMAT (JSON Array):
 [
   {
-    "shotNumber": "1A",
-    "shotType": "ESTABLISHING SHOT",
-    "cameraMovement": "CRANE DOWN",
-    "lens": "24mm WIDE",
-    "lighting": "NATURAL - GOLDEN HOUR",
-    "duration": 8,
-    "description": "Aerial view of the city skyline at sunset, camera cranes down to street level",
-    "purpose": "Establish location and time of day"
+    "shotNumber": "1",
+    "shotType": "MASTER SHOT", 
+    "cameraMovement": "STATIC",
+    "lens": "24mm",
+    "lighting": "NATURAL",
+    "description": "Wide view of the room showing character positions.",
+    "purpose": "Establish geography and mood"
+  },
+  {
+    "shotNumber": "2",
+    "shotType": "MEDIUM SHOT",
+    "cameraMovement": "PAN LEFT",
+    "lens": "50mm",
+    "description": "Tracking [Character Name] as they cross the room.",
+    "purpose": "Follow action"
   }
 ]`;
 
         try {
           const response = await this.aiHandler.generateContent(shotPrompt);
           const jsonMatch = response.match(/\[[\s\S]*\]/);
-          
+
           if (jsonMatch) {
             const shots = JSON.parse(jsonMatch[0]);
             shotListByScene.push({
@@ -81,9 +85,9 @@ Format your response as JSON array:
           // Continue with next scene on error
         }
       }
-      
+
       onProgress({ progress: 100, message: 'Shot list generation complete!' });
-      
+
       return {
         totalScenes: totalScenes,
         scenesProcessed: shotListByScene.length,
@@ -95,7 +99,7 @@ Format your response as JSON array:
           version: '1.0'
         }
       };
-      
+
     } catch (error) {
       console.error('Shot list generation failed:', error);
       throw error;
@@ -103,9 +107,36 @@ Format your response as JSON array:
   }
 
   /**
-   * Enhanced Screenplay Analysis with AI Prompts
-   * Uses specialized prompts for comprehensive results
+   * HİBRİT DOĞRULAMA (Hybrid Verification)
+   * Parser'ın emin olamadığı (sınırda kalan) satırlar için Gemini 1.5 Flash kontrolü
+   * @param {string} line - Analiz edilecek satır
+   * @param {string} context - Önceki ve sonraki 2 satır
    */
+  async verifyLineType(line, context) {
+    // Gemini 1.5 Flash (Hızlı ve Ucuz) kullan
+    const prompt = `Analiz edilen senaryo satırı: "${line}"
+Bağlam (Context):
+${context}
+
+Soru: Bu satır bir "DIALOGUE" (Diyalog) mu yoksa "ACTION" (Aksiyon/Tasvir) mi?
+Sadece tek kelime cevap ver: DIALOGUE veya ACTION.`;
+
+    try {
+      // AI Handler üzerinden hızlı model çağrısı (varsa 1.5-flash)
+      const result = await this.aiHandler.generateContent(prompt, {
+        model: 'gemini-1.5-flash',
+        temperature: 0.0
+      });
+
+      const answer = result.trim().toUpperCase();
+      if (answer.includes('DIALOGUE')) return 'DIALOGUE';
+      if (answer.includes('ACTION')) return 'ACTION';
+      return 'UNKNOWN';
+    } catch (e) {
+      console.warn('Verification failed:', e);
+      return 'UNKNOWN';
+    }
+  }
   async analyzeScreenplayEnhanced(text, scenes = [], characters = [], options = {}) {
     const { onProgress = () => { }, language = 'en' } = options;
 
