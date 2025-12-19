@@ -63,13 +63,25 @@ const LAYOUT_PROFILES = {
  * @returns {string} - 'FINAL_DRAFT', 'CELTX', veya 'GENERIC'
  */
 function detectScriptSource(meta, elements = []) {
+  // DEBUG: Elements array yapısını kontrol et
+  console.log('🔍 detectScriptSource çağrıldı:', { 
+    hasElements: !!elements, 
+    elementsLength: elements?.length || 0,
+    firstElement: elements?.[0]
+  });
+  
   // ÖNCE: FONT KONTROLÜ (En güvenilir yöntem)
   // Font isimleri yazılımı kesin olarak belirtir
   if (elements && elements.length > 0) {
     // İlk 10 elementi kontrol et (yeterli numune)
     const sampleSize = Math.min(10, elements.length);
+    console.log(`🔍 Font kontrolü başlıyor: ${sampleSize} element kontrol edilecek`);
+    
     for (let i = 0; i < sampleSize; i++) {
-      const fontName = (elements[i].fontName || '').toLowerCase();
+      const el = elements[i];
+      const fontName = (el?.fontName || el?.font || el?.style?.fontFamily || '').toLowerCase();
+      
+      console.log(`   Font ${i}: "${fontName}" (raw element keys: ${Object.keys(el || {}).join(', ')})`);
       
       if (fontName.includes('courierfinal') || fontName.includes('courier final draft')) {
         console.log('🔍 Font tespiti: CourierFinalDraft bulundu → FINAL_DRAFT');
@@ -84,6 +96,9 @@ function detectScriptSource(meta, elements = []) {
         return 'GENERIC';
       }
     }
+    console.log('⚠️ Font kontrolü tamamlandı, hiçbir bilinen font bulunamadı');
+  } else {
+    console.log('⚠️ Elements array boş veya undefined');
   }
   
   // SONRA: METADATA KONTROLÜ (Yedek yöntem)
@@ -441,6 +456,14 @@ export function extractBestTitle(text, metadata = {}, fileNames = null, fileInde
   try {
     // ADIM 1: DEDEKTİFLİK - Kaynak tespit et (font + metadata)
     const elements = metadata?.elements || [];
+    
+    console.log('🎯 extractBestTitle çağrıldı - metadata yapısı:', { 
+      metadataKeys: Object.keys(metadata || {}),
+      hasElements: !!elements,
+      elementsLength: elements.length,
+      firstElementSample: elements[0]
+    });
+    
     const profile = selectLayoutProfile(metadata, elements);
     
     console.log('🎯 extractBestTitle çağrıldı:', { 

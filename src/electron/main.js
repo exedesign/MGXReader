@@ -406,6 +406,15 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
       try {
         console.log('📄 pdf2json parsing complete');
         
+        // Extract font table from PDF (font index -> font name mapping)
+        const fontTable = {};
+        if (pdfData.Pages?.[0]?.Fonts) {
+          pdfData.Pages[0].Fonts.forEach((font, idx) => {
+            fontTable[idx] = font.name || `Font${idx}`;
+          });
+          console.log('🔤 Font table extracted:', fontTable);
+        }
+        
         // Extract metadata
         metadata = {
           title: pdfData.Meta?.Title || '',
@@ -413,7 +422,8 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
           creator: pdfData.Meta?.Creator || '', // Important for screenplay format detection
           producer: pdfData.Meta?.Producer || '',
           creationDate: pdfData.Meta?.CreationDate || '',
-          pages: pdfData.Pages?.length || 0
+          pages: pdfData.Pages?.length || 0,
+          fonts: fontTable // Font mapping table
         };
         
         totalPages = metadata.pages;
@@ -443,6 +453,10 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
             const y = textItem.y * pageHeight / 1000;
             const width = textItem.w * pageWidth / 1000;
             
+            // Font index'ini font ismine çevir
+            const fontIndex = textItem.R?.[0]?.TS?.[0];
+            const fontName = fontTable[fontIndex] || `Font${fontIndex}`;
+            
             elements.push({
               text: decodedText,
               page: actualPageNumber,
@@ -452,7 +466,7 @@ ipcMain.handle('pdf:parseAdvanced', async (event, filePath, selectedPages = null
                 x1: x + width,
                 y1: y + (textItem.R?.[0]?.TS?.[1] || 12) // Font size as height
               },
-              fontName: textItem.R?.[0]?.TS?.[0] || 'unknown', // Font face index
+              fontName: fontName, // Actual font name from font table
               fontSize: textItem.R?.[0]?.TS?.[1] || 12, // Font size
               bold: textItem.R?.[0]?.TS?.[2] === 1, // Bold flag
               italic: textItem.R?.[0]?.TS?.[3] === 1 // Italic flag
