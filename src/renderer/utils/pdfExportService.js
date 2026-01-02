@@ -124,14 +124,25 @@ export class PDFExportService {
   }
 
   addSection(title, content) {
-    this.checkPageBreak(30);
+    this.checkPageBreak(35);
     
-    // Section title
+    // Add visual separator line before section
+    this.doc.setDrawColor(200, 200, 200);
+    this.doc.setLineWidth(0.2);
+    this.doc.line(this.leftMargin, this.currentY, this.pageWidth - this.rightMargin, this.currentY);
+    this.currentY += 6;
+    
+    // Section title with background box for better readability
     this.doc.setFontSize(14);
     this.doc.setFont('helvetica', 'bold');
     const cleanTitle = title ? String(title).normalize('NFC') : '';
+    
+    // Add subtle background for section title
+    this.doc.setFillColor(245, 245, 245);
+    this.doc.rect(this.leftMargin - 2, this.currentY - 5, this.contentWidth + 4, 10, 'F');
+    
     this.doc.text(cleanTitle, this.leftMargin, this.currentY);
-    this.currentY += 8;
+    this.currentY += 10;
     
     // Section content
     this.doc.setFontSize(11);
@@ -153,7 +164,7 @@ export class PDFExportService {
       });
     }
     
-    this.currentY += 5;
+    this.currentY += 8;
   }
 
   addText(text) {
@@ -271,8 +282,14 @@ export class PDFExportService {
     
     this.createDocument();
     
-    // Header
-    this.addHeader('MGX Reader - Senaryo Analiz Raporu');
+    // Header with enhanced title
+    this.addHeader('MGX Reader - Kapsamlı Senaryo Analiz Raporu');
+    
+    // Add table of contents page
+    this.addTableOfContents(analysisData);
+    
+    // Executive Summary
+    this.addExecutiveSummary(analysisData);
     
     // Date info
     this.addSection('📅 Rapor Bilgileri', `Oluşturulma Tarihi: ${new Date().toLocaleString('tr-TR')}`);
@@ -332,10 +349,48 @@ export class PDFExportService {
   processPrioritySection(key, value, customTitle) {
     if (key === 'customResults' && typeof value === 'object') {
       this.addSection(customTitle, '');
-      Object.entries(value).forEach(([resultKey, resultData]) => {
+      
+      const resultCount = Object.keys(value).length;
+      this.doc.setFontSize(10);
+      this.doc.setFont('helvetica', 'italic');
+      this.doc.text(`Toplam ${resultCount} analiz sonucu`, this.leftMargin + 5, this.currentY);
+      this.currentY += 10;
+      this.doc.setFont('helvetica', 'normal');
+      
+      Object.entries(value).forEach(([resultKey, resultData], index) => {
+        // Add page break before each analysis if needed
+        this.checkPageBreak(40);
+        
         const name = resultData?.name || resultKey;
+        
+        // Add analysis number and name as a prominent subsection
+        this.doc.setFontSize(12);
+        this.doc.setFont('helvetica', 'bold');
+        
+        // Add a visual separator
+        this.doc.setDrawColor(180, 180, 180);
+        this.doc.setLineWidth(0.1);
+        this.doc.line(this.leftMargin + 5, this.currentY, this.pageWidth - this.rightMargin - 5, this.currentY);
+        this.currentY += 5;
+        
+        // Add analysis title with number
+        const analysisTitle = `${index + 1}. ${name}`;
+        this.doc.text(analysisTitle, this.leftMargin + 5, this.currentY);
+        this.currentY += 8;
+        
+        // Process and add the result content
+        this.doc.setFontSize(11);
+        this.doc.setFont('helvetica', 'normal');
+        
         const processedResult = this.processJSONContent(resultData);
-        this.addSubSection(`${name}`, processedResult);
+        const lines = this.doc.splitTextToSize(processedResult, this.contentWidth - 15);
+        lines.forEach(line => {
+          this.checkPageBreak(6);
+          this.doc.text(line, this.leftMargin + 10, this.currentY);
+          this.currentY += 6;
+        });
+        
+        this.currentY += 5;
       });
     } else {
       const formattedContent = this.formatSectionContent(value);
@@ -712,6 +767,154 @@ export class PDFExportService {
       .replace(/([A-Z])/g, ' $1')
       .replace(/^./, str => str.toUpperCase())
       .trim();
+  }
+
+  /**
+   * Add table of contents page
+   * Lists all sections that will appear in the report
+   */
+  addTableOfContents(analysisData) {
+    this.checkPageBreak(80);
+    
+    // Section title
+    this.doc.setFontSize(18);
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.text('📑 İçindekiler', this.leftMargin, this.currentY);
+    this.currentY += 12;
+    
+    // Horizontal line
+    this.doc.setLineWidth(0.3);
+    this.doc.line(this.leftMargin, this.currentY, this.pageWidth - this.rightMargin, this.currentY);
+    this.currentY += 10;
+    
+    // Table of contents items
+    this.doc.setFontSize(11);
+    this.doc.setFont('helvetica', 'normal');
+    
+    const tocItems = [
+      '📅 Rapor Bilgileri',
+      '📊 Analiz Özeti',
+      '📋 Genel Özet',
+      '💰 Bütçe & Zaman',
+      '🛠️ Prodüksiyon Kapsamı'
+    ];
+    
+    // Add sections from analysis data
+    const prioritySections = [
+      { key: 'customResults', title: '🎯 Özelleştirilmiş Analiz Sonuçları' },
+      { key: 'scenes', title: '🎬 Sahne Detayları' },
+      { key: 'characters', title: '👥 Karakter Analizi' },
+      { key: 'locations', title: '📍 Mekan Analizi' },
+      { key: 'equipment', title: '🛠️ Ekipman Gereksinimleri' },
+      { key: 'evaluation', title: '📊 Performans Değerlendirmesi' },
+      { key: 'competitiveAnalysis', title: '🏆 Rekabet Analizi' },
+      { key: 'audienceAnalysis', title: '🎯 Hedef Kitle Analizi' },
+      { key: 'vfxRequirements', title: '✨ VFX Gereksinimleri' },
+      { key: 'sfxRequirements', title: '🔊 SFX Gereksinimleri' },
+      { key: 'virtualProductionSuitability', title: '🎮 Sanal Prodüksiyon Uygunluğu' }
+    ];
+    
+    prioritySections.forEach(({ key, title }) => {
+      if (analysisData[key] !== undefined && analysisData[key] !== null) {
+        tocItems.push(title);
+      }
+    });
+    
+    // Render TOC items
+    tocItems.forEach((item, index) => {
+      this.checkPageBreak(8);
+      
+      // Item number and title
+      this.doc.setFont('helvetica', 'normal');
+      this.doc.text(`${index + 1}. ${item}`, this.leftMargin + 5, this.currentY);
+      this.currentY += 7;
+    });
+    
+    this.currentY += 10;
+    
+    // Add page break after TOC
+    this.doc.addPage();
+    this.currentY = 25;
+  }
+
+  /**
+   * Add executive summary
+   * Provides high-level overview of the entire analysis
+   */
+  addExecutiveSummary(analysisData) {
+    this.checkPageBreak(60);
+    
+    // Section title
+    this.doc.setFontSize(16);
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.text('📋 Yönetici Özeti', this.leftMargin, this.currentY);
+    this.currentY += 10;
+    
+    this.doc.setFontSize(11);
+    this.doc.setFont('helvetica', 'normal');
+    
+    // Build executive summary text
+    let summaryText = 'Bu rapor, senaryo analizinin kapsamlı sonuçlarını içermektedir. ';
+    
+    // Add analysis count
+    if (analysisData.customResults && Object.keys(analysisData.customResults).length > 0) {
+      const count = Object.keys(analysisData.customResults).length;
+      summaryText += `Toplam ${count} farklı analiz türü gerçekleştirilmiştir. `;
+    }
+    
+    // Add production insights
+    if (analysisData.scenes && analysisData.scenes.length > 0) {
+      summaryText += `Senaryo ${analysisData.scenes.length} sahneden oluşmaktadır. `;
+    }
+    
+    if (analysisData.characters && analysisData.characters.length > 0) {
+      summaryText += `Toplam ${analysisData.characters.length} karakter tespit edilmiştir. `;
+    }
+    
+    if (analysisData.locations && analysisData.locations.length > 0) {
+      summaryText += `${analysisData.locations.length} farklı mekan kullanılmaktadır. `;
+    }
+    
+    // Add budget and time estimates
+    if (analysisData.summary) {
+      if (analysisData.summary.estimatedShootingDays) {
+        summaryText += `Tahmini çekim süresi ${analysisData.summary.estimatedShootingDays} gündür. `;
+      }
+      if (analysisData.summary.budgetEstimate) {
+        summaryText += `Bütçe tahmini: ${analysisData.summary.budgetEstimate}. `;
+      }
+    }
+    
+    // Add production complexity insights
+    const equipmentCount = analysisData.equipment ? analysisData.equipment.length : 0;
+    const vfxCount = analysisData.vfxRequirements ? 
+      (Array.isArray(analysisData.vfxRequirements) ? analysisData.vfxRequirements.length : 
+       analysisData.vfxRequirements.sequences ? analysisData.vfxRequirements.sequences.length : 0) : 0;
+    const sfxCount = analysisData.sfxRequirements ? 
+      (Array.isArray(analysisData.sfxRequirements) ? analysisData.sfxRequirements.length :
+       analysisData.sfxRequirements.effects ? analysisData.sfxRequirements.effects.length : 0) : 0;
+    
+    if (equipmentCount > 0 || vfxCount > 0 || sfxCount > 0) {
+      summaryText += '\n\nProdüksiyon gereksinimleri: ';
+      const requirements = [];
+      if (equipmentCount > 0) requirements.push(`${equipmentCount} ekipman öğesi`);
+      if (vfxCount > 0) requirements.push(`${vfxCount} VFX sekansı`);
+      if (sfxCount > 0) requirements.push(`${sfxCount} SFX ihtiyacı`);
+      summaryText += requirements.join(', ') + '.';
+    }
+    
+    // Add conclusion
+    summaryText += '\n\nBu rapor, detaylı analiz sonuçlarını, prodüksiyon önerilerini ve değerlendirmeleri içermektedir. Her bölüm, projenin farklı yönlerini kapsamlı bir şekilde ele almaktadır.';
+    
+    // Clean and add text
+    const cleanedSummary = this.cleanTurkishText(summaryText);
+    this.addText(cleanedSummary);
+    
+    this.currentY += 10;
+    
+    // Add page break after executive summary
+    this.doc.addPage();
+    this.currentY = 25;
   }
 
   addAnalysisSummary(analysisData) {

@@ -34,7 +34,12 @@ Cross-platform desktop application combining AI-powered screenplay analysis with
 - Character tracking
 - Location management
 - Equipment suggestions
-- � **Production Reports**: Export analysis data to JSON
+- 📋 **Comprehensive Reports**: Export complete analysis as formatted PDF
+  - Table of contents
+  - Executive summary
+  - All analysis results in readable format
+  - Print-ready document
+- 💾 **Data Export**: Export analysis data to JSON for integration
 
 ---
 
