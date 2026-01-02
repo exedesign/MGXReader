@@ -1597,9 +1597,15 @@ export default function AnalysisPanel() {
             throw new Error('PDF belgesi oluşturulamadı');
           }
 
-          const success = await pdfService.save('senaryo-analiz-raporu.pdf');
+          const success = await pdfService.save('senaryo-analiz-kapsamli-rapor.pdf');
           if (success) {
-            alert(t('analysis.exportSuccess', 'PDF raporu başarıyla kaydedildi! JSON formatı otomatik olarak işlendi.'));
+            alert('✅ Kapsamlı PDF raporu başarıyla kaydedildi!\n\n' +
+                  '📋 Rapor içeriği:\n' +
+                  '• İçindekiler sayfası\n' +
+                  '• Yönetici özeti\n' +
+                  '• Detaylı analiz sonuçları\n' +
+                  '• Tüm bölümler düzenli formatta\n\n' +
+                  'Rapor yazdırılabilir ve okunabilir formattadır.');
           } else {
             alert('PDF kaydetme işlemi iptal edildi veya başarısız oldu.');
           }
@@ -1611,7 +1617,7 @@ export default function AnalysisPanel() {
       }
 
       if (format === 'docx') {
-        alert(`DOCX export özelliği yakında eklenecek. Şimdilik JSON veya PDF formatını kullanabilirsiniz.`);
+        alert('📝 DOCX export özelliği yakında eklenecek.\n\nŞimdilik kapsamlı PDF raporunu kullanabilirsiniz.\n\nPDF raporu içindekiler, özet ve tüm analiz sonuçlarını içerir.');
         return;
       }
 
@@ -1676,29 +1682,36 @@ export default function AnalysisPanel() {
                 </button>
 
                 {showExportMenu && (
-                  <div className="absolute top-full right-0 mt-1 bg-cinema-dark border border-cinema-gray rounded-lg shadow-lg z-50 min-w-[240px]">
+                  <div className="absolute top-full right-0 mt-1 bg-cinema-dark border border-cinema-gray rounded-lg shadow-lg z-50 min-w-[260px]">
                     <div className="px-3 py-2 text-xs text-cinema-text-dim border-b border-cinema-gray">
-                      📤 Export Formatları (JSON Optimized)
+                      📤 Export Formatları
                     </div>
+                    <button
+                      onClick={() => handleExport('pdf')}
+                      className="w-full px-4 py-3 text-left text-sm text-cinema-text hover:bg-cinema-gray transition-colors flex flex-col gap-1 border-b border-cinema-gray/30"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">📋</span>
+                        <span className="font-semibold">PDF Kapsamlı Rapor</span>
+                        <span className="text-xs text-green-400 ml-auto">✨ Önerilen</span>
+                      </div>
+                      <div className="text-xs text-cinema-text-dim pl-6">
+                        İçindekiler, özet ve tüm analizler
+                      </div>
+                    </button>
                     <button
                       onClick={() => handleExport('json')}
                       className="w-full px-4 py-2 text-left text-sm text-cinema-text hover:bg-cinema-gray transition-colors flex items-center gap-2"
                     >
-                      📄 JSON (Optimized Data)
-                      <span className="text-xs text-cinema-accent ml-auto">✨ Temiz</span>
-                    </button>
-                    <button
-                      onClick={() => handleExport('pdf')}
-                      className="w-full px-4 py-2 text-left text-sm text-cinema-text hover:bg-cinema-gray transition-colors flex items-center gap-2"
-                    >
-                      📋 PDF (Smart Report)
-                      <span className="text-xs text-cinema-accent ml-auto">✨ JSON Parser</span>
+                      📄 JSON (Ham Veri)
+                      <span className="text-xs text-cinema-accent ml-auto">Gelişmiş</span>
                     </button>
                     <button
                       onClick={() => handleExport('docx')}
-                      className="w-full px-4 py-2 text-left text-sm text-cinema-text hover:bg-cinema-gray transition-colors flex items-center gap-2 rounded-b-lg"
+                      className="w-full px-4 py-2 text-left text-sm text-cinema-text hover:bg-cinema-gray transition-colors flex items-center gap-2 rounded-b-lg opacity-50 cursor-not-allowed"
                     >
                       📝 Word Document
+                      <span className="text-xs text-yellow-400 ml-auto">Yakında</span>
                     </button>
                   </div>
                 )}
